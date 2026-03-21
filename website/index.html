@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Droply — Static Publishing Platform</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="#" class="logo">
+      <span class="logo-icon">D</span>
+      <span>Droply</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#quickstart" data-i18n="nav.quickstart">Quick Start</a>
+      <a href="#architecture" data-i18n="nav.architecture">Architecture</a>
+      <a href="#cli">CLI</a>
+      <a href="https://github.com/zhong/droply" class="btn btn-sm" target="_blank">GitHub</a>
+      <button class="lang-toggle" id="langToggle" aria-label="Switch language">EN</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="badge" data-i18n="hero.badge">Open Source &middot; Self-Hosted &middot; Go</div>
+    <h1 data-i18n="hero.title" data-i18n-html="true">Deploy static sites<br>in seconds.</h1>
+    <p class="hero-sub" data-i18n="hero.sub" data-i18n-html="true">
+      Multi-user static publishing with automatic subdomains,<br>
+      wildcard HTTPS, and custom domains. One command to ship.
+    </p>
+    <div class="hero-actions">
+      <a href="#quickstart" class="btn btn-primary" data-i18n="hero.cta">Get Started</a>
+      <a href="https://github.com/zhong/droply" class="btn btn-outline" target="_blank" data-i18n="hero.github">View on GitHub</a>
+    </div>
+    <div class="hero-code">
+      <div class="code-header">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+      </div>
+      <pre><code><span class="c-gray">$</span> droply deploy ./dist --sub alice --project blog
+
+<span class="c-dim">Packaging ./dist...</span>
+<span class="c-dim">Deploying to alice.droplydoc.com/blog...</span>
+<span class="c-green">Deployed! Version 1</span>
+<span class="c-blue">URL: https://alice.droplydoc.com/blog</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features" class="section">
+  <div class="container">
+    <h2 class="section-title" data-i18n="features.title">Everything you need, nothing you don't.</h2>
+    <p class="section-sub" data-i18n="features.sub">A focused toolkit for publishing static content. Fast, secure, self-hosted.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#9889;</div>
+        <h3 data-i18n="features.deploy.title">One-Command Deploy</h3>
+        <p data-i18n="features.deploy.desc">Package and publish any directory with a single CLI command. Automatic versioning keeps every deployment tracked.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#127760;</div>
+        <h3 data-i18n="features.subdomain.title">Automatic Subdomains</h3>
+        <p data-i18n="features.subdomain.desc" data-i18n-html="true">Each user gets their own subdomains. Create <code>alice.droplydoc.com</code> instantly, host multiple projects under it.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128274;</div>
+        <h3 data-i18n="features.https.title">HTTPS Everywhere</h3>
+        <p data-i18n="features.https.desc">Wildcard TLS certificates via Caddy. Every subdomain and custom domain gets HTTPS automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#127968;</div>
+        <h3 data-i18n="features.selfhost.title">Self-Hosted</h3>
+        <p data-i18n="features.selfhost.desc">Run on your own VPS. Your data, your rules. A single binary + Caddy is all you need.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128279;</div>
+        <h3 data-i18n="features.domain.title">Custom Domains</h3>
+        <p data-i18n="features.domain.desc">Bring your own domain. Add a CNAME record and Caddy handles certificate provisioning automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128230;</div>
+        <h3 data-i18n="features.zero.title">Zero Dependencies</h3>
+        <p data-i18n="features.zero.desc">Pure Go binaries with embedded SQLite. No Docker, no Node.js, no external databases required.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section class="section section-alt">
+  <div class="container">
+    <h2 class="section-title" data-i18n="how.title">How it works</h2>
+    <p class="section-sub" data-i18n="how.sub">Three steps from code to live site.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3 data-i18n="how.step1.title">Create a subdomain</h3>
+          <code class="step-code">droply subdomain create alice</code>
+          <p data-i18n="how.step1.desc">Claim your namespace. You can create multiple subdomains, each hosting different projects.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3 data-i18n="how.step2.title">Deploy your site</h3>
+          <code class="step-code">droply deploy ./dist --sub alice --project blog</code>
+          <p data-i18n="how.step2.desc">Your files are packaged, uploaded, and extracted. The project is created automatically on first deploy.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3 data-i18n="how.step3.title">It's live</h3>
+          <code class="step-code">https://alice.droplydoc.com/blog</code>
+          <p data-i18n="how.step3.desc">Caddy picks up the new route instantly. HTTPS is ready. Share the link.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture" class="section">
+  <div class="container">
+    <h2 class="section-title" data-i18n="arch.title">Architecture</h2>
+    <p class="section-sub" data-i18n="arch.sub">Simple, robust, easy to operate.</p>
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box arch-client">
+          <div class="arch-label" data-i18n="arch.cli">CLI Client</div>
+          <div class="arch-desc">droply</div>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box arch-caddy">
+          <div class="arch-label">Caddy</div>
+          <div class="arch-desc" data-i18n="arch.caddy_desc">TLS + Reverse Proxy + File Server</div>
+          <div class="arch-ports">:443 / :80</div>
+        </div>
+        <div class="arch-arrow">&larr;</div>
+        <div class="arch-box arch-browser">
+          <div class="arch-label" data-i18n="arch.browser">Browser</div>
+          <div class="arch-desc">HTTPS</div>
+        </div>
+      </div>
+      <div class="arch-connector">&#8595;</div>
+      <div class="arch-row">
+        <div class="arch-box arch-api">
+          <div class="arch-label">droply-server</div>
+          <div class="arch-desc" data-i18n="arch.api_desc">Auth &middot; Upload &middot; Routing</div>
+          <div class="arch-ports">:8080</div>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box arch-db">
+          <div class="arch-label">SQLite</div>
+          <div class="arch-desc" data-i18n="arch.db_desc">Users &middot; Projects &middot; Deployments</div>
+        </div>
+      </div>
+    </div>
+    <div class="tech-stack">
+      <h3 data-i18n="arch.tech">Tech Stack</h3>
+      <div class="tech-tags">
+        <span class="tag">Go</span>
+        <span class="tag">chi</span>
+        <span class="tag">cobra</span>
+        <span class="tag">SQLite</span>
+        <span class="tag">Caddy</span>
+        <span class="tag">bcrypt</span>
+        <span class="tag">TOML</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Quick Start -->
+<section id="quickstart" class="section section-alt">
+  <div class="container">
+    <h2 class="section-title" data-i18n="qs.title">Quick Start</h2>
+    <p class="section-sub" data-i18n="qs.sub">Up and running in minutes.</p>
+    <div class="quickstart-grid">
+      <div class="qs-card">
+        <h3 data-i18n="qs.build">Build from source</h3>
+        <div class="code-block">
+          <pre><code>git clone https://github.com/zhong/droply.git
+cd droply
+make build</code></pre>
+        </div>
+        <p data-i18n="qs.build_desc" data-i18n-html="true">Produces two binaries: <code>bin/droply-server</code> and <code>bin/droply</code></p>
+      </div>
+      <div class="qs-card">
+        <h3 data-i18n="qs.install">Or install with Go</h3>
+        <div class="code-block">
+          <pre><code>go install github.com/zhong/droply/cmd/droply@latest</code></pre>
+        </div>
+        <p data-i18n="qs.install_desc" data-i18n-html="true">Installs the CLI client directly into your <code>$GOPATH/bin</code></p>
+      </div>
+    </div>
+    <div class="qs-card qs-card-wide">
+      <h3 data-i18n="qs.server">Server deployment</h3>
+      <div class="code-block">
+        <pre><code><span class="c-gray"># <span data-i18n="qs.comment_dir">Create data directory</span></span>
+sudo mkdir -p /data/droply/sites
+
+<span class="c-gray"># <span data-i18n="qs.comment_start">Start the server</span></span>
+droply-server \
+  --addr :8080 \
+  --data-dir /data/droply \
+  --domain droplydoc.com \
+  --caddy-admin http://localhost:2019</code></pre>
+      </div>
+      <div class="qs-table">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="qs.th_flag">Flag</th>
+              <th data-i18n="qs.th_default">Default</th>
+              <th data-i18n="qs.th_desc">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--addr</code></td><td><code>:8080</code></td><td data-i18n="qs.flag_addr">Listen address</td></tr>
+            <tr><td><code>--data-dir</code></td><td><code>/data/droply</code></td><td data-i18n="qs.flag_data">Data directory (DB + files)</td></tr>
+            <tr><td><code>--domain</code></td><td><code>droplydoc.com</code></td><td data-i18n="qs.flag_domain">Base domain</td></tr>
+            <tr><td><code>--caddy-admin</code></td><td><code>http://localhost:2019</code></td><td>Caddy Admin API</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLI Reference -->
+<section id="cli" class="section">
+  <div class="container">
+    <h2 class="section-title" data-i18n="cli.title">CLI Reference</h2>
+    <p class="section-sub" data-i18n="cli.sub">Simple commands, predictable behavior.</p>
+    <div class="cli-grid">
+      <div class="cli-group">
+        <h3 data-i18n="cli.auth">Authentication</h3>
+        <div class="code-block">
+          <pre><code>droply register       <span class="c-dim"># <span data-i18n="cli.auth_register">Create account</span></span>
+droply login          <span class="c-dim"># <span data-i18n="cli.auth_login">Sign in</span></span>
+droply whoami         <span class="c-dim"># <span data-i18n="cli.auth_whoami">Current user</span></span>
+droply logout         <span class="c-dim"># <span data-i18n="cli.auth_logout">Sign out</span></span></code></pre>
+        </div>
+      </div>
+      <div class="cli-group">
+        <h3 data-i18n="cli.subdomains">Subdomains</h3>
+        <div class="code-block">
+          <pre><code>droply subdomain create alice
+droply subdomain list
+droply subdomain delete alice</code></pre>
+        </div>
+      </div>
+      <div class="cli-group">
+        <h3 data-i18n="cli.deploying">Deploying</h3>
+        <div class="code-block">
+          <pre><code><span class="c-dim"># <span data-i18n="cli.deploy_flags">Deploy with flags</span></span>
+droply deploy ./dist --sub alice --project blog
+
+<span class="c-dim"># <span data-i18n="cli.deploy_config">Or use .droply.toml config</span></span>
+droply deploy</code></pre>
+        </div>
+      </div>
+      <div class="cli-group">
+        <h3 data-i18n="cli.domains">Custom Domains</h3>
+        <div class="code-block">
+          <pre><code>droply domain add blog.example.com \
+  --sub alice --project blog
+droply domain list --sub alice --project blog
+droply domain remove blog.example.com \
+  --sub alice --project blog</code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="cli-config">
+      <h3 data-i18n="cli.config" data-i18n-html="true">Project config <code>.droply.toml</code></h3>
+      <div class="code-block">
+        <pre><code>subdomain = "alice"
+project   = "blog"</code></pre>
+      </div>
+      <p data-i18n="cli.config_desc" data-i18n-html="true">Place in your project root. No more flags needed for <code>droply deploy</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- API -->
+<section class="section section-alt">
+  <div class="container">
+    <h2 class="section-title">API</h2>
+    <p class="section-sub" data-i18n="api.sub" data-i18n-html="true">RESTful JSON API at <code>api.droplydoc.com</code>. Auth via <code>Bearer</code> token.</p>
+    <div class="api-table-wrap">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th data-i18n="api.th_method">Method</th>
+            <th data-i18n="api.th_endpoint">Endpoint</th>
+            <th data-i18n="api.th_desc">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="method post">POST</span></td><td>/auth/register</td><td data-i18n="api.register">Register</td></tr>
+          <tr><td><span class="method post">POST</span></td><td>/auth/login</td><td data-i18n="api.login">Login</td></tr>
+          <tr><td><span class="method post">POST</span></td><td>/subdomains</td><td data-i18n="api.create_sub">Create subdomain</td></tr>
+          <tr><td><span class="method get">GET</span></td><td>/subdomains</td><td data-i18n="api.list_sub">List subdomains</td></tr>
+          <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:name</td><td data-i18n="api.delete_sub">Delete subdomain</td></tr>
+          <tr><td><span class="method post">POST</span></td><td>/subdomains/:sub/projects/:name/deploy</td><td data-i18n="api.deploy">Deploy (multipart)</td></tr>
+          <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/projects</td><td data-i18n="api.list_proj">List projects</td></tr>
+          <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/projects/:name/deployments</td><td data-i18n="api.history">Deployment history</td></tr>
+          <tr><td><span class="method post">POST</span></td><td>/subdomains/:sub/projects/:name/domains</td><td data-i18n="api.add_domain">Add custom domain</td></tr>
+          <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:sub/projects/:name/domains/:domain</td><td data-i18n="api.remove_domain">Remove custom domain</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-left">
+      <span class="logo-icon logo-icon-sm">D</span>
+      <span>Droply</span>
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/zhong/droply" target="_blank">GitHub</a>
+      <span class="footer-sep">&middot;</span>
+      <span>MIT License</span>
+    </div>
+  </div>
+</footer>
+
+<script src="i18n.js"></script>
+</body>
+</html>
