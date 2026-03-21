@@ -22,7 +22,7 @@ func setupDomainTest(t *testing.T) (*server.Server, string) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	srv := server.New(st, sitesDir, "droplydoc.com", nil)
+	srv := server.New(st, sitesDir, "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
 	token := registerAndGetToken(t, srv, "alice@example.com", "password123")
 
 	// Create subdomain "alice".

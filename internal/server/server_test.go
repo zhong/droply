@@ -19,7 +19,7 @@ func newTestServer(t *testing.T) *server.Server {
 		t.Fatalf("create test store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return server.New(st, "/tmp/sites", "droplydoc.com", nil)
+	return server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
 }
 
 // registerAndGetToken registers a new user and returns their API token.

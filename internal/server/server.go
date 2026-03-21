@@ -22,6 +22,10 @@ type CaddyClient interface {
 	RemoveSubdomainRoute(name string) error
 	AddCustomDomainRoute(domain, subdomainName, projectName string) error
 	RemoveCustomDomainRoute(domain string) error
+	SetSubdomainProtected(name string, proxyAddr string) error
+	SetSubdomainUnprotected(name string) error
+	SetCustomDomainProtected(domain string, proxyAddr string) error
+	SetCustomDomainUnprotected(domain, subdomainName, projectName string) error
 }
 
 // Server holds all dependencies for the HTTP server.
@@ -31,15 +35,19 @@ type Server struct {
 	baseDomain string
 	caddy      CaddyClient
 	router     *chi.Mux
+	hmacKey    []byte
+	siteAddr   string
 }
 
 // New creates a new Server and registers all routes.
-func New(s store.Store, sitesDir, baseDomain string, caddy CaddyClient) *Server {
+func New(s store.Store, sitesDir, baseDomain string, caddy CaddyClient, hmacKey []byte, siteAddr string) *Server {
 	srv := &Server{
 		store:      s,
 		sitesDir:   sitesDir,
 		baseDomain: baseDomain,
 		caddy:      caddy,
+		hmacKey:    hmacKey,
+		siteAddr:   siteAddr,
 	}
 	srv.router = srv.buildRouter()
 	return srv
@@ -76,6 +84,14 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Post("/subdomains/{sub}/projects/{project}/domains", s.handleCreateDomain)
 		r.Get("/subdomains/{sub}/projects/{project}/domains", s.handleListDomains)
 		r.Delete("/subdomains/{sub}/projects/{project}/domains/{domain}", s.handleDeleteDomain)
+
+		r.Put("/subdomains/{sub}/access", s.handleSetAccess)
+		r.Get("/subdomains/{sub}/access", s.handleGetAccess)
+		r.Delete("/subdomains/{sub}/access", s.handleDeleteAccess)
+
+		r.Put("/subdomains/{sub}/projects/{project}/access", s.handleSetProjectAccess)
+		r.Get("/subdomains/{sub}/projects/{project}/access", s.handleGetProjectAccess)
+		r.Delete("/subdomains/{sub}/projects/{project}/access", s.handleDeleteProjectAccess)
 	})
 
 	return r

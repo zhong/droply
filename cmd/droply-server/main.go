@@ -32,7 +32,7 @@ func main() {
 
 	sitesDir := fmt.Sprintf("%s/sites", *dataDir)
 	caddyClient := caddy.NewClient(*caddyAddr, *domain, sitesDir)
-	srv := server.New(st, sitesDir, *domain, caddyClient)
+	srv := server.New(st, sitesDir, *domain, caddyClient, []byte("placeholder"), "localhost:8081")
 
 	if err := srv.RecoverCaddyRoutes(); err != nil {
 		log.Printf("Warning: route recovery failed: %v", err)

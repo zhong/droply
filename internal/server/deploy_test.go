@@ -74,7 +74,7 @@ func newDeployTestServer(t *testing.T) (*server.Server, string) {
 		t.Fatalf("create test store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv := server.New(st, sitesDir, "droplydoc.com", nil)
+	srv := server.New(st, sitesDir, "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
 	return srv, sitesDir
 }
 
