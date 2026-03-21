@@ -13,7 +13,7 @@ CLI (droply)                         Browser
 |                Caddy (443/80)                    |
 |          Auto HTTPS + Wildcard TLS               |
 +-------------------+-----------------------------+
-| api.droply.dev    |  *.droply.dev               |
+| api.droplydoc.com    |  *.droplydoc.com               |
 | reverse_proxy     |  file_server                |
 |    :8080          |  /data/droply/sites/         |
 +--------+----------+-----------------------------+
@@ -54,10 +54,10 @@ make test
 ### 前置条件
 
 - 一台 VPS（推荐 Ubuntu/Debian）
-- 一个域名（如 `droply.dev`），DNS 已配置：
-  - `A` 记录：`droply.dev` → 服务器 IP
-  - `A` 记录：`*.droply.dev` → 服务器 IP
-  - `A` 记录：`api.droply.dev` → 服务器 IP
+- 一个域名（如 `droplydoc.com`），DNS 已配置：
+  - `A` 记录：`droplydoc.com` → 服务器 IP
+  - `A` 记录：`*.droplydoc.com` → 服务器 IP
+  - `A` 记录：`api.droplydoc.com` → 服务器 IP
 - 安装 [Caddy](https://caddyserver.com/docs/install)（需要支持 DNS challenge 的版本以启用通配符证书）
 
 ### 1. 安装 Caddy
@@ -89,7 +89,7 @@ After=network.target caddy.service
 ExecStart=/usr/local/bin/droply-server \
   --addr :8080 \
   --data-dir /data/droply \
-  --domain droply.dev \
+  --domain droplydoc.com \
   --caddy-admin http://localhost:2019
 Restart=always
 User=www-data
@@ -107,7 +107,7 @@ sudo systemctl enable --now droply
 |------|--------|------|
 | `--addr` | `:8080` | 监听地址 |
 | `--data-dir` | `/data/droply` | 数据目录（数据库 + 静态文件） |
-| `--domain` | `droply.dev` | 基础域名 |
+| `--domain` | `droplydoc.com` | 基础域名 |
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
 
 ### 3. 配置 Caddy
@@ -119,7 +119,7 @@ sudo systemctl enable --now droply
     admin localhost:2019
 }
 
-api.droply.dev {
+api.droplydoc.com {
     reverse_proxy localhost:8080
 }
 ```
@@ -137,10 +137,10 @@ sudo systemctl restart caddy
 ├── droply.db              SQLite 数据库
 └── sites/
     ├── alice/
-    │   ├── blog/          alice.droply.dev/blog
-    │   └── portfolio/     alice.droply.dev/portfolio
+    │   ├── blog/          alice.droplydoc.com/blog
+    │   └── portfolio/     alice.droplydoc.com/portfolio
     └── bob/
-        └── docs/          bob.droply.dev/docs
+        └── docs/          bob.droplydoc.com/docs
 ```
 
 ## CLI 使用指南
@@ -164,7 +164,7 @@ go install github.com/zhong/droply/cmd/droply@latest
 CLI 配置文件位于 `~/.config/droply/config.toml`：
 
 ```toml
-api_url = "https://api.droply.dev"
+api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
 ```
 
@@ -194,7 +194,7 @@ droply logout
 ```bash
 # 创建子域名
 droply subdomain create alice
-# alice.droply.dev 现在可用
+# alice.droplydoc.com 现在可用
 
 # 列出所有子域名
 droply subdomain list
@@ -214,9 +214,9 @@ droply deploy ./dist --sub alice --project blog
 
 # 部署结果示例：
 # Packaging ./dist...
-# Deploying to alice.droply.dev/blog...
+# Deploying to alice.droplydoc.com/blog...
 # Deployed! Version 1
-# URL: https://alice.droply.dev/blog
+# URL: https://alice.droplydoc.com/blog
 ```
 
 #### 使用项目配置文件
@@ -272,7 +272,7 @@ droply domain remove blog.example.com --sub alice --project blog
 
 ## API
 
-所有 API 通过 `api.droply.dev` 访问，JSON 格式。认证使用 `Authorization: Bearer <token>` 头。
+所有 API 通过 `api.droplydoc.com` 访问，JSON 格式。认证使用 `Authorization: Bearer <token>` 头。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

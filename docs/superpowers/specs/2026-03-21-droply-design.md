@@ -17,7 +17,7 @@ CLI Client (Go)                    Browser
 │              Caddy (443/80)             │
 │         Auto HTTPS + Wildcard TLS       │
 ├─────────────────┬───────────────────────┤
-│ api.droply.dev  │  *.droply.dev         │
+│ api.droplydoc.com  │  *.droplydoc.com         │
 │ reverse_proxy   │  file_server          │
 │    :8080        │  /data/droply/sites/  │
 └────────┬────────┴───────────────────────┘
@@ -54,7 +54,7 @@ CLI Client (Go)                    Browser
 |------|------|------|
 | id | INTEGER PK | 自增主键 |
 | user_id | INTEGER FK | 所属用户 |
-| name | TEXT UNIQUE | 子域名名称，如 `alice` → `alice.droply.dev` |
+| name | TEXT UNIQUE | 子域名名称，如 `alice` → `alice.droplydoc.com` |
 | created_at | DATETIME | 创建时间 |
 
 约束: name 格式为小写字母+数字+连字符，3-32 字符。
@@ -102,7 +102,7 @@ users 1:N subdomains 1:N projects 1:N deployments
 
 ## API 设计
 
-所有接口通过 `api.droply.dev`，JSON 格式。
+所有接口通过 `api.droplydoc.com`，JSON 格式。
 
 ### 认证（无需 token）
 
@@ -182,7 +182,7 @@ project = "blog"
 ### 用户配置 `~/.config/droply/config.toml`
 
 ```toml
-api_url = "https://api.droply.dev"
+api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
 ```
 
@@ -200,13 +200,13 @@ token = "dp_xxxxxxxxxxxx"
 通过 Caddy Admin API (`localhost:2019`) 管理路由：
 
 - **启动时**: 加载基础配置（API 反代 + 通配符子域名处理）
-- **新建子域名时**: 添加路由 `{name}.droply.dev` → `file_server /data/droply/sites/{name}/`
+- **新建子域名时**: 添加路由 `{name}.droplydoc.com` → `file_server /data/droply/sites/{name}/`
 - **添加自定义域名时**: 添加路由 + 自动申请证书
 - **删除时**: 移除对应路由
 
 ### TLS
 
-- 通配符 `*.droply.dev`: DNS challenge（需配置 DNS provider API key，如 Cloudflare）
+- 通配符 `*.droplydoc.com`: DNS challenge（需配置 DNS provider API key，如 Cloudflare）
 - 自定义域名: 标准 HTTP challenge，Caddy 自动处理
 
 ## 磁盘布局

@@ -19,7 +19,7 @@ func newTestServer(t *testing.T) *server.Server {
 		t.Fatalf("create test store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return server.New(st, "/tmp/sites", "droply.dev", nil)
+	return server.New(st, "/tmp/sites", "droplydoc.com", nil)
 }
 
 // registerAndGetToken registers a new user and returns their API token.

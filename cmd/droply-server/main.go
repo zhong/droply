@@ -15,7 +15,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data-dir", "/data/droply", "directory for SQLite database and site files")
-	domain := flag.String("domain", "droply.dev", "base domain for subdomains")
+	domain := flag.String("domain", "droplydoc.com", "base domain for subdomains")
 	caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
 	flag.Parse()
 

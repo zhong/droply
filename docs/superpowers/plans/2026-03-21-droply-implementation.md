@@ -963,7 +963,7 @@ func setupTestServer(t *testing.T) *Server {
 	}
 	t.Cleanup(func() { s.Close() })
 
-	srv := New(s, "/tmp/droply-test-sites", "droply.dev", nil)
+	srv := New(s, "/tmp/droply-test-sites", "droplydoc.com", nil)
 	return srv
 }
 
@@ -1366,7 +1366,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data-dir", "/data/droply", "data directory")
-	baseDomain := flag.String("domain", "droply.dev", "base domain")
+	baseDomain := flag.String("domain", "droplydoc.com", "base domain")
 	flag.Parse()
 
 	dbPath := *dataDir + "/droply.db"
@@ -1740,7 +1740,7 @@ func TestDeploy(t *testing.T) {
 	sitesDir := t.TempDir()
 	s, _ := store.NewSQLiteStore(":memory:")
 	t.Cleanup(func() { s.Close() })
-	srv := New(s, sitesDir, "droply.dev", nil)
+	srv := New(s, sitesDir, "droplydoc.com", nil)
 
 	token := registerAndGetToken(t, srv)
 
@@ -1783,8 +1783,8 @@ func TestDeploy(t *testing.T) {
 	if resp["version"] != float64(1) {
 		t.Errorf("version = %v, want 1", resp["version"])
 	}
-	if resp["url"] != "https://alice.droply.dev/blog" {
-		t.Errorf("url = %v, want https://alice.droply.dev/blog", resp["url"])
+	if resp["url"] != "https://alice.droplydoc.com/blog" {
+		t.Errorf("url = %v, want https://alice.droplydoc.com/blog", resp["url"])
 	}
 
 	// Verify files on disk
@@ -1802,7 +1802,7 @@ func TestDeployAutoCreatesProject(t *testing.T) {
 	sitesDir := t.TempDir()
 	s, _ := store.NewSQLiteStore(":memory:")
 	t.Cleanup(func() { s.Close() })
-	srv := New(s, sitesDir, "droply.dev", nil)
+	srv := New(s, sitesDir, "droplydoc.com", nil)
 	token := registerAndGetToken(t, srv)
 
 	// Create subdomain
@@ -2089,7 +2089,7 @@ func setupDomainTest(t *testing.T) (*Server, string) {
 	sitesDir := t.TempDir()
 	s, _ := store.NewSQLiteStore(":memory:")
 	t.Cleanup(func() { s.Close() })
-	srv := New(s, sitesDir, "droply.dev", nil)
+	srv := New(s, sitesDir, "droplydoc.com", nil)
 	token := registerAndGetToken(t, srv)
 
 	// Create subdomain
@@ -2330,7 +2330,7 @@ import (
 func TestBuildSubdomainRoute(t *testing.T) {
 	c := &Client{
 		adminURL:   "http://localhost:2019",
-		baseDomain: "droply.dev",
+		baseDomain: "droplydoc.com",
 		sitesDir:   "/data/droply/sites",
 	}
 
@@ -2343,8 +2343,8 @@ func TestBuildSubdomainRoute(t *testing.T) {
 
 	match := parsed["match"].([]any)[0].(map[string]any)
 	hosts := match["host"].([]any)
-	if hosts[0] != "alice.droply.dev" {
-		t.Errorf("host = %v, want alice.droply.dev", hosts[0])
+	if hosts[0] != "alice.droplydoc.com" {
+		t.Errorf("host = %v, want alice.droplydoc.com", hosts[0])
 	}
 }
 
@@ -2357,7 +2357,7 @@ func TestAddSubdomainRouteHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, "droply.dev", "/data/droply/sites")
+	c := NewClient(server.URL, "droplydoc.com", "/data/droply/sites")
 
 	err := c.AddSubdomainRoute("alice")
 	if err != nil {
@@ -2379,7 +2379,7 @@ func TestRemoveSubdomainRouteHTTP(t *testing.T) {
 			routes := []map[string]any{
 				{
 					"@id":   "subdomain-alice",
-					"match": []map[string]any{{"host": []string{"alice.droply.dev"}}},
+					"match": []map[string]any{{"host": []string{"alice.droplydoc.com"}}},
 				},
 			}
 			json.NewEncoder(w).Encode(routes)
@@ -2389,7 +2389,7 @@ func TestRemoveSubdomainRouteHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, "droply.dev", "/data/droply/sites")
+	c := NewClient(server.URL, "droplydoc.com", "/data/droply/sites")
 	err := c.RemoveSubdomainRoute("alice")
 	if err != nil {
 		t.Fatalf("RemoveSubdomainRoute: %v", err)
@@ -2640,7 +2640,7 @@ func configPath() string {
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		APIURL: "https://api.droply.dev",
+		APIURL: "https://api.droplydoc.com",
 	}
 	_, err := toml.DecodeFile(configPath(), cfg)
 	if os.IsNotExist(err) {
@@ -3017,7 +3017,7 @@ func newSubdomainCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Subdomain created: %s.droply.dev\n", args[0])
+			fmt.Printf("Subdomain created: %s.droplydoc.com\n", args[0])
 			return nil
 		},
 	})
@@ -3038,7 +3038,7 @@ func newSubdomainCmd() *cobra.Command {
 				return nil
 			}
 			for _, s := range subs {
-				fmt.Printf("  %s.droply.dev  (%v projects)\n", s["name"], s["project_count"])
+				fmt.Printf("  %s.droplydoc.com  (%v projects)\n", s["name"], s["project_count"])
 			}
 			return nil
 		},
@@ -3101,7 +3101,7 @@ func newListCmd() *cobra.Command {
 				return nil
 			}
 			for _, p := range projects {
-				fmt.Printf("  %s.droply.dev/%s\n", sub, p["name"])
+				fmt.Printf("  %s.droplydoc.com/%s\n", sub, p["name"])
 			}
 			return nil
 		},
@@ -3214,7 +3214,7 @@ func newDeployCmd() *cobra.Command {
 			}
 			client := NewAPIClient(cfg)
 
-			fmt.Printf("Deploying to %s.droply.dev/%s...\n", sub, proj)
+			fmt.Printf("Deploying to %s.droplydoc.com/%s...\n", sub, proj)
 			path := fmt.Sprintf("/subdomains/%s/projects/%s/deploy", sub, proj)
 			result, err := client.uploadFile(path, tmpFile.Name())
 			if err != nil {

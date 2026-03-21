@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildSubdomainRoute(t *testing.T) {
-	c := NewClient("http://localhost:2019", "droply.dev", "/data/sites")
+	c := NewClient("http://localhost:2019", "droplydoc.com", "/data/sites")
 	route := c.buildSubdomainRoute("alice")
 
 	if route.ID != "subdomain-alice" {
@@ -17,8 +17,8 @@ func TestBuildSubdomainRoute(t *testing.T) {
 	if len(route.Match) != 1 || len(route.Match[0].Host) != 1 {
 		t.Fatalf("expected 1 match with 1 host, got %v", route.Match)
 	}
-	if route.Match[0].Host[0] != "alice.droply.dev" {
-		t.Errorf("expected host=alice.droply.dev, got %s", route.Match[0].Host[0])
+	if route.Match[0].Host[0] != "alice.droplydoc.com" {
+		t.Errorf("expected host=alice.droplydoc.com, got %s", route.Match[0].Host[0])
 	}
 	if len(route.Handle) != 1 || route.Handle[0].Handler != "file_server" {
 		t.Errorf("expected file_server handler, got %v", route.Handle)
@@ -38,7 +38,7 @@ func TestAddSubdomainRouteHTTP(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	c := NewClient(mock.URL, "droply.dev", "/data/sites")
+	c := NewClient(mock.URL, "droplydoc.com", "/data/sites")
 	if err := c.AddSubdomainRoute("alice"); err != nil {
 		t.Fatalf("AddSubdomainRoute: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestRemoveSubdomainRouteHTTP(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	c := NewClient(mock.URL, "droply.dev", "/data/sites")
+	c := NewClient(mock.URL, "droplydoc.com", "/data/sites")
 	if err := c.RemoveSubdomainRoute("alice"); err != nil {
 		t.Fatalf("RemoveSubdomainRoute: %v", err)
 	}

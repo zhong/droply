@@ -37,7 +37,7 @@ func configPath() string {
 // it returns a Config with the default API URL.
 func LoadConfig() *Config {
 	cfg := &Config{
-		APIURL: "https://api.droply.dev",
+		APIURL: "https://api.droplydoc.com",
 	}
 	p := configPath()
 	if _, err := os.Stat(p); os.IsNotExist(err) {
