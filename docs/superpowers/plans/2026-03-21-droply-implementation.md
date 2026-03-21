@@ -210,7 +210,7 @@ type Store interface {
 
 	// Startup recovery
 	ListAllSubdomains() ([]model.Subdomain, error)
-	ListAllVerifiedDomainsWithPaths() ([]DomainWithPath, error)
+	ListAllVerifiedDomainsWithPaths() ([]model.DomainWithPath, error)
 
 	Close() error
 }
@@ -1522,6 +1522,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+
+	"github.com/chenzhong/droply/internal/model"
 
 	"github.com/go-chi/chi/v5"
 )
