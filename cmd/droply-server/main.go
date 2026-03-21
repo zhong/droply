@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/chenzhong/droply/internal/caddy"
 	"github.com/chenzhong/droply/internal/server"
 	"github.com/chenzhong/droply/internal/store"
 )
@@ -15,6 +16,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data-dir", "/data/droply", "directory for SQLite database and site files")
 	domain := flag.String("domain", "droply.dev", "base domain for subdomains")
+	caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
 	flag.Parse()
 
 	dsn := fmt.Sprintf("%s/droply.db", *dataDir)
@@ -29,7 +31,8 @@ func main() {
 	defer st.Close()
 
 	sitesDir := fmt.Sprintf("%s/sites", *dataDir)
-	srv := server.New(st, sitesDir, *domain, nil)
+	caddyClient := caddy.NewClient(*caddyAddr, *domain, sitesDir)
+	srv := server.New(st, sitesDir, *domain, caddyClient)
 
 	log.Printf("droply-server listening on %s (domain=%s, data=%s)", *addr, *domain, *dataDir)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
