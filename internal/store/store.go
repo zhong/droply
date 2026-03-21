@@ -24,5 +24,10 @@ type Store interface {
 	DeleteCustomDomain(projectID int64, domain string) error
 	ListAllSubdomains() ([]model.Subdomain, error)
 	ListAllVerifiedDomainsWithPaths() ([]model.DomainWithPath, error)
+	CreateOrUpdateAccessRule(subdomainID int64, projectID *int64, allowedIPs []string, passwordHash string, sessionTTL int) (*model.AccessRule, error)
+	GetAccessRule(subdomainID int64, projectID *int64) (*model.AccessRule, error)
+	DeleteAccessRule(subdomainID int64, projectID *int64) error
+	FindAccessRuleForSite(subdomainName string, projectName string) (*model.AccessRule, error)
+	HasAccessRules(subdomainID int64) (bool, error)
 	Close() error
 }
