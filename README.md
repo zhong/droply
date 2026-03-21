@@ -73,7 +73,28 @@ xcaddy build --with github.com/caddy-dns/cloudflare
 sudo mv caddy /usr/bin/caddy
 ```
 
-### 2. Deploy droply-server
+### 2. Obtain Cloudflare API Token
+
+Caddy needs a Cloudflare API token to complete DNS challenges for wildcard certificates (`*.droplydoc.com`) and the `api.droplydoc.com` certificate.
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **Create Token**
+3. Use the **Edit zone DNS** template, or create a custom token with:
+   - **Permissions**: Zone → DNS → Edit
+   - **Zone Resources**: Include → Specific zone → `droplydoc.com`
+4. Copy the generated token
+
+Store the token on your server for Caddy to use:
+
+```bash
+# Create environment file for Caddy (readable only by root)
+sudo tee /etc/caddy/env > /dev/null << 'EOF'
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token-here
+EOF
+sudo chmod 600 /etc/caddy/env
+```
+
+### 3. Deploy droply-server
 
 ```bash
 # Create data directory
@@ -116,7 +137,7 @@ sudo systemctl enable --now droply
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API address |
 | `--hmac-secret` | (auto-generated) | Cookie signing key (auto-generated and persisted to `hmac.key` if empty) |
 
-### 3. Configure Caddy
+### 4. Configure Caddy
 
 Create `/etc/caddy/Caddyfile`:
 
@@ -125,18 +146,48 @@ Create `/etc/caddy/Caddyfile`:
     admin localhost:2019
 }
 
+# Wildcard certificate for all subdomains via DNS challenge
+*.droplydoc.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+
+    # droply-server dynamically adds routes via Admin API;
+    # this block just ensures the wildcard cert is provisioned.
+    # Without dynamic routes, return 404 by default.
+    respond "Not Found" 404
+}
+
+# API endpoint — gets its own certificate automatically
 api.droplydoc.com {
     reverse_proxy localhost:8080
 }
 ```
 
-droply-server automatically registers subdomain routes via the Caddy Admin API on startup. No manual configuration needed.
+Update the Caddy systemd service to load the environment file:
 
 ```bash
+# Override Caddy's systemd unit to include the env file
+sudo systemctl edit caddy
+```
+
+Add the following:
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/env
+```
+
+Then start/restart:
+
+```bash
+sudo systemctl daemon-reload
 sudo systemctl restart caddy
 ```
 
-### 4. Data Directory Structure
+droply-server automatically registers subdomain routes via the Caddy Admin API on startup. No manual configuration needed.
+
+### 5. Data Directory Structure
 
 ```
 /data/droply/

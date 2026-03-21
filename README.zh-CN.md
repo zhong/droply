@@ -73,7 +73,28 @@ xcaddy build --with github.com/caddy-dns/cloudflare
 sudo mv caddy /usr/bin/caddy
 ```
 
-### 2. 部署 droply-server
+### 2. 获取 Cloudflare API Token
+
+Caddy 需要 Cloudflare API Token 来完成通配符证书（`*.droplydoc.com`）和 `api.droplydoc.com` 证书的 DNS challenge 验证。
+
+1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
+2. 点击 **Create Token**
+3. 使用 **Edit zone DNS** 模板，或手动创建 Token：
+   - **Permissions**: Zone → DNS → Edit
+   - **Zone Resources**: Include → Specific zone → `droplydoc.com`
+4. 复制生成的 Token
+
+将 Token 存储到服务器：
+
+```bash
+# 创建 Caddy 环境变量文件（仅 root 可读）
+sudo tee /etc/caddy/env > /dev/null << 'EOF'
+CLOUDFLARE_API_TOKEN=你的-cloudflare-api-token
+EOF
+sudo chmod 600 /etc/caddy/env
+```
+
+### 3. 部署 droply-server
 
 ```bash
 # 创建数据目录
@@ -116,7 +137,7 @@ sudo systemctl enable --now droply
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
 | `--hmac-secret` | （自动生成） | Cookie 签名密钥（留空则自动生成并持久化到 `hmac.key`） |
 
-### 3. 配置 Caddy
+### 4. 配置 Caddy
 
 创建 `/etc/caddy/Caddyfile`：
 
@@ -125,18 +146,48 @@ sudo systemctl enable --now droply
     admin localhost:2019
 }
 
+# 通配符证书，通过 DNS challenge 签发
+*.droplydoc.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+
+    # droply-server 通过 Admin API 动态添加路由；
+    # 此块仅确保通配符证书被签发。
+    # 无动态路由时默认返回 404。
+    respond "Not Found" 404
+}
+
+# API 端点 — 自动获取独立证书
 api.droplydoc.com {
     reverse_proxy localhost:8080
 }
 ```
 
-droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，无需手动配置。
+更新 Caddy 的 systemd 服务以加载环境变量文件：
 
 ```bash
+# 编辑 Caddy 的 systemd override
+sudo systemctl edit caddy
+```
+
+添加以下内容：
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/env
+```
+
+然后启动/重启：
+
+```bash
+sudo systemctl daemon-reload
 sudo systemctl restart caddy
 ```
 
-### 4. 数据目录结构
+droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，无需手动配置。
+
+### 5. 数据目录结构
 
 ```
 /data/droply/
