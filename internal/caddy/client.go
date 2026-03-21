@@ -39,8 +39,13 @@ type caddyMatch struct {
 }
 
 type caddyHandler struct {
-	Handler string `json:"handler"`
-	Root    string `json:"root,omitempty"`
+	Handler   string          `json:"handler"`
+	Root      string          `json:"root,omitempty"`
+	Upstreams []caddyUpstream `json:"upstreams,omitempty"`
+}
+
+type caddyUpstream struct {
+	Dial string `json:"dial"`
 }
 
 // buildSubdomainRoute constructs a Caddy route for a subdomain.
@@ -107,6 +112,54 @@ func (c *Client) AddCustomDomainRoute(domain, subdomainName, projectName string)
 // RemoveCustomDomainRoute removes a custom domain route from the running Caddy config.
 func (c *Client) RemoveCustomDomainRoute(domain string) error {
 	return c.delete(fmt.Sprintf("/id/domain-%s", domain))
+}
+
+// buildSubdomainProtectedRoute constructs a Caddy route for a protected subdomain (reverse proxy).
+func (c *Client) buildSubdomainProtectedRoute(name string, proxyAddr string) caddyRoute {
+	host := fmt.Sprintf("%s.%s", name, c.baseDomain)
+	return caddyRoute{
+		ID:    fmt.Sprintf("subdomain-%s", name),
+		Match: []caddyMatch{{Host: []string{host}}},
+		Handle: []caddyHandler{
+			{Handler: "reverse_proxy", Upstreams: []caddyUpstream{{Dial: proxyAddr}}},
+		},
+		Terminal: true,
+	}
+}
+
+// SetSubdomainProtected switches a subdomain route from unprotected (file_server) to protected (reverse_proxy).
+func (c *Client) SetSubdomainProtected(name string, proxyAddr string) error {
+	_ = c.delete(fmt.Sprintf("/id/subdomain-%s", name))
+	route := c.buildSubdomainProtectedRoute(name, proxyAddr)
+	return c.postJSON("/config/apps/http/servers/main/routes", route)
+}
+
+// SetSubdomainUnprotected switches a subdomain route from protected (reverse_proxy) to unprotected (file_server).
+func (c *Client) SetSubdomainUnprotected(name string) error {
+	_ = c.delete(fmt.Sprintf("/id/subdomain-%s", name))
+	route := c.buildSubdomainRoute(name)
+	return c.postJSON("/config/apps/http/servers/main/routes", route)
+}
+
+// SetCustomDomainProtected switches a custom domain route from unprotected (file_server) to protected (reverse_proxy).
+func (c *Client) SetCustomDomainProtected(domain string, proxyAddr string) error {
+	_ = c.delete(fmt.Sprintf("/id/domain-%s", domain))
+	route := caddyRoute{
+		ID:    fmt.Sprintf("domain-%s", domain),
+		Match: []caddyMatch{{Host: []string{domain}}},
+		Handle: []caddyHandler{
+			{Handler: "reverse_proxy", Upstreams: []caddyUpstream{{Dial: proxyAddr}}},
+		},
+		Terminal: true,
+	}
+	return c.postJSON("/config/apps/http/servers/main/routes", route)
+}
+
+// SetCustomDomainUnprotected switches a custom domain route from protected (reverse_proxy) to unprotected (file_server).
+func (c *Client) SetCustomDomainUnprotected(domain, subdomainName, projectName string) error {
+	_ = c.delete(fmt.Sprintf("/id/domain-%s", domain))
+	route := c.buildCustomDomainRoute(domain, subdomainName, projectName)
+	return c.postJSON("/config/apps/http/servers/main/routes", route)
 }
 
 // postJSON sends a POST request with a JSON body to the Caddy admin API.
