@@ -1,0 +1,5 @@
+bin/
+*.db
+.superpowers/
+.droply.toml
+/data/
