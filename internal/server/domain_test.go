@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/chenzhong/droply/internal/server"
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/server"
+	"github.com/zhong/droply/internal/store"
 )
 
 // setupDomainTest creates a server with a real sites dir, registers a user, creates subdomain

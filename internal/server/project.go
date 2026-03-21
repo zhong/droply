@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chenzhong/droply/internal/model"
+	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
 )
 

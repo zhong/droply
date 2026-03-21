@@ -1,4 +1,4 @@
-module github.com/chenzhong/droply
+module github.com/zhong/droply
 
 go 1.26.1
 

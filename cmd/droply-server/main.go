@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/chenzhong/droply/internal/caddy"
-	"github.com/chenzhong/droply/internal/server"
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/caddy"
+	"github.com/zhong/droply/internal/server"
+	"github.com/zhong/droply/internal/store"
 )
 
 func main() {

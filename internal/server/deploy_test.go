@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chenzhong/droply/internal/server"
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/server"
+	"github.com/zhong/droply/internal/store"
 )
 
 // createTestTarGz builds an in-memory .tar.gz archive from a map of filename -> content.

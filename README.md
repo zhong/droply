@@ -34,7 +34,7 @@ CLI (droply)                         Browser
 ### 编译
 
 ```bash
-git clone https://github.com/chenzhong/droply.git
+git clone https://github.com/zhong/droply.git
 cd droply
 make build
 ```
@@ -156,7 +156,7 @@ sudo cp bin/droply /usr/local/bin/
 或者直接使用 `go install`：
 
 ```bash
-go install github.com/chenzhong/droply/cmd/droply@latest
+go install github.com/zhong/droply/cmd/droply@latest
 ```
 
 ### 配置

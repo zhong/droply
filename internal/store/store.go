@@ -1,6 +1,6 @@
 package store
 
-import "github.com/chenzhong/droply/internal/model"
+import "github.com/zhong/droply/internal/model"
 
 type Store interface {
 	CreateUser(email, hashedPassword, apiToken string) (*model.User, error)

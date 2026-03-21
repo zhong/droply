@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/chenzhong/droply/internal/cli"
+	"github.com/zhong/droply/internal/cli"
 )
 
 func main() {

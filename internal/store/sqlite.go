@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chenzhong/droply/internal/model"
+	"github.com/zhong/droply/internal/model"
 	_ "modernc.org/sqlite"
 )
 

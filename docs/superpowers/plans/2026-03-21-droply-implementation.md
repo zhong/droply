@@ -24,7 +24,7 @@
 
 ```bash
 cd /Users/chenzhong/Developer/droply
-go mod init github.com/chenzhong/droply
+go mod init github.com/zhong/droply
 ```
 
 - [ ] **Step 2: Create server entry point**
@@ -176,7 +176,7 @@ Create `internal/store/store.go`:
 ```go
 package store
 
-import "github.com/chenzhong/droply/internal/model"
+import "github.com/zhong/droply/internal/model"
 
 type Store interface {
 	// Users
@@ -455,7 +455,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chenzhong/droply/internal/model"
+	"github.com/zhong/droply/internal/model"
 	_ "modernc.org/sqlite"
 )
 
@@ -952,7 +952,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/store"
 )
 
 func setupTestServer(t *testing.T) *Server {
@@ -1109,8 +1109,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/chenzhong/droply/internal/model"
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/model"
+	"github.com/zhong/droply/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -1359,8 +1359,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/chenzhong/droply/internal/server"
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/server"
+	"github.com/zhong/droply/internal/store"
 )
 
 func main() {
@@ -1523,7 +1523,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/chenzhong/droply/internal/model"
+	"github.com/zhong/droply/internal/model"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -1617,7 +1617,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chenzhong/droply/internal/model"
+	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2081,7 +2081,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/chenzhong/droply/internal/store"
+	"github.com/zhong/droply/internal/store"
 )
 
 func setupDomainTest(t *testing.T) (*Server, string) {
@@ -2567,7 +2567,7 @@ Update `cmd/droply-server/main.go` to create and pass a Caddy client:
 
 ```go
 // Add to imports
-"github.com/chenzhong/droply/internal/caddy"
+"github.com/zhong/droply/internal/caddy"
 
 // In main(), before server.New:
 caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
@@ -2974,7 +2974,7 @@ package main
 import (
 	"os"
 
-	"github.com/chenzhong/droply/internal/cli"
+	"github.com/zhong/droply/internal/cli"
 )
 
 func main() {
