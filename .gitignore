@@ -3,3 +3,7 @@ bin/
 .superpowers/
 .droply.toml
 /data/
+/droply
+/droply-server
+.DS_Store
+hmac.key
