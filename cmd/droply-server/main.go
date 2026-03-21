@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/zhong/droply/internal/caddy"
 	"github.com/zhong/droply/internal/server"
@@ -13,10 +15,12 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "listen address")
+	addr := flag.String("addr", ":8080", "API listen address")
+	siteAddr := flag.String("site-addr", ":8081", "site serving listen address")
 	dataDir := flag.String("data-dir", "/data/droply", "directory for SQLite database and site files")
 	domain := flag.String("domain", "droplydoc.com", "base domain for subdomains")
 	caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
+	hmacSecret := flag.String("hmac-secret", "", "HMAC secret for cookie signing (auto-generated if empty)")
 	flag.Parse()
 
 	dsn := fmt.Sprintf("%s/droply.db", *dataDir)
@@ -30,16 +34,55 @@ func main() {
 	}
 	defer st.Close()
 
+	hmacKey, err := loadOrGenerateHMACKey(*hmacSecret, *dataDir)
+	if err != nil {
+		log.Fatalf("HMAC key: %v", err)
+	}
+
 	sitesDir := fmt.Sprintf("%s/sites", *dataDir)
 	caddyClient := caddy.NewClient(*caddyAddr, *domain, sitesDir)
-	srv := server.New(st, sitesDir, *domain, caddyClient, []byte("placeholder"), "localhost:8081")
+
+	siteProxyAddr := "localhost" + *siteAddr
+	srv := server.New(st, sitesDir, *domain, caddyClient, hmacKey, siteProxyAddr)
 
 	if err := srv.RecoverCaddyRoutes(); err != nil {
 		log.Printf("Warning: route recovery failed: %v", err)
 	}
 
+	siteHandler := srv.NewSiteHandler()
+	go func() {
+		log.Printf("site server listening on %s", *siteAddr)
+		if err := http.ListenAndServe(*siteAddr, siteHandler); err != nil {
+			log.Fatalf("site server error: %v", err)
+		}
+	}()
+
 	log.Printf("droply-server listening on %s (domain=%s, data=%s)", *addr, *domain, *dataDir)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func loadOrGenerateHMACKey(secret, dataDir string) ([]byte, error) {
+	if secret != "" {
+		return []byte(secret), nil
+	}
+
+	keyPath := filepath.Join(dataDir, "hmac.key")
+
+	if data, err := os.ReadFile(keyPath); err == nil && len(data) == 32 {
+		return data, nil
+	}
+
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate HMAC key: %w", err)
+	}
+
+	if err := os.WriteFile(keyPath, key, 0600); err != nil {
+		return nil, fmt.Errorf("write HMAC key: %w", err)
+	}
+
+	log.Printf("Generated new HMAC key at %s", keyPath)
+	return key, nil
 }
