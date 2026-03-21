@@ -1,11 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/chenzhong/droply/internal/cli"
 )
 
 func main() {
-	fmt.Println("droply")
-	os.Exit(0)
+	if err := cli.NewRootCmd().Execute(); err != nil {
+		os.Exit(1)
+	}
 }
