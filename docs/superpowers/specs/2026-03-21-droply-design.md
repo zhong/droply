@@ -273,6 +273,14 @@ droply/
 | 密码哈希 | `golang.org/x/crypto/bcrypt` | 标准选择 |
 | 配置文件 | `github.com/BurntSushi/toml` | TOML 解析 |
 
+## 实现细节备注
+
+- **上传大小限制**: 默认最大 50MB per deploy
+- **打包排除列表**: `.git`, `node_modules`, `.DS_Store`, `__pycache__`, `.env`
+- **Token 生成**: `dp_` 前缀 + 32 字节 `crypto/rand` hex 字符串
+- **自定义域名 DNS 验证**: 用户通过 `droply domain add` 添加后，手动执行 `droply domain verify <domain>` 触发服务端 DNS 检查；或在 deploy 时自动检查未验证的域名
+- **Caddy 启动恢复**: Go API 启动时从 SQLite 重建所有 Caddy 路由，不依赖 Caddy 持久化配置
+
 ## MVP 范围
 
 ### 包含
