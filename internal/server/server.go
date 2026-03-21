@@ -63,15 +63,15 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
 
-		r.Post("/subdomains", s.stubHandler)
-		r.Get("/subdomains", s.stubHandler)
-		r.Delete("/subdomains/{sub}", s.stubHandler)
+		r.Post("/subdomains", s.handleCreateSubdomain)
+		r.Get("/subdomains", s.handleListSubdomains)
+		r.Delete("/subdomains/{sub}", s.handleDeleteSubdomain)
 
-		r.Get("/subdomains/{sub}/projects", s.stubHandler)
-		r.Delete("/subdomains/{sub}/projects/{project}", s.stubHandler)
+		r.Get("/subdomains/{sub}/projects", s.handleListProjects)
+		r.Delete("/subdomains/{sub}/projects/{project}", s.handleDeleteProject)
 
-		r.Post("/subdomains/{sub}/projects/{project}/deploy", s.stubHandler)
-		r.Get("/subdomains/{sub}/projects/{project}/deployments", s.stubHandler)
+		r.Post("/subdomains/{sub}/projects/{project}/deploy", s.handleDeploy)
+		r.Get("/subdomains/{sub}/projects/{project}/deployments", s.handleListDeployments)
 
 		r.Post("/subdomains/{sub}/projects/{project}/domains", s.stubHandler)
 		r.Get("/subdomains/{sub}/projects/{project}/domains", s.stubHandler)
