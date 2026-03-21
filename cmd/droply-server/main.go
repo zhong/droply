@@ -34,6 +34,10 @@ func main() {
 	caddyClient := caddy.NewClient(*caddyAddr, *domain, sitesDir)
 	srv := server.New(st, sitesDir, *domain, caddyClient)
 
+	if err := srv.RecoverCaddyRoutes(); err != nil {
+		log.Printf("Warning: route recovery failed: %v", err)
+	}
+
 	log.Printf("droply-server listening on %s (domain=%s, data=%s)", *addr, *domain, *dataDir)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
 		log.Fatalf("server error: %v", err)
