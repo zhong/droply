@@ -17,6 +17,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newDeployCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newDomainCmd())
+	root.AddCommand(newAccessCmd())
 
 	return root
 }
