@@ -1,8 +1,10 @@
 # Droply
 
-多用户、多子域名的静态内容发布平台。通过 CLI 快速发布静态网站，自动分配子域名并提供 HTTPS 访问。
+Multi-user, multi-subdomain static content publishing platform. Publish static websites via CLI with automatic subdomain allocation and HTTPS.
 
-## 架构
+[中文文档](README.zh-CN.md)
+
+## Architecture
 
 ```
 CLI (droply)                         Browser
@@ -15,7 +17,7 @@ CLI (droply)                         Browser
 +-------------------+-----------------------------+
 | api.droplydoc.com |  *.droplydoc.com            |
 | reverse_proxy     |  file_server / reverse_proxy|
-|    :8080          |  :8081 (受保护站点)          |
+|    :8080          |  :8081 (protected sites)     |
 +--------+----------+-----------------------------+
          |
          v
@@ -26,13 +28,13 @@ CLI (droply)                         Browser
 +------------------+
 ```
 
-- **Caddy** — TLS 终止、自动 HTTPS（通配符 + 自定义域名）、API 反代、静态文件服务、受保护站点反代
-- **droply-server** — 用户认证、上传处理、元数据管理、访问控制、通过 Caddy Admin API 动态更新路由
-- **droply** — CLI 客户端，打包目录并上传
+- **Caddy** — TLS termination, auto HTTPS (wildcard + custom domains), API reverse proxy, static file serving, protected site reverse proxy
+- **droply-server** — User auth, upload handling, metadata management, access control, dynamic route updates via Caddy Admin API
+- **droply** — CLI client, packages directories and uploads
 
-## 快速开始
+## Quick Start
 
-### 编译
+### Build
 
 ```bash
 git clone https://github.com/zhong/droply.git
@@ -40,47 +42,47 @@ cd droply
 make build
 ```
 
-生成两个二进制文件：
-- `bin/droply-server` — 服务端
-- `bin/droply` — CLI 客户端
+Produces two binaries:
+- `bin/droply-server` — Server
+- `bin/droply` — CLI client
 
-### 运行测试
+### Run Tests
 
 ```bash
 make test
 ```
 
-## 服务端部署
+## Server Deployment
 
-### 前置条件
+### Prerequisites
 
-- 一台 VPS（推荐 Ubuntu/Debian）
-- 一个域名（如 `droplydoc.com`），DNS 已配置：
-  - `A` 记录：`droplydoc.com` → 服务器 IP
-  - `A` 记录：`*.droplydoc.com` → 服务器 IP
-  - `A` 记录：`api.droplydoc.com` → 服务器 IP
-- 安装 [Caddy](https://caddyserver.com/docs/install)（需要支持 DNS challenge 的版本以启用通配符证书）
+- A VPS (Ubuntu/Debian recommended)
+- A domain (e.g. `droplydoc.com`) with DNS configured:
+  - `A` record: `droplydoc.com` → server IP
+  - `A` record: `*.droplydoc.com` → server IP
+  - `A` record: `api.droplydoc.com` → server IP
+- [Caddy](https://caddyserver.com/docs/install) installed (with DNS challenge support for wildcard certificates)
 
-### 1. 安装 Caddy
+### 1. Install Caddy
 
-通配符证书需要 DNS challenge，需使用包含 DNS provider 模块的 Caddy。以 Cloudflare 为例：
+Wildcard certificates require DNS challenge. Use a Caddy build with a DNS provider module. Example with Cloudflare:
 
 ```bash
-# 使用 xcaddy 编译带 Cloudflare DNS 模块的 Caddy
+# Build Caddy with Cloudflare DNS module using xcaddy
 xcaddy build --with github.com/caddy-dns/cloudflare
 sudo mv caddy /usr/bin/caddy
 ```
 
-### 2. 部署 droply-server
+### 2. Deploy droply-server
 
 ```bash
-# 创建数据目录
+# Create data directory
 sudo mkdir -p /data/droply/sites
 
-# 将编译好的二进制文件复制到服务器
+# Copy the compiled binary to your server
 scp bin/droply-server your-server:/usr/local/bin/
 
-# 创建 systemd 服务
+# Create systemd service
 sudo tee /etc/systemd/system/droply.service > /dev/null << 'EOF'
 [Unit]
 Description=Droply Static Publishing Server
@@ -103,20 +105,20 @@ EOF
 sudo systemctl enable --now droply
 ```
 
-#### 服务端启动参数
+#### Server Flags
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--addr` | `:8080` | API 监听地址 |
-| `--site-addr` | `:8081` | 站点服务监听地址（受保护站点） |
-| `--data-dir` | `/data/droply` | 数据目录（数据库 + 静态文件） |
-| `--domain` | `droplydoc.com` | 基础域名 |
-| `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
-| `--hmac-secret` | （自动生成） | Cookie 签名密钥（留空则自动生成并持久化到 `hmac.key`） |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--addr` | `:8080` | API listen address |
+| `--site-addr` | `:8081` | Site server address (protected sites) |
+| `--data-dir` | `/data/droply` | Data directory (database + site files) |
+| `--domain` | `droplydoc.com` | Base domain |
+| `--caddy-admin` | `http://localhost:2019` | Caddy Admin API address |
+| `--hmac-secret` | (auto-generated) | Cookie signing key (auto-generated and persisted to `hmac.key` if empty) |
 
-### 3. 配置 Caddy
+### 3. Configure Caddy
 
-创建 `/etc/caddy/Caddyfile`：
+Create `/etc/caddy/Caddyfile`:
 
 ```caddyfile
 {
@@ -128,17 +130,17 @@ api.droplydoc.com {
 }
 ```
 
-droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，无需手动配置。
+droply-server automatically registers subdomain routes via the Caddy Admin API on startup. No manual configuration needed.
 
 ```bash
 sudo systemctl restart caddy
 ```
 
-### 4. 数据目录结构
+### 4. Data Directory Structure
 
 ```
 /data/droply/
-├── droply.db              SQLite 数据库
+├── droply.db              SQLite database
 └── sites/
     ├── alice/
     │   ├── blog/          alice.droplydoc.com/blog
@@ -147,85 +149,85 @@ sudo systemctl restart caddy
         └── docs/          bob.droplydoc.com/docs
 ```
 
-## CLI 使用指南
+## CLI Guide
 
-### 安装
+### Installation
 
-将 `bin/droply` 复制到 `$PATH` 中的目录：
+Copy `bin/droply` to a directory in your `$PATH`:
 
 ```bash
 sudo cp bin/droply /usr/local/bin/
 ```
 
-或者直接使用 `go install`：
+Or install directly with Go:
 
 ```bash
 go install github.com/zhong/droply/cmd/droply@latest
 ```
 
-### 配置
+### Configuration
 
-CLI 配置文件位于 `~/.config/droply/config.toml`：
+CLI config file is located at `~/.config/droply/config.toml`:
 
 ```toml
 api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
 ```
 
-登录或注册时会自动创建和更新此文件。如果使用自部署实例，先手动创建配置文件并修改 `api_url`。
+This file is automatically created and updated on login/register. For self-hosted instances, create the config file manually and set the `api_url`.
 
-### 注册和登录
+### Register and Login
 
 ```bash
-# 注册新账号
+# Register a new account
 droply register
-# 交互式输入 Email 和 Password
+# Interactive email and password input
 
-# 登录已有账号
+# Login to existing account
 droply login
 
-# 查看当前登录状态
+# Check current login status
 droply whoami
 
-# 登出
+# Logout
 droply logout
 ```
 
-### 管理子域名
+### Manage Subdomains
 
-每个用户可以创建多个子域名，子域名名称要求：小写字母 + 数字 + 连字符，3-32 个字符。
+Each user can create multiple subdomains. Name requirements: lowercase letters + digits + hyphens, 3-32 characters.
 
 ```bash
-# 创建子域名
+# Create a subdomain
 droply subdomain create alice
-# alice.droplydoc.com 现在可用
+# alice.droplydoc.com is now available
 
-# 列出所有子域名
+# List all subdomains
 droply subdomain list
 
-# 删除子域名（会同时删除其下所有项目）
+# Delete a subdomain (also deletes all projects under it)
 droply subdomain delete alice
 ```
 
-### 部署网站
+### Deploy Sites
 
 ```bash
-# 部署当前目录到指定子域名和项目
+# Deploy current directory to a subdomain and project
 droply deploy --sub alice --project blog
 
-# 部署指定目录
+# Deploy a specific directory
 droply deploy ./dist --sub alice --project blog
 
-# 部署结果示例：
+# Example output:
 # Packaging ./dist...
 # Deploying to alice.droplydoc.com/blog...
 # Deployed! Version 1
 # URL: https://alice.droplydoc.com/blog
 ```
 
-#### 使用项目配置文件
+#### Project Config File
 
-在项目根目录创建 `.droply.toml`，后续部署无需每次指定参数：
+Create `.droply.toml` in your project root to avoid specifying flags every time:
 
 ```toml
 subdomain = "alice"
@@ -233,125 +235,125 @@ project = "blog"
 ```
 
 ```bash
-# 有 .droply.toml 后，直接运行即可
+# With .droply.toml, just run:
 droply deploy
 ```
 
-#### 打包排除规则
+#### Exclusion Rules
 
-部署时自动排除以下文件和目录：
+The following files and directories are automatically excluded during deployment:
 
 - `.git`
 - `node_modules`
 - `__pycache__`
 - `.DS_Store`
 - `.env`
-- 所有隐藏目录（以 `.` 开头）
+- All hidden directories (starting with `.`)
 
-#### 上传限制
+#### Upload Limit
 
-单次部署最大 **50MB**。
+Maximum **50MB** per deployment.
 
-### 查看项目列表
+### List Projects
 
 ```bash
 droply list --sub alice
 ```
 
-### 自定义域名
+### Custom Domains
 
 ```bash
-# 为项目添加自定义域名
+# Add a custom domain to a project
 droply domain add blog.example.com --sub alice --project blog
-# 输出 CNAME 记录目标，按提示在 DNS 中添加
+# Outputs a CNAME target — add this record at your DNS provider
 
-# 查看自定义域名
+# List custom domains
 droply domain list --sub alice --project blog
 
-# 移除自定义域名
+# Remove a custom domain
 droply domain remove blog.example.com --sub alice --project blog
 ```
 
-添加自定义域名后，需要在 DNS 服务商处添加 CNAME 记录，指向输出的目标地址。Caddy 会自动为验证通过的自定义域名申请 HTTPS 证书。
+After adding a custom domain, add a CNAME record at your DNS provider pointing to the output target. Caddy will automatically provision HTTPS certificates for verified custom domains.
 
-### 访问控制
+### Access Control
 
-为子域名或项目设置 IP 白名单和密码保护。支持两个粒度级别：子域名级别（所有项目共享）和项目级别（覆盖子域名规则）。
+Protect subdomains or projects with IP whitelists and passwords. Two granularity levels: subdomain-level (shared across all projects) and project-level (overrides subdomain rules).
 
 ```bash
-# 设置子域名级别访问控制：IP 白名单 + 自动生成密码
+# Set subdomain-level access control: IP whitelist + auto-generated password
 droply access set --subdomain alice --ip 10.0.0.0/8 --password auto --expire 24h
-# 输出生成的密码
+# Outputs the generated password
 
-# 设置项目级别访问控制（覆盖子域名规则）
+# Set project-level access control (overrides subdomain rules)
 droply access set --subdomain alice --project blog --password "my-secret" --expire 7d
 
-# 查看访问控制规则
+# View access control rules
 droply access get --subdomain alice
 droply access get --subdomain alice --project blog
 
-# 移除访问控制
+# Remove access control
 droply access remove --subdomain alice
 droply access remove --subdomain alice --project blog
 ```
 
-#### 访问控制参数
+#### Access Control Flags
 
-| 参数 | 说明 |
-|------|------|
-| `--subdomain` | 子域名名称（必填） |
-| `--project` | 项目名称（可选，不指定则操作子域名级别） |
-| `--ip` | 允许的 IP 或 CIDR（可重复指定多个） |
-| `--password` | 密码（`auto` 自动生成，或指定自定义密码，最少 8 位） |
-| `--expire` | 会话过期时间（如 `1h`、`24h`、`7d`，默认 `24h`） |
+| Flag | Description |
+|------|-------------|
+| `--subdomain` | Subdomain name (required) |
+| `--project` | Project name (optional; omit for subdomain-level rules) |
+| `--ip` | Allowed IP or CIDR (repeatable for multiple entries) |
+| `--password` | Password (`auto` to generate, or a custom value, minimum 8 characters) |
+| `--expire` | Session TTL (e.g. `1h`, `24h`, `7d`, default `24h`) |
 
-#### 工作原理
+#### How It Works
 
-- **IP 白名单**：只有来自指定 IP/子网的请求才能访问
-- **密码保护**：访问者需要在登录页输入密码，通过后设置 cookie 保持会话
-- **组合使用**：同时配置 IP 和密码时，两者都必须满足（AND 逻辑）
-- **规则优先级**：项目级规则完全覆盖子域名级规则
+- **IP whitelist**: Only requests from specified IPs/subnets are allowed
+- **Password protection**: Visitors enter a password on a login page; a cookie maintains the session
+- **Combined rules**: When both IP and password are configured, both must be satisfied (AND logic)
+- **Rule priority**: Project-level rules completely override subdomain-level rules
 
-受保护的站点会通过 Caddy 反代到 droply-server 的站点服务端口（`:8081`），由 server 处理验证逻辑。
+Protected sites are reverse-proxied through Caddy to droply-server's site serving port (`:8081`), where the server handles verification.
 
 ## API
 
-所有 API 通过 `api.droplydoc.com` 访问，JSON 格式。认证使用 `Authorization: Bearer <token>` 头。
+All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentication uses `Authorization: Bearer <token>` header.
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/auth/register` | 注册 |
-| POST | `/auth/login` | 登录 |
-| POST | `/subdomains` | 创建子域名 |
-| GET | `/subdomains` | 列出子域名 |
-| DELETE | `/subdomains/:name` | 删除子域名 |
-| GET | `/subdomains/:sub/projects` | 列出项目 |
-| DELETE | `/subdomains/:sub/projects/:name` | 删除项目 |
-| POST | `/subdomains/:sub/projects/:name/deploy` | 部署（multipart） |
-| GET | `/subdomains/:sub/projects/:name/deployments` | 部署历史 |
-| POST | `/subdomains/:sub/projects/:name/domains` | 添加自定义域名 |
-| GET | `/subdomains/:sub/projects/:name/domains` | 列出自定义域名 |
-| DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | 删除自定义域名 |
-| PUT | `/subdomains/:sub/access` | 设置子域名访问控制 |
-| GET | `/subdomains/:sub/access` | 查看子域名访问控制 |
-| DELETE | `/subdomains/:sub/access` | 移除子域名访问控制 |
-| PUT | `/subdomains/:sub/projects/:name/access` | 设置项目访问控制 |
-| GET | `/subdomains/:sub/projects/:name/access` | 查看项目访问控制 |
-| DELETE | `/subdomains/:sub/projects/:name/access` | 移除项目访问控制 |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/register` | Register |
+| POST | `/auth/login` | Login |
+| POST | `/subdomains` | Create subdomain |
+| GET | `/subdomains` | List subdomains |
+| DELETE | `/subdomains/:name` | Delete subdomain |
+| GET | `/subdomains/:sub/projects` | List projects |
+| DELETE | `/subdomains/:sub/projects/:name` | Delete project |
+| POST | `/subdomains/:sub/projects/:name/deploy` | Deploy (multipart) |
+| GET | `/subdomains/:sub/projects/:name/deployments` | Deployment history |
+| POST | `/subdomains/:sub/projects/:name/domains` | Add custom domain |
+| GET | `/subdomains/:sub/projects/:name/domains` | List custom domains |
+| DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | Remove custom domain |
+| PUT | `/subdomains/:sub/access` | Set subdomain access control |
+| GET | `/subdomains/:sub/access` | Get subdomain access control |
+| DELETE | `/subdomains/:sub/access` | Remove subdomain access control |
+| PUT | `/subdomains/:sub/projects/:name/access` | Set project access control |
+| GET | `/subdomains/:sub/projects/:name/access` | Get project access control |
+| DELETE | `/subdomains/:sub/projects/:name/access` | Remove project access control |
 
-## 技术栈
+## Tech Stack
 
-| 组件 | 技术 |
-|------|------|
-| 语言 | Go |
-| HTTP 路由 | [chi](https://github.com/go-chi/chi) |
-| CLI 框架 | [cobra](https://github.com/spf13/cobra) |
-| 数据库 | SQLite ([modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) |
-| 密码哈希 | bcrypt |
-| Cookie 签名 | HMAC-SHA256 |
-| 限流 | golang.org/x/time/rate |
-| 配置文件 | TOML |
-| 反向代理/HTTPS | Caddy |
+| Component | Technology |
+|-----------|-----------|
+| Language | Go |
+| HTTP Router | [chi](https://github.com/go-chi/chi) |
+| CLI Framework | [cobra](https://github.com/spf13/cobra) |
+| Database | SQLite ([modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) |
+| Password Hashing | bcrypt |
+| Cookie Signing | HMAC-SHA256 |
+| Rate Limiting | golang.org/x/time/rate |
+| Configuration | TOML |
+| Reverse Proxy/HTTPS | Caddy |
 
 ## License
 
