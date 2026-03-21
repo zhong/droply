@@ -50,7 +50,7 @@ func (s *Server) handleCreateSubdomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.caddy != nil {
-		if err := s.caddy.AddSubdomain(sub.Name, s.baseDomain, s.sitesDir); err != nil {
+		if err := s.caddy.AddSubdomainRoute(sub.Name); err != nil {
 			// Non-fatal: log but continue; the record is already stored.
 			_ = err
 		}
@@ -97,7 +97,7 @@ func (s *Server) handleDeleteSubdomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.caddy != nil {
-		_ = s.caddy.RemoveSubdomain(subName)
+		_ = s.caddy.RemoveSubdomainRoute(subName)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

@@ -18,10 +18,10 @@ const userContextKey contextKey = "user"
 
 // CaddyClient is the interface for interacting with the Caddy admin API.
 type CaddyClient interface {
-	AddSubdomain(subdomain, baseDomain, sitesDir string) error
-	RemoveSubdomain(subdomain string) error
-	AddCustomDomain(domain, subdomain, project string) error
-	RemoveCustomDomain(domain string) error
+	AddSubdomainRoute(name string) error
+	RemoveSubdomainRoute(name string) error
+	AddCustomDomainRoute(domain, subdomainName, projectName string) error
+	RemoveCustomDomainRoute(domain string) error
 }
 
 // Server holds all dependencies for the HTTP server.
@@ -73,9 +73,9 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Post("/subdomains/{sub}/projects/{project}/deploy", s.handleDeploy)
 		r.Get("/subdomains/{sub}/projects/{project}/deployments", s.handleListDeployments)
 
-		r.Post("/subdomains/{sub}/projects/{project}/domains", s.stubHandler)
-		r.Get("/subdomains/{sub}/projects/{project}/domains", s.stubHandler)
-		r.Delete("/subdomains/{sub}/projects/{project}/domains/{domain}", s.stubHandler)
+		r.Post("/subdomains/{sub}/projects/{project}/domains", s.handleCreateDomain)
+		r.Get("/subdomains/{sub}/projects/{project}/domains", s.handleListDomains)
+		r.Delete("/subdomains/{sub}/projects/{project}/domains/{domain}", s.handleDeleteDomain)
 	})
 
 	return r
@@ -106,11 +106,6 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 func userFromContext(ctx context.Context) *model.User {
 	u, _ := ctx.Value(userContextKey).(*model.User)
 	return u
-}
-
-// stubHandler returns 501 Not Implemented for endpoints not yet built.
-func (s *Server) stubHandler(w http.ResponseWriter, r *http.Request) {
-	jsonError(w, "not implemented", http.StatusNotImplemented)
 }
 
 // jsonResponse writes a JSON response with the given status code.
