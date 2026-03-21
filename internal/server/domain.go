@@ -53,6 +53,15 @@ func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.caddy != nil {
+		rule, _ := s.store.FindAccessRuleForSite(subName, projName)
+		if rule != nil {
+			_ = s.caddy.SetCustomDomainProtected(req.Domain, s.siteAddr)
+		} else {
+			_ = s.caddy.AddCustomDomainRoute(req.Domain, subName, projName)
+		}
+	}
+
 	cnameTarget := fmt.Sprintf("%s.%s", subName, s.baseDomain)
 	jsonResponse(w, createDomainResponse{
 		CustomDomain: cd,
