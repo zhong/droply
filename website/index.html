@@ -87,6 +87,11 @@
         <p data-i18n="features.domain.desc">Bring your own domain. Add a CNAME record and Caddy handles certificate provisioning automatically.</p>
       </div>
       <div class="feature-card">
+        <div class="feature-icon">&#128737;</div>
+        <h3 data-i18n="features.access.title">Access Control</h3>
+        <p data-i18n="features.access.desc">Protect sites with IP whitelists and passwords. Per-subdomain or per-project rules with configurable session TTL.</p>
+      </div>
+      <div class="feature-card">
         <div class="feature-icon">&#128230;</div>
         <h3 data-i18n="features.zero.title">Zero Dependencies</h3>
         <p data-i18n="features.zero.desc">Pure Go binaries with embedded SQLite. No Docker, no Node.js, no external databases required.</p>
@@ -227,10 +232,12 @@ droply-server \
             </tr>
           </thead>
           <tbody>
-            <tr><td><code>--addr</code></td><td><code>:8080</code></td><td data-i18n="qs.flag_addr">Listen address</td></tr>
+            <tr><td><code>--addr</code></td><td><code>:8080</code></td><td data-i18n="qs.flag_addr">API listen address</td></tr>
+            <tr><td><code>--site-addr</code></td><td><code>:8081</code></td><td data-i18n="qs.flag_site">Site server address (protected sites)</td></tr>
             <tr><td><code>--data-dir</code></td><td><code>/data/droply</code></td><td data-i18n="qs.flag_data">Data directory (DB + files)</td></tr>
             <tr><td><code>--domain</code></td><td><code>droplydoc.com</code></td><td data-i18n="qs.flag_domain">Base domain</td></tr>
             <tr><td><code>--caddy-admin</code></td><td><code>http://localhost:2019</code></td><td>Caddy Admin API</td></tr>
+            <tr><td><code>--hmac-secret</code></td><td><code></code></td><td data-i18n="qs.flag_hmac">Cookie signing key (auto-generated if empty)</td></tr>
           </tbody>
         </table>
       </div>
@@ -269,6 +276,20 @@ droply deploy ./dist --sub alice --project blog
 
 <span class="c-dim"># <span data-i18n="cli.deploy_config">Or use .droply.toml config</span></span>
 droply deploy</code></pre>
+        </div>
+      </div>
+      <div class="cli-group">
+        <h3 data-i18n="cli.access">Access Control</h3>
+        <div class="code-block">
+          <pre><code><span class="c-dim"># <span data-i18n="cli.access_set">Set rules (IP + password)</span></span>
+droply access set --subdomain alice \
+  --ip 10.0.0.0/8 --password auto
+
+<span class="c-dim"># <span data-i18n="cli.access_get">View rules</span></span>
+droply access get --subdomain alice
+
+<span class="c-dim"># <span data-i18n="cli.access_remove">Remove rules</span></span>
+droply access remove --subdomain alice</code></pre>
         </div>
       </div>
       <div class="cli-group">
@@ -318,6 +339,9 @@ project   = "blog"</code></pre>
           <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/projects/:name/deployments</td><td data-i18n="api.history">Deployment history</td></tr>
           <tr><td><span class="method post">POST</span></td><td>/subdomains/:sub/projects/:name/domains</td><td data-i18n="api.add_domain">Add custom domain</td></tr>
           <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:sub/projects/:name/domains/:domain</td><td data-i18n="api.remove_domain">Remove custom domain</td></tr>
+          <tr><td><span class="method put">PUT</span></td><td>/subdomains/:sub/access</td><td data-i18n="api.set_access">Set access control</td></tr>
+          <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/access</td><td data-i18n="api.get_access">Get access control</td></tr>
+          <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:sub/access</td><td data-i18n="api.del_access">Remove access control</td></tr>
         </tbody>
       </table>
     </div>

@@ -25,6 +25,8 @@ const translations = {
     "features.selfhost.desc": "在自己的 VPS 上运行。数据完全由你掌控。只需一个二进制文件 + Caddy。",
     "features.domain.title": "自定义域名",
     "features.domain.desc": "绑定自己的域名。添加 CNAME 记录，Caddy 自动申请和续期证书。",
+    "features.access.title": "访问控制",
+    "features.access.desc": "通过 IP 白名单和密码保护站点。支持子域名级和项目级规则，可配置会话过期时间。",
     "features.zero.title": "零依赖",
     "features.zero.desc": "纯 Go 编译的二进制文件，内嵌 SQLite。无需 Docker、Node.js 或外部数据库。",
 
@@ -61,9 +63,11 @@ const translations = {
     "qs.th_flag": "参数",
     "qs.th_default": "默认值",
     "qs.th_desc": "说明",
-    "qs.flag_addr": "监听地址",
+    "qs.flag_addr": "API 监听地址",
+    "qs.flag_site": "站点服务地址（受保护站点）",
     "qs.flag_data": "数据目录（数据库 + 文件）",
     "qs.flag_domain": "基础域名",
+    "qs.flag_hmac": "Cookie 签名密钥（留空自动生成）",
 
     // CLI
     "cli.title": "CLI 参考",
@@ -77,6 +81,10 @@ const translations = {
     "cli.deploying": "部署",
     "cli.deploy_flags": "使用参数部署",
     "cli.deploy_config": "或使用 .droply.toml 配置文件",
+    "cli.access": "访问控制",
+    "cli.access_set": "设置规则（IP + 密码）",
+    "cli.access_get": "查看规则",
+    "cli.access_remove": "移除规则",
     "cli.domains": "自定义域名",
     "cli.config": "项目配置文件 <code>.droply.toml</code>",
     "cli.config_desc": "放在项目根目录，之后 <code>droply deploy</code> 无需传参。",
@@ -96,6 +104,9 @@ const translations = {
     "api.history": "部署历史",
     "api.add_domain": "添加自定义域名",
     "api.remove_domain": "删除自定义域名",
+    "api.set_access": "设置访问控制",
+    "api.get_access": "查看访问控制",
+    "api.del_access": "移除访问控制",
   },
 };
 

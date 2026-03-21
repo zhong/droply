@@ -13,20 +13,21 @@ CLI (droply)                         Browser
 |                Caddy (443/80)                    |
 |          Auto HTTPS + Wildcard TLS               |
 +-------------------+-----------------------------+
-| api.droplydoc.com    |  *.droplydoc.com               |
-| reverse_proxy     |  file_server                |
-|    :8080          |  /data/droply/sites/         |
+| api.droplydoc.com |  *.droplydoc.com            |
+| reverse_proxy     |  file_server / reverse_proxy|
+|    :8080          |  :8081 (受保护站点)          |
 +--------+----------+-----------------------------+
          |
          v
 +------------------+    +-----------------+
 |  droply-server   |--->|     SQLite      |
-|     :8080        |    |   droply.db     |
-+------------------+    +-----------------+
+|  API :8080       |    |   droply.db     |
+|  Site :8081      |    +-----------------+
++------------------+
 ```
 
-- **Caddy** — TLS 终止、自动 HTTPS（通配符 + 自定义域名）、API 反代、静态文件服务
-- **droply-server** — 用户认证、上传处理、元数据管理、通过 Caddy Admin API 动态更新路由
+- **Caddy** — TLS 终止、自动 HTTPS（通配符 + 自定义域名）、API 反代、静态文件服务、受保护站点反代
+- **droply-server** — 用户认证、上传处理、元数据管理、访问控制、通过 Caddy Admin API 动态更新路由
 - **droply** — CLI 客户端，打包目录并上传
 
 ## 快速开始
@@ -88,6 +89,7 @@ After=network.target caddy.service
 [Service]
 ExecStart=/usr/local/bin/droply-server \
   --addr :8080 \
+  --site-addr :8081 \
   --data-dir /data/droply \
   --domain droplydoc.com \
   --caddy-admin http://localhost:2019
@@ -105,10 +107,12 @@ sudo systemctl enable --now droply
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--addr` | `:8080` | 监听地址 |
+| `--addr` | `:8080` | API 监听地址 |
+| `--site-addr` | `:8081` | 站点服务监听地址（受保护站点） |
 | `--data-dir` | `/data/droply` | 数据目录（数据库 + 静态文件） |
 | `--domain` | `droplydoc.com` | 基础域名 |
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
+| `--hmac-secret` | （自动生成） | Cookie 签名密钥（留空则自动生成并持久化到 `hmac.key`） |
 
 ### 3. 配置 Caddy
 
@@ -270,6 +274,46 @@ droply domain remove blog.example.com --sub alice --project blog
 
 添加自定义域名后，需要在 DNS 服务商处添加 CNAME 记录，指向输出的目标地址。Caddy 会自动为验证通过的自定义域名申请 HTTPS 证书。
 
+### 访问控制
+
+为子域名或项目设置 IP 白名单和密码保护。支持两个粒度级别：子域名级别（所有项目共享）和项目级别（覆盖子域名规则）。
+
+```bash
+# 设置子域名级别访问控制：IP 白名单 + 自动生成密码
+droply access set --subdomain alice --ip 10.0.0.0/8 --password auto --expire 24h
+# 输出生成的密码
+
+# 设置项目级别访问控制（覆盖子域名规则）
+droply access set --subdomain alice --project blog --password "my-secret" --expire 7d
+
+# 查看访问控制规则
+droply access get --subdomain alice
+droply access get --subdomain alice --project blog
+
+# 移除访问控制
+droply access remove --subdomain alice
+droply access remove --subdomain alice --project blog
+```
+
+#### 访问控制参数
+
+| 参数 | 说明 |
+|------|------|
+| `--subdomain` | 子域名名称（必填） |
+| `--project` | 项目名称（可选，不指定则操作子域名级别） |
+| `--ip` | 允许的 IP 或 CIDR（可重复指定多个） |
+| `--password` | 密码（`auto` 自动生成，或指定自定义密码，最少 8 位） |
+| `--expire` | 会话过期时间（如 `1h`、`24h`、`7d`，默认 `24h`） |
+
+#### 工作原理
+
+- **IP 白名单**：只有来自指定 IP/子网的请求才能访问
+- **密码保护**：访问者需要在登录页输入密码，通过后设置 cookie 保持会话
+- **组合使用**：同时配置 IP 和密码时，两者都必须满足（AND 逻辑）
+- **规则优先级**：项目级规则完全覆盖子域名级规则
+
+受保护的站点会通过 Caddy 反代到 droply-server 的站点服务端口（`:8081`），由 server 处理验证逻辑。
+
 ## API
 
 所有 API 通过 `api.droplydoc.com` 访问，JSON 格式。认证使用 `Authorization: Bearer <token>` 头。
@@ -288,6 +332,12 @@ droply domain remove blog.example.com --sub alice --project blog
 | POST | `/subdomains/:sub/projects/:name/domains` | 添加自定义域名 |
 | GET | `/subdomains/:sub/projects/:name/domains` | 列出自定义域名 |
 | DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | 删除自定义域名 |
+| PUT | `/subdomains/:sub/access` | 设置子域名访问控制 |
+| GET | `/subdomains/:sub/access` | 查看子域名访问控制 |
+| DELETE | `/subdomains/:sub/access` | 移除子域名访问控制 |
+| PUT | `/subdomains/:sub/projects/:name/access` | 设置项目访问控制 |
+| GET | `/subdomains/:sub/projects/:name/access` | 查看项目访问控制 |
+| DELETE | `/subdomains/:sub/projects/:name/access` | 移除项目访问控制 |
 
 ## 技术栈
 
@@ -298,6 +348,8 @@ droply domain remove blog.example.com --sub alice --project blog
 | CLI 框架 | [cobra](https://github.com/spf13/cobra) |
 | 数据库 | SQLite ([modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)) |
 | 密码哈希 | bcrypt |
+| Cookie 签名 | HMAC-SHA256 |
+| 限流 | golang.org/x/time/rate |
 | 配置文件 | TOML |
 | 反向代理/HTTPS | Caddy |
 

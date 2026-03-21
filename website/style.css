@@ -664,6 +664,11 @@ code {
   color: var(--red);
 }
 
+.method.put {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 /* ===== Footer ===== */
 .footer {
   padding: 32px 0;
