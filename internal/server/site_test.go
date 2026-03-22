@@ -116,6 +116,52 @@ func TestSiteHandlerNoRule(t *testing.T) {
 	}
 }
 
+func TestSiteHandlerTrailingSlashRedirect(t *testing.T) {
+	srv, _ := newTestSiteServer(t)
+	token := registerAndGetToken(t, srv, "carol@example.com", "password123")
+
+	body, _ := json.Marshal(map[string]string{"name": "carol"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	deployProject(t, srv, token, "carol", "site", map[string]string{
+		"index.html": "<html><link rel='stylesheet' href='style.css'></html>",
+		"style.css":  "body{}",
+	})
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Request /site (no trailing slash) should redirect to /site/
+	req = httptest.NewRequest(http.MethodGet, "/site", nil)
+	req.Host = "carol.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected 301 redirect, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if loc != "/site/" {
+		t.Fatalf("expected redirect to /site/, got %s", loc)
+	}
+
+	// Request /site/ (with trailing slash) should serve index.html
+	req = httptest.NewRequest(http.MethodGet, "/site/", nil)
+	req.Host = "carol.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestSiteHandlerPasswordRequired(t *testing.T) {
 	srv, sitesDir := newTestSiteServer(t)
 	setupProtectedSite(t, srv, sitesDir)

@@ -173,7 +173,10 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		if len(parts) > 1 {
 			servePath = "/" + parts[1]
 		} else {
-			servePath = "/"
+			// Request is /project without trailing slash — redirect to /project/
+			// so relative URLs (e.g. href="style.css") resolve correctly.
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+			return
 		}
 	}
 
