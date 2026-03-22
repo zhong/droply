@@ -205,7 +205,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Check cookie.
 		if rule.HasPassword {
-			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain) {
+			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain, rule.PasswordHash) {
 				s.serveFile(w, r, subdomainName, projectName, servePath)
 				return
 			}
@@ -319,7 +319,7 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ra
 		}
 	}
 
-	cookieValue := s.signCookie(cookieSubdomain, cookieProject, expiry)
+	cookieValue := s.signCookie(cookieSubdomain, cookieProject, expiry, rule.PasswordHash)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "_droply_access",
 		Value:    cookieValue,
@@ -377,19 +377,24 @@ func isIPAllowed(clientIP string, allowedIPs []string) bool {
 
 // signCookie creates a signed cookie value in the format:
 // {subdomain}:{project_or_empty}:{expiry_unix}:{hmac_sha256_hex}
-func (s *Server) signCookie(subdomain, project string, expiry time.Time) string {
+// The passwordHash is included in the HMAC payload (not in the cookie value)
+// so that changing the password automatically invalidates existing cookies.
+func (s *Server) signCookie(subdomain, project string, expiry time.Time, passwordHash string) string {
 	expiryStr := strconv.FormatInt(expiry.Unix(), 10)
-	payload := fmt.Sprintf("%s:%s:%s", subdomain, project, expiryStr)
+	payload := fmt.Sprintf("%s:%s:%s:%s", subdomain, project, expiryStr, passwordHash)
 
 	mac := hmac.New(sha256.New, s.hmacKey)
 	mac.Write([]byte(payload))
 	sig := hex.EncodeToString(mac.Sum(nil))
 
-	return fmt.Sprintf("%s:%s", payload, sig)
+	return fmt.Sprintf("%s:%s:%s:%s", subdomain, project, expiryStr, sig)
 }
 
 // isValidAccessCookie checks the _droply_access cookie for validity.
-func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string, isCustomDomain bool) bool {
+// passwordHash is from the rule returned by FindAccessRuleForSite.
+// For subdomain-scoped cookies (cookieProj=="") where the passed rule is project-level,
+// the function looks up the subdomain-level rule to get the correct hash.
+func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string, isCustomDomain bool, passwordHash string) bool {
 	cookie, err := r.Cookie("_droply_access")
 	if err != nil {
 		return false
@@ -405,16 +410,7 @@ func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string,
 	expiryStr := parts[2]
 	sig := parts[3]
 
-	// Verify HMAC.
-	payload := fmt.Sprintf("%s:%s:%s", cookieSub, cookieProj, expiryStr)
-	mac := hmac.New(sha256.New, s.hmacKey)
-	mac.Write([]byte(payload))
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
-		return false
-	}
-
-	// Check expiry.
+	// Check expiry first (cheap, no DB needed).
 	expiryUnix, err := strconv.ParseInt(expiryStr, 10, 64)
 	if err != nil {
 		return false
@@ -425,6 +421,27 @@ func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string,
 
 	// Check scope: cookie subdomain must match.
 	if cookieSub != subdomain {
+		return false
+	}
+
+	// Determine the correct passwordHash for HMAC verification.
+	hashForVerify := passwordHash
+	if cookieProj == "" && project != "" {
+		// Subdomain-scoped cookie but we were given a project-level rule's hash.
+		// Look up the subdomain-level rule to get the correct hash.
+		subRule, err := s.store.FindAccessRuleForSite(cookieSub, "")
+		if err != nil || subRule == nil {
+			return false
+		}
+		hashForVerify = subRule.PasswordHash
+	}
+
+	// Verify HMAC with passwordHash included in payload.
+	payload := fmt.Sprintf("%s:%s:%s:%s", cookieSub, cookieProj, expiryStr, hashForVerify)
+	mac := hmac.New(sha256.New, s.hmacKey)
+	mac.Write([]byte(payload))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
 		return false
 	}
 
