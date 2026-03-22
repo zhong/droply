@@ -52,6 +52,14 @@ Produces two binaries:
 make test
 ```
 
+### Deploy to Server
+
+On the server, pull latest code, rebuild, and restart the service:
+
+```bash
+make deploy
+```
+
 ## Server Deployment
 
 ### Prerequisites

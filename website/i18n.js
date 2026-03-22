@@ -57,6 +57,8 @@ const translations = {
     "qs.build_desc": "生成两个二进制文件：<code>bin/droply-server</code> 和 <code>bin/droply</code>",
     "qs.install": "或使用 Go 安装",
     "qs.install_desc": "CLI 客户端将安装到 <code>$GOPATH/bin</code>",
+    "qs.deploy": "部署到服务器",
+    "qs.deploy_desc": "在服务器上拉取最新代码、重新编译并重启服务。",
     "qs.server": "服务端部署",
     "qs.comment_dir": "创建数据目录",
     "qs.comment_start": "启动服务",

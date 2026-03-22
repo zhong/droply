@@ -1,4 +1,4 @@
-.PHONY: build server cli test clean
+.PHONY: build server cli test clean deploy
 
 build: server cli
 
@@ -13,3 +13,10 @@ test:
 
 clean:
 	rm -rf bin/
+
+deploy:
+	git pull
+	go build -o bin/droply-server ./cmd/droply-server
+	sudo systemctl stop droply
+	sudo cp bin/droply-server /usr/local/bin/droply-server
+	sudo systemctl start droply
