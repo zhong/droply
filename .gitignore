@@ -1,4 +1,5 @@
 bin/
+dist/
 *.db
 .superpowers/
 .droply.toml
