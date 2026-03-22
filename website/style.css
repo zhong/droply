@@ -535,6 +535,51 @@ code {
   user-select: all;
 }
 
+/* Copy button */
+.code-block-copy {
+  position: relative;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.copy-btn:hover {
+  background: rgba(255,255,255,0.2);
+  color: #e2e8f0;
+}
+
+.copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.copy-btn .check-icon {
+  display: none;
+  color: var(--green);
+}
+
+.copy-btn.copied .copy-icon {
+  display: none;
+}
+
+.copy-btn.copied .check-icon {
+  display: block;
+}
+
 .code-block {
   background: #1e1e2e;
   border-radius: 8px;

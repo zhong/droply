@@ -194,15 +194,23 @@
     <div class="quickstart-grid">
       <div class="qs-card qs-card-wide qs-card-highlight">
         <h3 data-i18n="qs.install_cli">Install CLI</h3>
-        <div class="code-block">
+        <div class="code-block code-block-copy">
           <pre><code>curl -fsSL https://droplydoc.com/install.sh | bash</code></pre>
+          <button class="copy-btn" data-copy="curl -fsSL https://droplydoc.com/install.sh | bash" aria-label="Copy to clipboard">
+            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
         </div>
         <p data-i18n="qs.install_cli_desc" data-i18n-html="true">One command to install. Auto-detects your OS and architecture. Supports <strong>macOS</strong> (ARM/x64), <strong>Linux</strong> (x64), and <strong>Windows</strong> (x64).</p>
       </div>
       <div class="qs-card qs-card-wide qs-card-highlight">
         <h3 data-i18n="qs.setup_server">Deploy Server</h3>
-        <div class="code-block">
+        <div class="code-block code-block-copy">
           <pre><code>curl -fsSL https://droplydoc.com/setup.sh | sudo bash</code></pre>
+          <button class="copy-btn" data-copy="curl -fsSL https://droplydoc.com/setup.sh | sudo bash" aria-label="Copy to clipboard">
+            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
         </div>
         <p data-i18n="qs.setup_server_desc" data-i18n-html="true">Sets up a complete droply server on a fresh VPS. Installs droply-server, Caddy (with Cloudflare DNS), configures systemd, and starts everything. You'll be prompted for your domain and Cloudflare API token.</p>
       </div>
@@ -378,5 +386,16 @@ project   = "blog"</code></pre>
 </footer>
 
 <script src="i18n.js"></script>
+<script>
+document.querySelectorAll('.copy-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var text = btn.getAttribute('data-copy');
+    navigator.clipboard.writeText(text).then(function() {
+      btn.classList.add('copied');
+      setTimeout(function() { btn.classList.remove('copied'); }, 2000);
+    });
+  });
+});
+</script>
 </body>
 </html>
