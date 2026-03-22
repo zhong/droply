@@ -183,6 +183,9 @@ func newAccessRemoveCmd() *cobra.Command {
 
 func parseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
+	if strings.EqualFold(s, "never") {
+		return 87600 * time.Hour, nil // 10 years
+	}
 	if strings.HasSuffix(s, "d") {
 		days := strings.TrimSuffix(s, "d")
 		var d int
@@ -192,4 +195,33 @@ func parseDuration(s string) (time.Duration, error) {
 		return time.Duration(d) * 24 * time.Hour, nil
 	}
 	return time.ParseDuration(s)
+}
+
+func formatTTL(seconds float64) string {
+	s := int(seconds)
+	if s >= 315360000 {
+		return "never"
+	}
+	if s >= 86400 && s%86400 == 0 {
+		return fmt.Sprintf("%dd", s/86400)
+	}
+	return (time.Duration(s) * time.Second).String()
+}
+
+func buildShareLine(url, password string, ips []any, ttlSeconds float64) string {
+	parts := []string{url}
+	if password != "" {
+		parts = append(parts, "Password: "+password)
+	}
+	if len(ips) > 0 {
+		ipStrs := make([]string, len(ips))
+		for i, ip := range ips {
+			ipStrs[i] = fmt.Sprintf("%v", ip)
+		}
+		parts = append(parts, "IP: "+strings.Join(ipStrs, ", "))
+	}
+	if password != "" && ttlSeconds > 0 {
+		parts = append(parts, "Expires: "+formatTTL(ttlSeconds))
+	}
+	return strings.Join(parts, " | ")
 }
