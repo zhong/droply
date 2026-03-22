@@ -103,3 +103,48 @@ func TestBuildShareLine(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildAccessURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		apiURL   string
+		sub      string
+		project  string
+		expected string
+	}{
+		{
+			name:     "subdomain only",
+			apiURL:   "https://api.droplydoc.com",
+			sub:      "alice",
+			expected: "https://alice.droplydoc.com",
+		},
+		{
+			name:     "subdomain with project",
+			apiURL:   "https://api.droplydoc.com",
+			sub:      "alice",
+			project:  "blog",
+			expected: "https://alice.droplydoc.com/blog",
+		},
+		{
+			name:     "staging environment",
+			apiURL:   "http://api.staging.droplydoc.com",
+			sub:      "bob",
+			project:  "docs",
+			expected: "http://bob.staging.droplydoc.com/docs",
+		},
+		{
+			name:     "localhost returns empty",
+			apiURL:   "http://localhost:8080",
+			sub:      "alice",
+			expected: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildAccessURL(tt.apiURL, tt.sub, tt.project)
+			if got != tt.expected {
+				t.Fatalf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}

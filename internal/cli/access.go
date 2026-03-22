@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -224,4 +225,25 @@ func buildShareLine(url, password string, ips []any, ttlSeconds float64) string 
 		parts = append(parts, "Expires: "+formatTTL(ttlSeconds))
 	}
 	return strings.Join(parts, " | ")
+}
+
+func buildAccessURL(apiURL, subdomain, project string) string {
+	u, err := url.Parse(apiURL)
+	if err != nil {
+		return ""
+	}
+	host := u.Hostname()
+	if !strings.HasPrefix(host, "api.") {
+		return ""
+	}
+	siteHost := strings.TrimPrefix(host, "api.")
+	siteHost = subdomain + "." + siteHost
+	if port := u.Port(); port != "" {
+		siteHost += ":" + port
+	}
+	result := u.Scheme + "://" + siteHost
+	if project != "" {
+		result += "/" + project
+	}
+	return result
 }
