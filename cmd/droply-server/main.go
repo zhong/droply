@@ -14,7 +14,13 @@ import (
 	"github.com/zhong/droply/internal/store"
 )
 
+var version string
+
 func main() {
+	if version == "" {
+		version = "dev"
+	}
+	log.Printf("droply-server %s starting", version)
 	addr := flag.String("addr", ":8080", "API listen address")
 	siteAddr := flag.String("site-addr", ":8081", "site serving listen address")
 	dataDir := flag.String("data-dir", "/data/droply", "directory for SQLite database and site files")
