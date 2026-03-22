@@ -12,6 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// formatSize returns a human-readable file size string.
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+	)
+	switch {
+	case bytes >= MB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 var excludeDirs = map[string]bool{
 	".git":         true,
 	"node_modules": true,
@@ -22,15 +38,27 @@ var excludeDirs = map[string]bool{
 
 // createTarGz walks srcDir and writes a gzipped tar archive to w.
 // It excludes hidden directories, node_modules, .git, __pycache__, .DS_Store, and .env.
-func createTarGz(w io.Writer, srcDir string) error {
+// Returns the number of files packaged.
+func createTarGz(w io.Writer, srcDir string) (int, error) {
 	gz := gzip.NewWriter(w)
-	defer gz.Close()
 	tw := tar.NewWriter(gz)
-	defer tw.Close()
 
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+	var fileCount int
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Compute path relative to srcDir first, so root is handled
+		// before any name-based checks.
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip root dir entry itself.
+		if rel == "." {
+			return nil
 		}
 
 		name := info.Name()
@@ -50,17 +78,6 @@ func createTarGz(w io.Writer, srcDir string) error {
 
 		// Skip hidden files.
 		if !info.IsDir() && strings.HasPrefix(name, ".") {
-			return nil
-		}
-
-		// Compute path relative to srcDir.
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Skip root dir entry itself.
-		if rel == "." {
 			return nil
 		}
 
@@ -86,9 +103,27 @@ func createTarGz(w io.Writer, srcDir string) error {
 			return err
 		}
 		defer f.Close()
-		_, err = io.Copy(tw, f)
-		return err
+		if _, err := io.Copy(tw, f); err != nil {
+			return err
+		}
+		fileCount++
+		return nil
 	})
+	if err != nil {
+		tw.Close()
+		gz.Close()
+		return fileCount, err
+	}
+
+	// Explicitly close in correct order: tar first, then gzip.
+	if err := tw.Close(); err != nil {
+		gz.Close()
+		return fileCount, fmt.Errorf("tar close: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		return fileCount, fmt.Errorf("gzip close: %w", err)
+	}
+	return fileCount, nil
 }
 
 func newDeployCmd() *cobra.Command {
@@ -132,10 +167,14 @@ func newDeployCmd() *cobra.Command {
 			defer tmpFile.Close()
 
 			fmt.Printf("Packaging %s...\n", srcDir)
-			if err := createTarGz(tmpFile, srcDir); err != nil {
+			packaged, err := createTarGz(tmpFile, srcDir)
+			if err != nil {
 				return fmt.Errorf("package: %w", err)
 			}
 			tmpFile.Close()
+			if packaged == 0 {
+				return fmt.Errorf("no files to deploy in %s", srcDir)
+			}
 
 			cfg := LoadConfig()
 			client := NewAPIClient(cfg)
@@ -148,10 +187,14 @@ func newDeployCmd() *cobra.Command {
 			}
 
 			version, _ := result["version"].(float64)
+			fileCount, _ := result["file_count"].(float64)
+			totalSize, _ := result["total_size"].(float64)
 			url, _ := result["url"].(string)
 			fmt.Printf("Deployed successfully!\n")
-			fmt.Printf("  Version: %d\n", int(version))
-			fmt.Printf("  URL:     %s\n", url)
+			fmt.Printf("  Version:    %d\n", int(version))
+			fmt.Printf("  Files:      %d\n", int(fileCount))
+			fmt.Printf("  Total size: %s\n", formatSize(int64(totalSize)))
+			fmt.Printf("  URL:        %s\n", url)
 			return nil
 		},
 	}

@@ -491,9 +491,10 @@ code {
 /* ===== Quick Start ===== */
 .quickstart-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
-  margin-bottom: 24px;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .qs-card {
@@ -516,7 +517,7 @@ code {
 }
 
 .qs-card-wide {
-  max-width: 100%;
+  /* inherits grid width */
 }
 
 .code-block {
@@ -568,9 +569,12 @@ code {
 /* ===== CLI Reference ===== */
 .cli-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
   margin-bottom: 32px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .cli-group {

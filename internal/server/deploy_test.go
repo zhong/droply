@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -131,6 +132,192 @@ func TestDeploy(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(sitesDir, "alice", "mysite", "style.css")); err != nil {
 		t.Fatalf("style.css not on disk: %v", err)
+	}
+}
+
+func TestRedeployOverwritesFiles(t *testing.T) {
+	srv, sitesDir := newDeployTestServer(t)
+	token := registerAndGetToken(t, srv, "redeploy@example.com", "password123")
+
+	// Create subdomain.
+	body, _ := json.Marshal(map[string]string{"name": "redeployer"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// First deploy with original content.
+	archive1 := createTestTarGz(t, map[string]string{
+		"index.html": "<html><body>Version 1</body></html>",
+		"style.css":  "body { color: red; }",
+	})
+	req = buildDeployRequest(t, "/subdomains/redeployer/projects/mysite/deploy", archive1, token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp1 map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp1)
+	if int(resp1["version"].(float64)) != 1 {
+		t.Fatalf("first deploy: expected version=1, got %v", resp1["version"])
+	}
+	if int(resp1["file_count"].(float64)) != 2 {
+		t.Fatalf("first deploy: expected file_count=2, got %v", resp1["file_count"])
+	}
+
+	// Verify first deploy content.
+	content1, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "index.html"))
+	if err != nil {
+		t.Fatalf("read index.html after first deploy: %v", err)
+	}
+	if string(content1) != "<html><body>Version 1</body></html>" {
+		t.Fatalf("first deploy content mismatch: got %q", string(content1))
+	}
+
+	// Second deploy with UPDATED content.
+	archive2 := createTestTarGz(t, map[string]string{
+		"index.html": "<html><body>Version 2 UPDATED</body></html>",
+		"style.css":  "body { color: blue; }",
+	})
+	req = buildDeployRequest(t, "/subdomains/redeployer/projects/mysite/deploy", archive2, token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp2 map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp2)
+	if int(resp2["version"].(float64)) != 2 {
+		t.Fatalf("second deploy: expected version=2, got %v", resp2["version"])
+	}
+	if int(resp2["file_count"].(float64)) != 2 {
+		t.Fatalf("second deploy: expected file_count=2, got %v", resp2["file_count"])
+	}
+
+	// Verify files were ACTUALLY overwritten with new content.
+	content2, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "index.html"))
+	if err != nil {
+		t.Fatalf("read index.html after second deploy: %v", err)
+	}
+	if string(content2) != "<html><body>Version 2 UPDATED</body></html>" {
+		t.Fatalf("REDEPLOY BUG: index.html was NOT updated!\n  expected: %q\n  got:      %q", "<html><body>Version 2 UPDATED</body></html>", string(content2))
+	}
+
+	cssContent, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "style.css"))
+	if err != nil {
+		t.Fatalf("read style.css after second deploy: %v", err)
+	}
+	if string(cssContent) != "body { color: blue; }" {
+		t.Fatalf("REDEPLOY BUG: style.css was NOT updated!\n  expected: %q\n  got:      %q", "body { color: blue; }", string(cssContent))
+	}
+}
+
+// createTarGzWithFileInfoHeader creates a tar.gz using tar.FileInfoHeader,
+// exactly like the real CLI client does, to test compatibility.
+func createTarGzWithFileInfoHeader(t *testing.T, files map[string]string) *bytes.Buffer {
+	t.Helper()
+
+	// Write files to a temp dir first, then tar them using FileInfoHeader.
+	tmpDir := t.TempDir()
+	for name, content := range files {
+		p := filepath.Join(tmpDir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+	}
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	for name := range files {
+		p := filepath.Join(tmpDir, name)
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			t.Fatalf("FileInfoHeader %s: %v", name, err)
+		}
+		hdr.Name = name
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("write header %s: %v", name, err)
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			t.Fatalf("open %s: %v", name, err)
+		}
+		if _, err := io.Copy(tw, f); err != nil {
+			f.Close()
+			t.Fatalf("copy %s: %v", name, err)
+		}
+		f.Close()
+	}
+
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar close: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	return &buf
+}
+
+func TestDeployWithFileInfoHeader(t *testing.T) {
+	srv, sitesDir := newDeployTestServer(t)
+	token := registerAndGetToken(t, srv, "fih@example.com", "password123")
+
+	body, _ := json.Marshal(map[string]string{"name": "fihtest"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Create tar.gz using FileInfoHeader (like the real client).
+	archive := createTarGzWithFileInfoHeader(t, map[string]string{
+		"index.html": "<html><body>FileInfoHeader test</body></html>",
+		"style.css":  "body { color: green; }",
+		"i18n.js":    "const i18n = {};",
+	})
+
+	req = buildDeployRequest(t, "/subdomains/fihtest/projects/site/deploy", archive, token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	t.Logf("deploy response: %+v", resp)
+
+	fileCount := int(resp["file_count"].(float64))
+	if fileCount != 3 {
+		t.Fatalf("expected file_count=3, got %d — FileInfoHeader tar not compatible with extractTarGz!", fileCount)
+	}
+
+	// Verify files on disk.
+	content, err := os.ReadFile(filepath.Join(sitesDir, "fihtest", "site", "index.html"))
+	if err != nil {
+		t.Fatalf("index.html not on disk: %v", err)
+	}
+	if string(content) != "<html><body>FileInfoHeader test</body></html>" {
+		t.Fatalf("content mismatch: %q", string(content))
 	}
 }
 
