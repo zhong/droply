@@ -34,7 +34,31 @@ CLI (droply)                         Browser
 
 ## 快速开始
 
-### 编译
+### 从 Release 安装 CLI
+
+从 [最新 Release](https://github.com/zhong/droply/releases/latest) 下载预编译二进制文件：
+
+| 平台 | 二进制文件 |
+|------|-----------|
+| macOS (Apple Silicon) | `droply-darwin-arm64` |
+| macOS (Intel) | `droply-darwin-amd64` |
+| Linux (x86_64) | `droply-linux-amd64` |
+| Windows (x86_64) | `droply-windows-amd64.exe` |
+
+```bash
+# 示例：macOS Apple Silicon
+curl -Lo droply https://github.com/zhong/droply/releases/latest/download/droply-darwin-arm64
+chmod +x droply
+sudo mv droply /usr/local/bin/
+```
+
+或者使用 Go 安装：
+
+```bash
+go install github.com/zhong/droply/cmd/droply@latest
+```
+
+### 从源码编译
 
 ```bash
 git clone https://github.com/zhong/droply.git
@@ -45,6 +69,14 @@ make build
 生成两个二进制文件：
 - `bin/droply-server` — 服务端
 - `bin/droply` — CLI 客户端
+
+#### 交叉编译所有平台
+
+```bash
+make build-all
+```
+
+在 `dist/` 目录下生成所有支持平台的二进制文件。
 
 ### 运行测试
 
@@ -225,16 +257,12 @@ droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，�
 
 ### 安装
 
-将 `bin/droply` 复制到 `$PATH` 中的目录：
+从 [GitHub Releases](https://github.com/zhong/droply/releases/latest) 下载（参见上方快速开始），或从源码编译 `make build`。
+
+验证安装：
 
 ```bash
-sudo cp bin/droply /usr/local/bin/
-```
-
-或者直接使用 `go install`：
-
-```bash
-go install github.com/zhong/droply/cmd/droply@latest
+droply version
 ```
 
 ### 配置

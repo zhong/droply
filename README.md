@@ -34,7 +34,31 @@ CLI (droply)                         Browser
 
 ## Quick Start
 
-### Build
+### Install CLI from Release
+
+Download pre-built binaries from the [latest release](https://github.com/zhong/droply/releases/latest):
+
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `droply-darwin-arm64` |
+| macOS (Intel) | `droply-darwin-amd64` |
+| Linux (x86_64) | `droply-linux-amd64` |
+| Windows (x86_64) | `droply-windows-amd64.exe` |
+
+```bash
+# Example: macOS Apple Silicon
+curl -Lo droply https://github.com/zhong/droply/releases/latest/download/droply-darwin-arm64
+chmod +x droply
+sudo mv droply /usr/local/bin/
+```
+
+Or install with Go:
+
+```bash
+go install github.com/zhong/droply/cmd/droply@latest
+```
+
+### Build from Source
 
 ```bash
 git clone https://github.com/zhong/droply.git
@@ -45,6 +69,14 @@ make build
 Produces two binaries:
 - `bin/droply-server` — Server
 - `bin/droply` — CLI client
+
+#### Cross-compile for All Platforms
+
+```bash
+make build-all
+```
+
+Produces binaries in `dist/` for all supported platforms.
 
 ### Run Tests
 
@@ -225,16 +257,12 @@ droply-server automatically registers subdomain routes via the Caddy Admin API o
 
 ### Installation
 
-Copy `bin/droply` to a directory in your `$PATH`:
+Download from [GitHub Releases](https://github.com/zhong/droply/releases/latest) (see Quick Start above), or build from source with `make build`.
+
+Check your installation:
 
 ```bash
-sudo cp bin/droply /usr/local/bin/
-```
-
-Or install directly with Go:
-
-```bash
-go install github.com/zhong/droply/cmd/droply@latest
+droply version
 ```
 
 ### Configuration

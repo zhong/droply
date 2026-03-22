@@ -193,6 +193,15 @@
     <p class="section-sub" data-i18n="qs.sub">Up and running in minutes.</p>
     <div class="quickstart-grid">
       <div class="qs-card">
+        <h3 data-i18n="qs.download">Download from Release</h3>
+        <div class="code-block">
+          <pre><code><span class="c-gray"># macOS (Apple Silicon)</span>
+curl -Lo droply https://github.com/zhong/droply/releases/latest/download/droply-darwin-arm64
+chmod +x droply && sudo mv droply /usr/local/bin/</code></pre>
+        </div>
+        <p data-i18n="qs.download_desc" data-i18n-html="true">Pre-built binaries for <strong>macOS</strong> (ARM/x64), <strong>Linux</strong> (x64), and <strong>Windows</strong> (x64). See <a href="https://github.com/zhong/droply/releases/latest">all downloads</a>.</p>
+      </div>
+      <div class="qs-card">
         <h3 data-i18n="qs.build">Build from source</h3>
         <div class="code-block">
           <pre><code>git clone https://github.com/zhong/droply.git
@@ -207,13 +216,6 @@ make build</code></pre>
           <pre><code>go install github.com/zhong/droply/cmd/droply@latest</code></pre>
         </div>
         <p data-i18n="qs.install_desc" data-i18n-html="true">Installs the CLI client directly into your <code>$GOPATH/bin</code></p>
-      </div>
-      <div class="qs-card">
-        <h3 data-i18n="qs.deploy">Deploy to server</h3>
-        <div class="code-block">
-          <pre><code>make deploy</code></pre>
-        </div>
-        <p data-i18n="qs.deploy_desc">Pull latest code, rebuild, and restart the service on the server.</p>
       </div>
     </div>
     <div class="qs-card qs-card-wide">
