@@ -9,11 +9,11 @@ After setting access control via `droply access set`, the CLI output is not opti
 ### 1. `--expire never` Support
 
 **CLI (`internal/cli/access.go`):**
-- `parseDuration("never")` returns `876000h` (100 years = 3,153,600,000 seconds).
+- `parseDuration("never")` returns `87600h` (10 years = 315,360,000 seconds). This fits comfortably in 32-bit integers and SQLite's INTEGER type.
 - When displaying TTL, if the value ≥ 315,360,000 (10 years in seconds), show `never` instead of the raw duration.
 
 **Server (`internal/server/access.go`):**
-- Remove the TTL upper bound of 2,592,000. New validation: `ttl >= 300` only. This allows the CLI to send the large TTL value without server rejection.
+- Raise the TTL upper bound from 2,592,000 to 315,360,000 (10 years). New validation: `ttl >= 300 && ttl <= 315360000`. This allows the "never" TTL while still preventing arbitrary values.
 
 ### 2. Single-Line Share Output
 
@@ -29,7 +29,9 @@ https://{subdomain}.droplydoc.com/{project} | Password: {password} | IP: {ips} |
 - **IP**: Only if `allowed_ips` is non-empty. Multiple IPs comma-separated.
 - **Expires**: Only if password is set (IP-only rules have no session concept). Shows human-friendly duration or `never`.
 
-**URL construction:** The site domain `droplydoc.com` is derived from the existing API URL config (`api.droplydoc.com` → `droplydoc.com`). This keeps it consistent without adding a new config field.
+**Password source:** For `--password auto`, use `generated_password` from the API response. For custom `--password "xxx"`, use the original CLI flag value directly (the server does not echo custom passwords back).
+
+**URL construction:** The site domain `droplydoc.com` is derived from the existing API URL config (`api.droplydoc.com` → strip `api.` prefix). If the API URL doesn't match this pattern (e.g., `localhost`), skip the share line and fall back to the current output format.
 
 ### 3. TTL Display Helper
 
@@ -40,14 +42,14 @@ A `formatTTL(seconds float64) string` function handles display:
 
 ### 4. `access get` Also Uses Friendly TTL
 
-The `access get` command also uses `formatTTL` for consistent display.
+The `access get` command also uses `formatTTL` for consistent display. For IP-only rules (no password), TTL is omitted from display since it has no practical effect.
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
 | `internal/cli/access.go` | `parseDuration` handles `"never"`, new `formatTTL` + `buildShareLine` helpers, update `set` and `get` output |
-| `internal/server/access.go` | Remove TTL upper bound check |
+| `internal/server/access.go` | Raise TTL upper bound to 315,360,000 |
 | `internal/server/access_test.go` | Add test for large TTL acceptance |
 | `internal/cli/access_test.go` | Tests for `parseDuration("never")`, `formatTTL`, share line formatting (create if not exists) |
 
