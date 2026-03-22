@@ -67,18 +67,42 @@ func newAccessSetCmd() *cobra.Command {
 			}
 
 			fmt.Println("Access control updated.")
-			if ips := result["allowed_ips"]; ips != nil {
-				fmt.Printf("  IP whitelist: %v\n", ips)
+
+			// Determine password to display.
+			var displayPassword string
+			if gp, ok := result["generated_password"].(string); ok && gp != "" {
+				displayPassword = gp
+			} else if password != "" && password != "auto" {
+				displayPassword = password
 			}
-			if result["has_password"] == true {
-				if gp, ok := result["generated_password"].(string); ok && gp != "" {
-					fmt.Printf("  Password: %s\n", gp)
-				} else {
+
+			// Build share line if site URL can be derived.
+			siteURL := buildAccessURL(cfg.APIURL, sub, project)
+			if siteURL != "" {
+				var ips []any
+				if ipList, ok := result["allowed_ips"].([]any); ok {
+					ips = ipList
+				}
+
+				var ttl float64
+				if t, ok := result["session_ttl"].(float64); ok {
+					ttl = t
+				}
+
+				fmt.Println(buildShareLine(siteURL, displayPassword, ips, ttl))
+			} else {
+				// Fallback: original format for non-standard API URLs.
+				if ips := result["allowed_ips"]; ips != nil {
+					fmt.Printf("  IP whitelist: %v\n", ips)
+				}
+				if displayPassword != "" {
+					fmt.Printf("  Password: %s\n", displayPassword)
+				} else if result["has_password"] == true {
 					fmt.Println("  Password: (set)")
 				}
-			}
-			if ttl, ok := result["session_ttl"].(float64); ok {
-				fmt.Printf("  Session TTL: %s\n", (time.Duration(ttl) * time.Second).String())
+				if ttl, ok := result["session_ttl"].(float64); ok {
+					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
+				}
 			}
 
 			return nil
@@ -89,7 +113,7 @@ func newAccessSetCmd() *cobra.Command {
 	cmd.Flags().String("project", "", "Project name (optional, for project-level rules)")
 	cmd.Flags().StringSlice("ip", nil, "Allowed IP or CIDR (repeatable)")
 	cmd.Flags().String("password", "", "Password ('auto' to generate, or a custom value)")
-	cmd.Flags().String("expire", "24h", "Session expiry duration (e.g. 1h, 24h, 7d)")
+	cmd.Flags().String("expire", "24h", "Session expiry duration (e.g. 1h, 24h, 7d, never)")
 
 	return cmd
 }
@@ -130,8 +154,10 @@ func newAccessGetCmd() *cobra.Command {
 			if result["has_password"] == true {
 				fmt.Println("  Password: (set)")
 			}
-			if ttl, ok := result["session_ttl"].(float64); ok {
-				fmt.Printf("  Session TTL: %s\n", (time.Duration(ttl) * time.Second).String())
+			if result["has_password"] == true {
+				if ttl, ok := result["session_ttl"].(float64); ok {
+					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
+				}
 			}
 			return nil
 		},
