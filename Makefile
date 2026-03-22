@@ -1,22 +1,40 @@
-.PHONY: build server cli test clean deploy
+VERSION ?= $(shell git describe --tags --always --dirty)
+LDFLAGS := -s -w -X main.version=$(VERSION)
+
+.PHONY: build server cli test clean deploy build-all build-darwin-arm64 build-darwin-amd64 build-linux-amd64 build-windows-amd64
 
 build: server cli
 
 server:
-	go build -o bin/droply-server ./cmd/droply-server
+	go build -ldflags "$(LDFLAGS)" -o bin/droply-server ./cmd/droply-server
 
 cli:
-	go build -o bin/droply ./cmd/droply
+	go build -ldflags "$(LDFLAGS)" -o bin/droply ./cmd/droply
 
 test:
 	go test ./...
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ dist/
 
 deploy:
 	git pull
-	go build -o bin/droply-server ./cmd/droply-server
+	go build -ldflags "$(LDFLAGS)" -o bin/droply-server ./cmd/droply-server
 	sudo systemctl stop droply
 	sudo cp bin/droply-server /usr/local/bin/droply-server
 	sudo systemctl start droply
+
+build-all: build-darwin-arm64 build-darwin-amd64 build-linux-amd64 build-windows-amd64
+
+build-darwin-arm64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/droply-darwin-arm64 ./cmd/droply
+
+build-darwin-amd64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-darwin-amd64 ./cmd/droply
+
+build-linux-amd64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-linux-amd64 ./cmd/droply
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-server-linux-amd64 ./cmd/droply-server
+
+build-windows-amd64:
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-windows-amd64.exe ./cmd/droply
