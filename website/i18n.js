@@ -83,6 +83,7 @@ const translations = {
     "cli.deploy_config": "或使用 .droply.toml 配置文件",
     "cli.access": "访问控制",
     "cli.access_set": "设置规则（IP + 密码）",
+    "cli.access_never": "永不过期密码",
     "cli.access_get": "查看规则",
     "cli.access_remove": "移除规则",
     "cli.domains": "自定义域名",

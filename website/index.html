@@ -284,12 +284,15 @@ droply deploy</code></pre>
           <pre><code><span class="c-dim"># <span data-i18n="cli.access_set">Set rules (IP + password)</span></span>
 droply access set --subdomain alice \
   --ip 10.0.0.0/8 --password auto
+<span class="c-green">https://alice.droplydoc.com | Password: a1b2... | IP: 10.0.0.0/8 | Expires: 1d</span>
+
+<span class="c-dim"># <span data-i18n="cli.access_never">Never-expire password</span></span>
+droply access set --subdomain alice \
+  --password auto --expire never
+<span class="c-green">https://alice.droplydoc.com | Password: xYz1... | Expires: never</span>
 
 <span class="c-dim"># <span data-i18n="cli.access_get">View rules</span></span>
-droply access get --subdomain alice
-
-<span class="c-dim"># <span data-i18n="cli.access_remove">Remove rules</span></span>
-droply access remove --subdomain alice</code></pre>
+droply access get --subdomain alice</code></pre>
         </div>
       </div>
       <div class="cli-group">

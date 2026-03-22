@@ -338,10 +338,15 @@ droply domain remove blog.example.com --sub alice --project blog
 ```bash
 # 设置子域名级别访问控制：IP 白名单 + 自动生成密码
 droply access set --subdomain alice --ip 10.0.0.0/8 --password auto --expire 24h
-# 输出生成的密码
+# 输出：https://alice.droplydoc.com | Password: a1b2c3d4e5f6g7h8 | IP: 10.0.0.0/8 | Expires: 1d
+
+# 设置永不过期的密码
+droply access set --subdomain alice --password auto --expire never
+# 输出：https://alice.droplydoc.com | Password: xYz123AbCdEf9876 | Expires: never
 
 # 设置项目级别访问控制（覆盖子域名规则）
 droply access set --subdomain alice --project blog --password "my-secret" --expire 7d
+# 输出：https://alice.droplydoc.com/blog | Password: my-secret | Expires: 7d
 
 # 查看访问控制规则
 droply access get --subdomain alice
@@ -352,6 +357,8 @@ droply access remove --subdomain alice
 droply access remove --subdomain alice --project blog
 ```
 
+设置访问控制后，会输出一行便于复制分享的信息，包含访问地址、密码、IP 限制和过期时间，可以直接粘贴到聊天或邮件中。
+
 #### 访问控制参数
 
 | 参数 | 说明 |
@@ -360,7 +367,7 @@ droply access remove --subdomain alice --project blog
 | `--project` | 项目名称（可选，不指定则操作子域名级别） |
 | `--ip` | 允许的 IP 或 CIDR（可重复指定多个） |
 | `--password` | 密码（`auto` 自动生成，或指定自定义密码，最少 8 位） |
-| `--expire` | 会话过期时间（如 `1h`、`24h`、`7d`，默认 `24h`） |
+| `--expire` | 会话过期时间（如 `1h`、`24h`、`7d`、`never`，默认 `24h`） |
 
 #### 工作原理
 

@@ -338,10 +338,15 @@ Protect subdomains or projects with IP whitelists and passwords. Two granularity
 ```bash
 # Set subdomain-level access control: IP whitelist + auto-generated password
 droply access set --subdomain alice --ip 10.0.0.0/8 --password auto --expire 24h
-# Outputs the generated password
+# Output: https://alice.droplydoc.com | Password: a1b2c3d4e5f6g7h8 | IP: 10.0.0.0/8 | Expires: 1d
+
+# Set a password that never expires
+droply access set --subdomain alice --password auto --expire never
+# Output: https://alice.droplydoc.com | Password: xYz123AbCdEf9876 | Expires: never
 
 # Set project-level access control (overrides subdomain rules)
 droply access set --subdomain alice --project blog --password "my-secret" --expire 7d
+# Output: https://alice.droplydoc.com/blog | Password: my-secret | Expires: 7d
 
 # View access control rules
 droply access get --subdomain alice
@@ -352,6 +357,8 @@ droply access remove --subdomain alice
 droply access remove --subdomain alice --project blog
 ```
 
+After setting access control, a copy-friendly share line is printed with the access URL, password, IP restrictions, and expiry — ready to paste into chat or email.
+
 #### Access Control Flags
 
 | Flag | Description |
@@ -360,7 +367,7 @@ droply access remove --subdomain alice --project blog
 | `--project` | Project name (optional; omit for subdomain-level rules) |
 | `--ip` | Allowed IP or CIDR (repeatable for multiple entries) |
 | `--password` | Password (`auto` to generate, or a custom value, minimum 8 characters) |
-| `--expire` | Session TTL (e.g. `1h`, `24h`, `7d`, default `24h`) |
+| `--expire` | Session TTL (e.g. `1h`, `24h`, `7d`, `never`, default `24h`) |
 
 #### How It Works
 
