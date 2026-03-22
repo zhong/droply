@@ -34,7 +34,22 @@ CLI (droply)                         Browser
 
 ## Quick Start
 
-### Install CLI from Release
+### Install CLI
+
+One-line install (auto-detects OS and architecture):
+
+```bash
+curl -fsSL https://droplydoc.com/install.sh | bash
+```
+
+Or install a specific version:
+
+```bash
+VERSION=v0.1.0 curl -fsSL https://droplydoc.com/install.sh | bash
+```
+
+<details>
+<summary>Alternative installation methods</summary>
 
 Download pre-built binaries from the [latest release](https://github.com/zhong/droply/releases/latest):
 
@@ -57,6 +72,8 @@ Or install with Go:
 ```bash
 go install github.com/zhong/droply/cmd/droply@latest
 ```
+
+</details>
 
 ### Build from Source
 
@@ -102,6 +119,25 @@ droply deploy
 ```
 
 ## Server Deployment
+
+### One-Line Setup
+
+Set up a complete droply server on a fresh VPS (Ubuntu/Debian):
+
+```bash
+curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+```
+
+This installs droply-server, Caddy (with Cloudflare DNS module), configures systemd services, and starts everything. You'll be prompted for your domain and Cloudflare API token.
+
+For non-interactive setup:
+
+```bash
+DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+```
+
+<details>
+<summary>Manual setup</summary>
 
 ### Prerequisites
 
@@ -239,6 +275,8 @@ sudo systemctl restart caddy
 ```
 
 droply-server automatically registers subdomain routes via the Caddy Admin API on startup. No manual configuration needed.
+
+</details>
 
 ### 5. Data Directory Structure
 

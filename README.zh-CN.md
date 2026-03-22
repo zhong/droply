@@ -34,7 +34,22 @@ CLI (droply)                         Browser
 
 ## 快速开始
 
-### 从 Release 安装 CLI
+### 安装 CLI
+
+一键安装（自动检测操作系统和架构）：
+
+```bash
+curl -fsSL https://droplydoc.com/install.sh | bash
+```
+
+安装指定版本：
+
+```bash
+VERSION=v0.1.0 curl -fsSL https://droplydoc.com/install.sh | bash
+```
+
+<details>
+<summary>其他安装方式</summary>
 
 从 [最新 Release](https://github.com/zhong/droply/releases/latest) 下载预编译二进制文件：
 
@@ -57,6 +72,8 @@ sudo mv droply /usr/local/bin/
 ```bash
 go install github.com/zhong/droply/cmd/droply@latest
 ```
+
+</details>
 
 ### 从源码编译
 
@@ -102,6 +119,25 @@ droply deploy
 ```
 
 ## 服务端部署
+
+### 一键部署
+
+在全新 VPS（Ubuntu/Debian）上一键部署完整的 droply 服务端：
+
+```bash
+curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+```
+
+脚本会安装 droply-server、Caddy（含 Cloudflare DNS 模块）、配置 systemd 服务并启动。过程中会提示输入域名和 Cloudflare API Token。
+
+非交互式部署：
+
+```bash
+DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+```
+
+<details>
+<summary>手动部署</summary>
 
 ### 前置条件
 
@@ -239,6 +275,8 @@ sudo systemctl restart caddy
 ```
 
 droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，无需手动配置。
+
+</details>
 
 ### 5. 数据目录结构
 
