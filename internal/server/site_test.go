@@ -470,3 +470,117 @@ func TestSiteHandlerCookieInvalidAfterPasswordChange(t *testing.T) {
 		t.Fatalf("login with new password: expected 302, got %d", rr.Code)
 	}
 }
+
+func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
+	srv, sitesDir := newTestSiteServer(t)
+	token := registerAndGetToken(t, srv, "subtest@example.com", "password123")
+
+	// Create subdomain.
+	body, _ := json.Marshal(map[string]string{"name": "bob"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d", rr.Code)
+	}
+
+	// Deploy project.
+	deployProject(t, srv, token, "bob", "app", map[string]string{
+		"page.html": "Hello App",
+	})
+
+	// Set SUBDOMAIN-level password rule.
+	accessBody, _ := json.Marshal(map[string]interface{}{
+		"password": "subdomainpass1",
+	})
+	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set subdomain access: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// ALSO set PROJECT-level password rule (different password).
+	accessBody, _ = json.Marshal(map[string]interface{}{
+		"password": "projectpass12",
+	})
+	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/projects/app/access", bytes.NewReader(accessBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set project access: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Login with SUBDOMAIN password at a second project (no project-level rule)
+	// to get a subdomain-scoped cookie.
+	deployProject(t, srv, token, "bob", "other", map[string]string{
+		"page.html": "Other Page",
+	})
+
+	form := url.Values{}
+	form.Set("password", "subdomainpass1")
+	form.Set("redirect", "/other/page.html")
+	form.Set("host", "bob.droplydoc.com")
+	req = httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "bob.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("subdomain login: expected 302, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var subCookie *http.Cookie
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "_droply_access" {
+			subCookie = c
+			break
+		}
+	}
+	if subCookie == nil {
+		t.Fatal("expected subdomain-level cookie")
+	}
+
+	// Use subdomain-scoped cookie to access the project "app" (which has its own project-level rule).
+	// Subdomain-scoped cookie should still grant access.
+	req = httptest.NewRequest(http.MethodGet, "/app/page.html", nil)
+	req.Host = "bob.droplydoc.com"
+	req.AddCookie(subCookie)
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "Hello App") {
+		t.Fatalf("subdomain cookie should access project with project-level rule, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Now change the SUBDOMAIN password — subdomain-scoped cookie should be invalidated.
+	accessBody, _ = json.Marshal(map[string]interface{}{
+		"password": "newsubpass123",
+	})
+	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update subdomain password: expected 200, got %d", rr.Code)
+	}
+
+	// Old subdomain cookie should now be rejected.
+	req = httptest.NewRequest(http.MethodGet, "/app/page.html", nil)
+	req.Host = "bob.droplydoc.com"
+	req.AddCookie(subCookie)
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), "_droply/login") {
+		t.Fatalf("old subdomain cookie should be rejected after password change, got %d: %s", rr.Code, rr.Body.String())
+	}
+	_ = sitesDir
+}
