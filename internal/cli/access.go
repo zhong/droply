@@ -153,8 +153,6 @@ func newAccessGetCmd() *cobra.Command {
 			}
 			if result["has_password"] == true {
 				fmt.Println("  Password: (set)")
-			}
-			if result["has_password"] == true {
 				if ttl, ok := result["session_ttl"].(float64); ok {
 					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
 				}
