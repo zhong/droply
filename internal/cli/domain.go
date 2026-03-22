@@ -44,6 +44,7 @@ func newDomainCmd() *cobra.Command {
 	cmd.AddCommand(newDomainAddCmd())
 	cmd.AddCommand(newDomainListCmd())
 	cmd.AddCommand(newDomainRemoveCmd())
+	cmd.AddCommand(newDomainVerifyCmd())
 	return cmd
 }
 
@@ -109,6 +110,40 @@ func newDomainListCmd() *cobra.Command {
 					status = "verified"
 				}
 				fmt.Printf("%-48s  %s\n", d.Domain, status)
+			}
+			return nil
+		},
+	}
+}
+
+func newDomainVerifyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "verify <domain>",
+		Short: "Verify DNS configuration for a custom domain",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			domain := args[0]
+			sub, proj, err := resolveProject(cmd)
+			if err != nil {
+				return err
+			}
+
+			cfg := LoadConfig()
+			client := NewAPIClient(cfg)
+
+			var result struct {
+				Verified bool   `json:"verified"`
+				Message  string `json:"message"`
+			}
+			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains/%s/verify", sub, proj, domain)
+			if err := client.doJSON("POST", apiPath, nil, &result); err != nil {
+				return err
+			}
+
+			if result.Verified {
+				fmt.Printf("Domain %q verified.\n", domain)
+			} else {
+				fmt.Printf("Domain %q not verified: %s\n", domain, result.Message)
 			}
 			return nil
 		},

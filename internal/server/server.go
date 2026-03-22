@@ -82,6 +82,7 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Post("/subdomains/{sub}/projects/{project}/domains", s.handleCreateDomain)
 		r.Get("/subdomains/{sub}/projects/{project}/domains", s.handleListDomains)
 		r.Delete("/subdomains/{sub}/projects/{project}/domains/{domain}", s.handleDeleteDomain)
+		r.Post("/subdomains/{sub}/projects/{project}/domains/{domain}/verify", s.handleVerifyDomain)
 
 		r.Put("/subdomains/{sub}/access", s.handleSetAccess)
 		r.Get("/subdomains/{sub}/access", s.handleGetAccess)

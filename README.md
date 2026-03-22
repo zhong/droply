@@ -339,6 +339,9 @@ droply list --sub alice
 droply domain add blog.example.com --sub alice --project blog
 # Outputs a CNAME target — add this record at your DNS provider
 
+# Verify DNS is configured correctly
+droply domain verify blog.example.com --sub alice --project blog
+
 # List custom domains
 droply domain list --sub alice --project blog
 
@@ -346,7 +349,7 @@ droply domain list --sub alice --project blog
 droply domain remove blog.example.com --sub alice --project blog
 ```
 
-After adding a custom domain, add a CNAME record at your DNS provider pointing to the output target. Caddy will automatically provision HTTPS certificates for verified custom domains.
+After adding a custom domain, add a CNAME or A record at your DNS provider pointing to the output target, then run `droply domain verify` to confirm. Caddy will automatically provision HTTPS certificates for verified custom domains.
 
 ### Access Control
 
@@ -413,6 +416,7 @@ All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentic
 | POST | `/subdomains/:sub/projects/:name/domains` | Add custom domain |
 | GET | `/subdomains/:sub/projects/:name/domains` | List custom domains |
 | DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | Remove custom domain |
+| POST | `/subdomains/:sub/projects/:name/domains/:domain/verify` | Verify custom domain DNS |
 | PUT | `/subdomains/:sub/access` | Set subdomain access control |
 | GET | `/subdomains/:sub/access` | Get subdomain access control |
 | DELETE | `/subdomains/:sub/access` | Remove subdomain access control |

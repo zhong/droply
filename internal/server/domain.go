@@ -3,7 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
@@ -137,4 +139,76 @@ func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleVerifyDomain checks DNS records for the custom domain and marks it as verified
+// if a CNAME or A record resolves to the expected target.
+func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
+	user := userFromContext(r.Context())
+	subName := chi.URLParam(r, "sub")
+	projName := chi.URLParam(r, "project")
+	domainName := chi.URLParam(r, "domain")
+
+	sub, err := s.store.GetSubdomainByName(subName)
+	if err != nil {
+		jsonError(w, "subdomain not found", http.StatusNotFound)
+		return
+	}
+	if sub.UserID != user.ID {
+		jsonError(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	proj, err := s.store.GetProject(sub.ID, projName)
+	if err != nil {
+		jsonError(w, "project not found", http.StatusNotFound)
+		return
+	}
+
+	cd, err := s.store.GetCustomDomain(domainName)
+	if err != nil || cd.ProjectID != proj.ID {
+		jsonError(w, "domain not found", http.StatusNotFound)
+		return
+	}
+
+	if cd.Verified {
+		jsonResponse(w, map[string]any{"verified": true, "message": "already verified"}, http.StatusOK)
+		return
+	}
+
+	expectedTarget := fmt.Sprintf("%s.%s", subName, s.baseDomain)
+
+	// Check CNAME records.
+	if cname, err := net.LookupCNAME(domainName); err == nil {
+		cname = strings.TrimSuffix(cname, ".")
+		if strings.EqualFold(cname, expectedTarget) {
+			s.store.VerifyCustomDomain(domainName)
+			jsonResponse(w, map[string]any{"verified": true}, http.StatusOK)
+			return
+		}
+	}
+
+	// Check A records — if the domain resolves to the same IPs as the expected target.
+	domainIPs, err := net.LookupHost(domainName)
+	if err == nil && len(domainIPs) > 0 {
+		targetIPs, err := net.LookupHost(expectedTarget)
+		if err == nil {
+			ipSet := map[string]bool{}
+			for _, ip := range targetIPs {
+				ipSet[ip] = true
+			}
+			for _, ip := range domainIPs {
+				if ipSet[ip] {
+					s.store.VerifyCustomDomain(domainName)
+					jsonResponse(w, map[string]any{"verified": true}, http.StatusOK)
+					return
+				}
+			}
+		}
+	}
+
+	jsonResponse(w, map[string]any{
+		"verified": false,
+		"message":  fmt.Sprintf("DNS not pointing to %s (CNAME or A record required)", expectedTarget),
+	}, http.StatusOK)
 }

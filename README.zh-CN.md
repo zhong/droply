@@ -339,6 +339,9 @@ droply list --sub alice
 droply domain add blog.example.com --sub alice --project blog
 # 输出 CNAME 记录目标，按提示在 DNS 中添加
 
+# 验证 DNS 配置是否正确
+droply domain verify blog.example.com --sub alice --project blog
+
 # 查看自定义域名
 droply domain list --sub alice --project blog
 
@@ -346,7 +349,7 @@ droply domain list --sub alice --project blog
 droply domain remove blog.example.com --sub alice --project blog
 ```
 
-添加自定义域名后，需要在 DNS 服务商处添加 CNAME 记录，指向输出的目标地址。Caddy 会自动为验证通过的自定义域名申请 HTTPS 证书。
+添加自定义域名后，在 DNS 服务商处添加 CNAME 或 A 记录指向输出的目标地址，然后运行 `droply domain verify` 确认。Caddy 会自动为验证通过的自定义域名申请 HTTPS 证书。
 
 ### 访问控制
 
@@ -413,6 +416,7 @@ droply access remove --subdomain alice --project blog
 | POST | `/subdomains/:sub/projects/:name/domains` | 添加自定义域名 |
 | GET | `/subdomains/:sub/projects/:name/domains` | 列出自定义域名 |
 | DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | 删除自定义域名 |
+| POST | `/subdomains/:sub/projects/:name/domains/:domain/verify` | 验证自定义域名 DNS |
 | PUT | `/subdomains/:sub/access` | 设置子域名访问控制 |
 | GET | `/subdomains/:sub/access` | 查看子域名访问控制 |
 | DELETE | `/subdomains/:sub/access` | 移除子域名访问控制 |
