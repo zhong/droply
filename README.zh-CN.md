@@ -157,10 +157,9 @@ sudo systemctl enable --now droply
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
 
-    # droply-server 通过 Admin API 动态添加路由；
-    # 此块仅确保通配符证书被签发。
-    # 无动态路由时默认返回 404。
-    respond "Not Found" 404
+    # 所有子域名请求代理到 droply-server 的站点处理器，
+    # 由站点处理器提供文件服务并执行访问控制。
+    reverse_proxy localhost:8081
 }
 
 # API 端点 — 自动获取独立证书

@@ -17,13 +17,11 @@ type contextKey string
 const userContextKey contextKey = "user"
 
 // CaddyClient is the interface for interacting with the Caddy admin API.
+// Subdomain routes are handled by Caddy's wildcard reverse_proxy to the site server,
+// so only custom domain route management is needed here.
 type CaddyClient interface {
-	AddSubdomainRoute(name string) error
-	RemoveSubdomainRoute(name string) error
 	AddCustomDomainRoute(domain, subdomainName, projectName string) error
 	RemoveCustomDomainRoute(domain string) error
-	SetSubdomainProtected(name string, proxyAddr string) error
-	SetSubdomainUnprotected(name string) error
 	SetCustomDomainProtected(domain string, proxyAddr string) error
 	SetCustomDomainUnprotected(domain, subdomainName, projectName string) error
 }

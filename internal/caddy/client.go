@@ -48,20 +48,6 @@ type caddyUpstream struct {
 	Dial string `json:"dial"`
 }
 
-// buildSubdomainRoute constructs a Caddy route for a subdomain.
-func (c *Client) buildSubdomainRoute(name string) caddyRoute {
-	host := fmt.Sprintf("%s.%s", name, c.baseDomain)
-	root := filepath.Join(c.sitesDir, name)
-	return caddyRoute{
-		ID:    fmt.Sprintf("subdomain-%s", name),
-		Match: []caddyMatch{{Host: []string{host}}},
-		Handle: []caddyHandler{
-			{Handler: "file_server", Root: root},
-		},
-		Terminal: true,
-	}
-}
-
 // buildCustomDomainRoute constructs a Caddy route for a custom domain.
 func (c *Client) buildCustomDomainRoute(domain, subdomainName, projectName string) caddyRoute {
 	root := filepath.Join(c.sitesDir, subdomainName, projectName)
@@ -75,34 +61,6 @@ func (c *Client) buildCustomDomainRoute(domain, subdomainName, projectName strin
 	}
 }
 
-// LoadInitialConfig sends the initial Caddy configuration via POST /load.
-func (c *Client) LoadInitialConfig(apiAddr string) error {
-	config := map[string]interface{}{
-		"apps": map[string]interface{}{
-			"http": map[string]interface{}{
-				"servers": map[string]interface{}{
-					"main": map[string]interface{}{
-						"listen": []string{apiAddr},
-						"routes": []interface{}{},
-					},
-				},
-			},
-		},
-	}
-	return c.postJSON("/load", config)
-}
-
-// AddSubdomainRoute adds a subdomain route to the running Caddy config.
-func (c *Client) AddSubdomainRoute(name string) error {
-	route := c.buildSubdomainRoute(name)
-	return c.postJSON("/config/apps/http/servers/main/routes", route)
-}
-
-// RemoveSubdomainRoute removes a subdomain route from the running Caddy config.
-func (c *Client) RemoveSubdomainRoute(name string) error {
-	return c.delete(fmt.Sprintf("/id/subdomain-%s", name))
-}
-
 // AddCustomDomainRoute adds a custom domain route to the running Caddy config.
 func (c *Client) AddCustomDomainRoute(domain, subdomainName, projectName string) error {
 	route := c.buildCustomDomainRoute(domain, subdomainName, projectName)
@@ -112,33 +70,6 @@ func (c *Client) AddCustomDomainRoute(domain, subdomainName, projectName string)
 // RemoveCustomDomainRoute removes a custom domain route from the running Caddy config.
 func (c *Client) RemoveCustomDomainRoute(domain string) error {
 	return c.delete(fmt.Sprintf("/id/domain-%s", domain))
-}
-
-// buildSubdomainProtectedRoute constructs a Caddy route for a protected subdomain (reverse proxy).
-func (c *Client) buildSubdomainProtectedRoute(name string, proxyAddr string) caddyRoute {
-	host := fmt.Sprintf("%s.%s", name, c.baseDomain)
-	return caddyRoute{
-		ID:    fmt.Sprintf("subdomain-%s", name),
-		Match: []caddyMatch{{Host: []string{host}}},
-		Handle: []caddyHandler{
-			{Handler: "reverse_proxy", Upstreams: []caddyUpstream{{Dial: proxyAddr}}},
-		},
-		Terminal: true,
-	}
-}
-
-// SetSubdomainProtected switches a subdomain route from unprotected (file_server) to protected (reverse_proxy).
-func (c *Client) SetSubdomainProtected(name string, proxyAddr string) error {
-	_ = c.delete(fmt.Sprintf("/id/subdomain-%s", name))
-	route := c.buildSubdomainProtectedRoute(name, proxyAddr)
-	return c.postJSON("/config/apps/http/servers/main/routes", route)
-}
-
-// SetSubdomainUnprotected switches a subdomain route from protected (reverse_proxy) to unprotected (file_server).
-func (c *Client) SetSubdomainUnprotected(name string) error {
-	_ = c.delete(fmt.Sprintf("/id/subdomain-%s", name))
-	route := c.buildSubdomainRoute(name)
-	return c.postJSON("/config/apps/http/servers/main/routes", route)
 }
 
 // SetCustomDomainProtected switches a custom domain route from unprotected (file_server) to protected (reverse_proxy).

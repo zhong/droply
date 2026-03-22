@@ -60,14 +60,5 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	_ = os.RemoveAll(filepath.Join(s.sitesDir, subName, projName))
 
-	// After project deletion, ON DELETE CASCADE removes its access rule.
-	// Check if subdomain still has any rules; if not, switch back to file_server.
-	if s.caddy != nil {
-		hasRules, _ := s.store.HasAccessRules(sub.ID)
-		if !hasRules {
-			_ = s.caddy.SetSubdomainUnprotected(subName)
-		}
-	}
-
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestSetSubdomainProtected(t *testing.T) {
+func TestSetCustomDomainProtected(t *testing.T) {
 	var receivedRoutes []caddyRoute
 	var deletedPaths []string
 
@@ -26,18 +26,18 @@ func TestSetSubdomainProtected(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(ts.URL, "droplydoc.com", "/data/sites")
-	if err := c.SetSubdomainProtected("alice", "localhost:8081"); err != nil {
-		t.Fatalf("SetSubdomainProtected: %v", err)
+	if err := c.SetCustomDomainProtected("blog.example.com", "localhost:8081"); err != nil {
+		t.Fatalf("SetCustomDomainProtected: %v", err)
 	}
 
-	if len(deletedPaths) != 1 || deletedPaths[0] != "/id/subdomain-alice" {
-		t.Errorf("expected delete of /id/subdomain-alice, got %v", deletedPaths)
+	if len(deletedPaths) != 1 || deletedPaths[0] != "/id/domain-blog.example.com" {
+		t.Errorf("expected delete of /id/domain-blog.example.com, got %v", deletedPaths)
 	}
 	if len(receivedRoutes) != 1 {
 		t.Fatalf("expected 1 route, got %d", len(receivedRoutes))
 	}
 	route := receivedRoutes[0]
-	if route.ID != "subdomain-alice" {
+	if route.ID != "domain-blog.example.com" {
 		t.Errorf("unexpected route ID: %s", route.ID)
 	}
 	if route.Handle[0].Handler != "reverse_proxy" {
@@ -45,7 +45,7 @@ func TestSetSubdomainProtected(t *testing.T) {
 	}
 }
 
-func TestSetSubdomainUnprotected(t *testing.T) {
+func TestSetCustomDomainUnprotected(t *testing.T) {
 	var receivedRoutes []caddyRoute
 	var deletedPaths []string
 
@@ -64,8 +64,8 @@ func TestSetSubdomainUnprotected(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(ts.URL, "droplydoc.com", "/data/sites")
-	if err := c.SetSubdomainUnprotected("alice"); err != nil {
-		t.Fatalf("SetSubdomainUnprotected: %v", err)
+	if err := c.SetCustomDomainUnprotected("blog.example.com", "alice", "blog"); err != nil {
+		t.Fatalf("SetCustomDomainUnprotected: %v", err)
 	}
 
 	if len(deletedPaths) != 1 {

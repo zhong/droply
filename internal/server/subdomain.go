@@ -49,13 +49,6 @@ func (s *Server) handleCreateSubdomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.caddy != nil {
-		if err := s.caddy.AddSubdomainRoute(sub.Name); err != nil {
-			// Non-fatal: log but continue; the record is already stored.
-			_ = err
-		}
-	}
-
 	jsonResponse(w, sub, http.StatusCreated)
 }
 
@@ -94,10 +87,6 @@ func (s *Server) handleDeleteSubdomain(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteSubdomain(user.ID, subName); err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
-	}
-
-	if s.caddy != nil {
-		_ = s.caddy.RemoveSubdomainRoute(subName)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

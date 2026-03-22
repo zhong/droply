@@ -177,12 +177,8 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		return
 	}
 
-	// Update Caddy routes to protected.
+	// Update custom domain Caddy routes to protected.
 	if s.caddy != nil {
-		if err := s.caddy.SetSubdomainProtected(subName, s.siteAddr); err != nil {
-			// Log but don't fail the request.
-			_ = err
-		}
 		s.updateCustomDomainRoutes(sub.ID, subName, true)
 	}
 
@@ -270,11 +266,10 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		return
 	}
 
-	// Check if subdomain still has any access rules; if not, switch back to unprotected.
+	// Check if subdomain still has any access rules; if not, switch custom domains back to unprotected.
 	if s.caddy != nil {
 		hasRules, err := s.store.HasAccessRules(sub.ID)
 		if err == nil && !hasRules {
-			_ = s.caddy.SetSubdomainUnprotected(subName)
 			s.updateCustomDomainRoutes(sub.ID, subName, false)
 		}
 	}

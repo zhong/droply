@@ -7,25 +7,28 @@ import (
 	"testing"
 )
 
-func TestBuildSubdomainRoute(t *testing.T) {
+func TestBuildCustomDomainRoute(t *testing.T) {
 	c := NewClient("http://localhost:2019", "droplydoc.com", "/data/sites")
-	route := c.buildSubdomainRoute("alice")
+	route := c.buildCustomDomainRoute("blog.example.com", "alice", "blog")
 
-	if route.ID != "subdomain-alice" {
-		t.Errorf("expected ID=subdomain-alice, got %s", route.ID)
+	if route.ID != "domain-blog.example.com" {
+		t.Errorf("expected ID=domain-blog.example.com, got %s", route.ID)
 	}
 	if len(route.Match) != 1 || len(route.Match[0].Host) != 1 {
 		t.Fatalf("expected 1 match with 1 host, got %v", route.Match)
 	}
-	if route.Match[0].Host[0] != "alice.droplydoc.com" {
-		t.Errorf("expected host=alice.droplydoc.com, got %s", route.Match[0].Host[0])
+	if route.Match[0].Host[0] != "blog.example.com" {
+		t.Errorf("expected host=blog.example.com, got %s", route.Match[0].Host[0])
 	}
 	if len(route.Handle) != 1 || route.Handle[0].Handler != "file_server" {
 		t.Errorf("expected file_server handler, got %v", route.Handle)
 	}
+	if route.Handle[0].Root != "/data/sites/alice/blog" {
+		t.Errorf("expected root=/data/sites/alice/blog, got %s", route.Handle[0].Root)
+	}
 }
 
-func TestAddSubdomainRouteHTTP(t *testing.T) {
+func TestAddCustomDomainRouteHTTP(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]interface{}
 
@@ -39,20 +42,20 @@ func TestAddSubdomainRouteHTTP(t *testing.T) {
 	defer mock.Close()
 
 	c := NewClient(mock.URL, "droplydoc.com", "/data/sites")
-	if err := c.AddSubdomainRoute("alice"); err != nil {
-		t.Fatalf("AddSubdomainRoute: %v", err)
+	if err := c.AddCustomDomainRoute("blog.example.com", "alice", "blog"); err != nil {
+		t.Fatalf("AddCustomDomainRoute: %v", err)
 	}
 
 	expectedPath := "/config/apps/http/servers/main/routes"
 	if gotPath != expectedPath {
 		t.Errorf("expected POST to %s, got %s", expectedPath, gotPath)
 	}
-	if id, ok := gotBody["@id"].(string); !ok || id != "subdomain-alice" {
-		t.Errorf("expected @id=subdomain-alice in body, got %v", gotBody["@id"])
+	if id, ok := gotBody["@id"].(string); !ok || id != "domain-blog.example.com" {
+		t.Errorf("expected @id=domain-blog.example.com in body, got %v", gotBody["@id"])
 	}
 }
 
-func TestRemoveSubdomainRouteHTTP(t *testing.T) {
+func TestRemoveCustomDomainRouteHTTP(t *testing.T) {
 	var gotMethod string
 	var gotPath string
 
@@ -64,14 +67,14 @@ func TestRemoveSubdomainRouteHTTP(t *testing.T) {
 	defer mock.Close()
 
 	c := NewClient(mock.URL, "droplydoc.com", "/data/sites")
-	if err := c.RemoveSubdomainRoute("alice"); err != nil {
-		t.Fatalf("RemoveSubdomainRoute: %v", err)
+	if err := c.RemoveCustomDomainRoute("blog.example.com"); err != nil {
+		t.Fatalf("RemoveCustomDomainRoute: %v", err)
 	}
 
 	if gotMethod != http.MethodDelete {
 		t.Errorf("expected DELETE, got %s", gotMethod)
 	}
-	expectedPath := "/id/subdomain-alice"
+	expectedPath := "/id/domain-blog.example.com"
 	if gotPath != expectedPath {
 		t.Errorf("expected path %s, got %s", expectedPath, gotPath)
 	}

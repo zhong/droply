@@ -157,10 +157,9 @@ Create `/etc/caddy/Caddyfile`:
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
 
-    # droply-server dynamically adds routes via Admin API;
-    # this block just ensures the wildcard cert is provisioned.
-    # Without dynamic routes, return 404 by default.
-    respond "Not Found" 404
+    # Proxy all subdomain requests to droply-server's site handler,
+    # which serves files and enforces access control.
+    reverse_proxy localhost:8081
 }
 
 # API endpoint — gets its own certificate automatically
