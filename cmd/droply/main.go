@@ -6,8 +6,10 @@ import (
 	"github.com/zhong/droply/internal/cli"
 )
 
+var version string
+
 func main() {
-	if err := cli.NewRootCmd().Execute(); err != nil {
+	if err := cli.NewRootCmd(version).Execute(); err != nil {
 		os.Exit(1)
 	}
 }
