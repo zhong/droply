@@ -141,13 +141,13 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		}
 	}
 
-	// TTL: default 86400, range 300-2592000.
+	// TTL: default 86400, range 300-315360000.
 	ttl := req.SessionTTL
 	if ttl == 0 {
 		ttl = 86400
 	}
-	if ttl < 300 || ttl > 2592000 {
-		jsonError(w, "session_ttl must be between 300 and 2592000", http.StatusBadRequest)
+	if ttl < 300 || ttl > 315360000 {
+		jsonError(w, "session_ttl must be between 300 and 315360000", http.StatusBadRequest)
 		return
 	}
 

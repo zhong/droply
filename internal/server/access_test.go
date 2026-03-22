@@ -187,3 +187,32 @@ func TestSetAccessValidation(t *testing.T) {
 		t.Fatalf("short password: expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestSetAccessLargeTTL(t *testing.T) {
+	srv := newTestServer(t)
+	token := registerAndGetToken(t, srv, "largettl@example.com", "password123")
+	createSubdomain(t, srv, token, "largettl")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"auto_password": true,
+		"session_ttl":   315360000, // 10 years
+	})
+	req := httptest.NewRequest(http.MethodPut, "/subdomains/largettl/access", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if int(resp["session_ttl"].(float64)) != 315360000 {
+		t.Fatalf("expected session_ttl 315360000, got %v", resp["session_ttl"])
+	}
+}
