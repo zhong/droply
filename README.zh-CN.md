@@ -69,7 +69,12 @@ make test
 
 ```bash
 # 使用 xcaddy 编译带 Cloudflare DNS 模块的 Caddy
-xcaddy build --with github.com/caddy-dns/cloudflare
+# 注意：--replace 用于绕过 Cloudflare 新版 API Token（cfut_/cfat_ 前缀）的兼容性问题
+# 参考：https://github.com/caddy-dns/cloudflare/issues/125
+# 上游修复合并后可移除 --replace 行
+xcaddy build \
+  --with github.com/caddy-dns/cloudflare \
+  --replace github.com/caddy-dns/cloudflare=github.com/ogerman/cloudflare@master
 sudo mv caddy /usr/bin/caddy
 ```
 

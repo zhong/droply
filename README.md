@@ -69,7 +69,12 @@ Wildcard certificates require DNS challenge. Use a Caddy build with a DNS provid
 
 ```bash
 # Build Caddy with Cloudflare DNS module using xcaddy
-xcaddy build --with github.com/caddy-dns/cloudflare
+# Note: --replace is needed to work around a compatibility issue with Cloudflare's
+# new API token format (cfut_/cfat_ prefixes). See: https://github.com/caddy-dns/cloudflare/issues/125
+# Once the upstream fix is merged, you can remove the --replace line.
+xcaddy build \
+  --with github.com/caddy-dns/cloudflare \
+  --replace github.com/caddy-dns/cloudflare=github.com/ogerman/cloudflare@master
 sudo mv caddy /usr/bin/caddy
 ```
 
