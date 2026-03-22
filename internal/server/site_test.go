@@ -390,3 +390,83 @@ func TestSiteHandlerCustomDomain(t *testing.T) {
 		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestSiteHandlerCookieInvalidAfterPasswordChange(t *testing.T) {
+	srv, sitesDir := newTestSiteServer(t)
+	token, password := setupProtectedSite(t, srv, sitesDir)
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Step 1: Login with original password to get a cookie.
+	form := url.Values{}
+	form.Set("password", password)
+	form.Set("redirect", "/docs/hello.txt")
+	form.Set("host", "alice.droplydoc.com")
+	req := httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "alice.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("login: expected 302, got %d", rr.Code)
+	}
+
+	var oldCookie *http.Cookie
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "_droply_access" {
+			oldCookie = c
+			break
+		}
+	}
+	if oldCookie == nil {
+		t.Fatal("expected _droply_access cookie after login")
+	}
+
+	// Step 2: Verify old cookie works.
+	req = httptest.NewRequest(http.MethodGet, "/docs/hello.txt", nil)
+	req.Host = "alice.droplydoc.com"
+	req.AddCookie(oldCookie)
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "Hello Droply") {
+		t.Fatalf("old cookie should work before password change, got %d", rr.Code)
+	}
+
+	// Step 3: Change the password via API.
+	accessBody, _ := json.Marshal(map[string]interface{}{
+		"password": "newpassword12345",
+	})
+	req = httptest.NewRequest(http.MethodPut, "/subdomains/alice/projects/docs/access", bytes.NewReader(accessBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update password: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Step 4: Old cookie should now be rejected.
+	req = httptest.NewRequest(http.MethodGet, "/docs/hello.txt", nil)
+	req.Host = "alice.droplydoc.com"
+	req.AddCookie(oldCookie)
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), "_droply/login") {
+		t.Fatalf("old cookie should be rejected after password change, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Step 5: Login with new password should work.
+	form = url.Values{}
+	form.Set("password", "newpassword12345")
+	form.Set("redirect", "/docs/hello.txt")
+	form.Set("host", "alice.droplydoc.com")
+	req = httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "alice.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("login with new password: expected 302, got %d", rr.Code)
+	}
+}
