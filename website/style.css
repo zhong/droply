@@ -520,6 +520,21 @@ code {
   /* inherits grid width */
 }
 
+.qs-card-highlight {
+  border: 2px solid var(--accent);
+  background: var(--accent-light);
+}
+
+.qs-card-highlight .code-block {
+  background: var(--text);
+}
+
+.qs-card-highlight .code-block code {
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  user-select: all;
+}
+
 .code-block {
   background: #1e1e2e;
   border-radius: 8px;

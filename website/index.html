@@ -192,14 +192,19 @@
     <h2 class="section-title" data-i18n="qs.title">Quick Start</h2>
     <p class="section-sub" data-i18n="qs.sub">Up and running in minutes.</p>
     <div class="quickstart-grid">
-      <div class="qs-card">
-        <h3 data-i18n="qs.download">Download from Release</h3>
+      <div class="qs-card qs-card-wide qs-card-highlight">
+        <h3 data-i18n="qs.install_cli">Install CLI</h3>
         <div class="code-block">
-          <pre><code><span class="c-gray"># macOS (Apple Silicon)</span>
-curl -Lo droply https://github.com/zhong/droply/releases/latest/download/droply-darwin-arm64
-chmod +x droply && sudo mv droply /usr/local/bin/</code></pre>
+          <pre><code>curl -fsSL https://droplydoc.com/install.sh | bash</code></pre>
         </div>
-        <p data-i18n="qs.download_desc" data-i18n-html="true">Pre-built binaries for <strong>macOS</strong> (ARM/x64), <strong>Linux</strong> (x64), and <strong>Windows</strong> (x64). See <a href="https://github.com/zhong/droply/releases/latest">all downloads</a>.</p>
+        <p data-i18n="qs.install_cli_desc" data-i18n-html="true">One command to install. Auto-detects your OS and architecture. Supports <strong>macOS</strong> (ARM/x64), <strong>Linux</strong> (x64), and <strong>Windows</strong> (x64).</p>
+      </div>
+      <div class="qs-card qs-card-wide qs-card-highlight">
+        <h3 data-i18n="qs.setup_server">Deploy Server</h3>
+        <div class="code-block">
+          <pre><code>curl -fsSL https://droplydoc.com/setup.sh | sudo bash</code></pre>
+        </div>
+        <p data-i18n="qs.setup_server_desc" data-i18n-html="true">Sets up a complete droply server on a fresh VPS. Installs droply-server, Caddy (with Cloudflare DNS), configures systemd, and starts everything. You'll be prompted for your domain and Cloudflare API token.</p>
       </div>
       <div class="qs-card">
         <h3 data-i18n="qs.build">Build from source</h3>
@@ -218,18 +223,7 @@ make build</code></pre>
         <p data-i18n="qs.install_desc" data-i18n-html="true">Installs the CLI client directly into your <code>$GOPATH/bin</code></p>
       </div>
       <div class="qs-card qs-card-wide">
-      <h3 data-i18n="qs.server">Server deployment</h3>
-      <div class="code-block">
-        <pre><code><span class="c-gray"># <span data-i18n="qs.comment_dir">Create data directory</span></span>
-sudo mkdir -p /data/droply/sites
-
-<span class="c-gray"># <span data-i18n="qs.comment_start">Start the server</span></span>
-droply-server \
-  --addr :8080 \
-  --data-dir /data/droply \
-  --domain droplydoc.com \
-  --caddy-admin http://localhost:2019</code></pre>
-      </div>
+      <h3 data-i18n="qs.server">Server flags reference</h3>
       <div class="qs-table">
         <table>
           <thead>
