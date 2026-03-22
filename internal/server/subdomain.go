@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -88,6 +90,8 @@ func (s *Server) handleDeleteSubdomain(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	_ = os.RemoveAll(filepath.Join(s.sitesDir, subName))
 
 	w.WriteHeader(http.StatusNoContent)
 }

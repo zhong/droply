@@ -326,10 +326,14 @@ The following files and directories are automatically excluded during deployment
 
 Maximum **50MB** per deployment.
 
-### List Projects
+### Manage Projects
 
 ```bash
-droply list --sub alice
+# List projects in a subdomain
+droply project list --sub alice
+
+# Delete a project (removes all files and deployments)
+droply project delete blog --sub alice
 ```
 
 ### Custom Domains

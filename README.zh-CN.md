@@ -326,10 +326,14 @@ droply deploy
 
 单次部署最大 **50MB**。
 
-### 查看项目列表
+### 管理项目
 
 ```bash
-droply list --sub alice
+# 列出子域名下的项目
+droply project list --sub alice
+
+# 删除项目（同时删除所有文件和部署记录）
+droply project delete blog --sub alice
 ```
 
 ### 自定义域名

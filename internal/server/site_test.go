@@ -375,6 +375,107 @@ func TestSiteHandlerRateLimiting(t *testing.T) {
 	}
 }
 
+func TestSiteHandlerDeletedSubdomainReturns404(t *testing.T) {
+	srv, _ := newTestSiteServer(t)
+	token := registerAndGetToken(t, srv, "deltest@example.com", "password123")
+
+	// Create subdomain and deploy a project.
+	body, _ := json.Marshal(map[string]string{"name": "delme"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	deployProject(t, srv, token, "delme", "site", map[string]string{
+		"hello.txt": "Should Not Be Served After Delete",
+	})
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Verify it's accessible before deletion.
+	req = httptest.NewRequest(http.MethodGet, "/site/hello.txt", nil)
+	req.Host = "delme.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("before delete: expected 200, got %d", rr.Code)
+	}
+
+	// Delete the subdomain via API.
+	req = httptest.NewRequest(http.MethodDelete, "/subdomains/delme", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("delete subdomain: expected 204, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// After deletion, the site should return 404.
+	req = httptest.NewRequest(http.MethodGet, "/site/hello.txt", nil)
+	req.Host = "delme.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("after delete: expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSiteHandlerDeletedProjectReturns404(t *testing.T) {
+	srv, _ := newTestSiteServer(t)
+	token := registerAndGetToken(t, srv, "projdel@example.com", "password123")
+
+	// Create subdomain and deploy two projects.
+	body, _ := json.Marshal(map[string]string{"name": "keeper"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: expected 201, got %d", rr.Code)
+	}
+
+	deployProject(t, srv, token, "keeper", "alive", map[string]string{
+		"hello.txt": "Still Here",
+	})
+	deployProject(t, srv, token, "keeper", "doomed", map[string]string{
+		"hello.txt": "Gone Soon",
+	})
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Delete project "doomed" via API.
+	req = httptest.NewRequest(http.MethodDelete, "/subdomains/keeper/projects/doomed", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("delete project: expected 204, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Deleted project should return 404.
+	req = httptest.NewRequest(http.MethodGet, "/doomed/hello.txt", nil)
+	req.Host = "keeper.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("deleted project: expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Other project should still be accessible.
+	req = httptest.NewRequest(http.MethodGet, "/alive/hello.txt", nil)
+	req.Host = "keeper.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("surviving project: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestSiteHandlerCustomDomain(t *testing.T) {
 	srv, _ := newTestSiteServer(t)
 

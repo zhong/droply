@@ -152,6 +152,12 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify the subdomain still exists in the database.
+	if _, err := s.store.GetSubdomainByName(subdomainName); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
 	var projectName string
 	var servePath string
 	var isCustomDomain bool

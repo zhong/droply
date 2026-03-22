@@ -276,6 +276,13 @@ droply subdomain delete alice</code></pre>
         </div>
       </div>
       <div class="cli-group">
+        <h3 data-i18n="cli.projects">Projects</h3>
+        <div class="code-block">
+          <pre><code>droply project list --sub alice
+droply project delete blog --sub alice</code></pre>
+        </div>
+      </div>
+      <div class="cli-group">
         <h3 data-i18n="cli.deploying">Deploying</h3>
         <div class="code-block">
           <pre><code><span class="c-dim"># <span data-i18n="cli.deploy_flags">Deploy with flags</span></span>
@@ -346,6 +353,7 @@ project   = "blog"</code></pre>
           <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:name</td><td data-i18n="api.delete_sub">Delete subdomain</td></tr>
           <tr><td><span class="method post">POST</span></td><td>/subdomains/:sub/projects/:name/deploy</td><td data-i18n="api.deploy">Deploy (multipart)</td></tr>
           <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/projects</td><td data-i18n="api.list_proj">List projects</td></tr>
+          <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:sub/projects/:name</td><td data-i18n="api.delete_proj">Delete project</td></tr>
           <tr><td><span class="method get">GET</span></td><td>/subdomains/:sub/projects/:name/deployments</td><td data-i18n="api.history">Deployment history</td></tr>
           <tr><td><span class="method post">POST</span></td><td>/subdomains/:sub/projects/:name/domains</td><td data-i18n="api.add_domain">Add custom domain</td></tr>
           <tr><td><span class="method delete">DEL</span></td><td>/subdomains/:sub/projects/:name/domains/:domain</td><td data-i18n="api.remove_domain">Remove custom domain</td></tr>
