@@ -60,6 +60,15 @@ On the server, pull latest code, rebuild, and restart the service:
 make deploy
 ```
 
+### Deploy Website
+
+The project website at `droplydoc.com` is hosted via droply itself. To update:
+
+```bash
+cd website
+droply deploy
+```
+
 ## Server Deployment
 
 ### Prerequisites

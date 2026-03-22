@@ -60,6 +60,15 @@ make test
 make deploy
 ```
 
+### 部署官网
+
+项目官网 `droplydoc.com` 通过 droply 自身托管。更新官网：
+
+```bash
+cd website
+droply deploy
+```
+
 ## 服务端部署
 
 ### 前置条件
