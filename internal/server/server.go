@@ -35,6 +35,8 @@ type Server struct {
 	router     *chi.Mux
 	hmacKey    []byte
 	siteAddr   string
+	visitCh    chan visitRecord
+	done       chan struct{}
 }
 
 // New creates a new Server and registers all routes.
@@ -46,6 +48,8 @@ func New(s store.Store, sitesDir, baseDomain string, caddy CaddyClient, hmacKey 
 		caddy:      caddy,
 		hmacKey:    hmacKey,
 		siteAddr:   siteAddr,
+		visitCh:    make(chan visitRecord, 1000),
+		done:       make(chan struct{}),
 	}
 	srv.router = srv.buildRouter()
 	return srv
@@ -91,6 +95,9 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Put("/subdomains/{sub}/projects/{project}/access", s.handleSetProjectAccess)
 		r.Get("/subdomains/{sub}/projects/{project}/access", s.handleGetProjectAccess)
 		r.Delete("/subdomains/{sub}/projects/{project}/access", s.handleDeleteProjectAccess)
+
+		r.Get("/subdomains/{sub}/projects/{project}/stats", s.handleGetStats)
+		r.Get("/subdomains/{sub}/projects/{project}/logs", s.handleGetLogs)
 	})
 
 	return r
