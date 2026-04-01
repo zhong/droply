@@ -94,6 +94,42 @@ func (s *SQLiteStore) migrate() error {
 			updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),
 			UNIQUE(subdomain_id, project_id)
 		);
+
+			CREATE TABLE IF NOT EXISTS page_visits (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				subdomain_id INTEGER NOT NULL REFERENCES subdomains(id) ON DELETE CASCADE,
+				project TEXT NOT NULL,
+				path TEXT NOT NULL,
+				ip TEXT NOT NULL,
+				referer TEXT DEFAULT '',
+				user_agent TEXT DEFAULT '',
+				visited_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_page_visits_lookup ON page_visits(subdomain_id, project, visited_at);
+			CREATE INDEX IF NOT EXISTS idx_page_visits_path ON page_visits(subdomain_id, project, path, visited_at);
+			CREATE INDEX IF NOT EXISTS idx_page_visits_cleanup ON page_visits(visited_at);
+
+			CREATE TABLE IF NOT EXISTS page_daily_stats (
+				subdomain_id INTEGER NOT NULL,
+				project TEXT NOT NULL,
+				path TEXT NOT NULL,
+				date TEXT NOT NULL,
+				pv INTEGER NOT NULL DEFAULT 0,
+				uv INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (subdomain_id, project, path, date),
+				FOREIGN KEY (subdomain_id) REFERENCES subdomains(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS page_daily_ips (
+				subdomain_id INTEGER NOT NULL,
+				project TEXT NOT NULL,
+				path TEXT NOT NULL,
+				date TEXT NOT NULL,
+				ip TEXT NOT NULL,
+				PRIMARY KEY (subdomain_id, project, path, date, ip),
+				FOREIGN KEY (subdomain_id) REFERENCES subdomains(id) ON DELETE CASCADE
+			);
 	`)
 	return err
 }
@@ -695,4 +731,153 @@ func scanAccessRule(row *sql.Row) (*model.AccessRule, error) {
 	r.CreatedAt = parseTimeFlexible(createdAt)
 	r.UpdatedAt = parseTimeFlexible(updatedAt)
 	return &r, nil
+}
+
+// ---- Analytics ----
+
+func (s *SQLiteStore) RecordVisit(subdomainID int64, project, path, ip, referer, userAgent string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC()
+	visitedAt := now.Format(dtLayout)
+	today := now.Format("2006-01-02")
+
+	// Insert visit log
+	_, err = tx.Exec(
+		`INSERT INTO page_visits (subdomain_id, project, path, ip, referer, user_agent, visited_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		subdomainID, project, path, ip, referer, userAgent, visitedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert visit: %w", err)
+	}
+
+	// Upsert daily stats PV
+	_, err = tx.Exec(
+		`INSERT INTO page_daily_stats (subdomain_id, project, path, date, pv, uv)
+		 VALUES (?, ?, ?, ?, 1, 0)
+		 ON CONFLICT(subdomain_id, project, path, date)
+		 DO UPDATE SET pv = pv + 1`,
+		subdomainID, project, path, today,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert daily stats pv: %w", err)
+	}
+
+	// Deduplicate IP for UV via INSERT OR IGNORE
+	res, err := tx.Exec(
+		`INSERT OR IGNORE INTO page_daily_ips (subdomain_id, project, path, date, ip)
+		 VALUES (?, ?, ?, ?, ?)`,
+		subdomainID, project, path, today, ip,
+	)
+	if err != nil {
+		return fmt.Errorf("insert daily ip: %w", err)
+	}
+	// If the IP was new (row was inserted), increment UV
+	if n, _ := res.RowsAffected(); n > 0 {
+		_, err = tx.Exec(
+			`UPDATE page_daily_stats SET uv = uv + 1
+			 WHERE subdomain_id = ? AND project = ? AND path = ? AND date = ?`,
+			subdomainID, project, path, today,
+		)
+		if err != nil {
+			return fmt.Errorf("increment uv: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (s *SQLiteStore) GetPageStats(subdomainID int64, project, period string) ([]model.PageDailyStat, error) {
+	query := `SELECT path, SUM(pv) as pv, SUM(uv) as uv
+			  FROM page_daily_stats
+			  WHERE subdomain_id = ? AND project = ?`
+	args := []any{subdomainID, project}
+
+	switch period {
+	case "7d":
+		query += ` AND date >= date('now', '-7 days')`
+	case "30d":
+		query += ` AND date >= date('now', '-30 days')`
+	}
+	// "all" or default: no date filter
+
+	query += ` GROUP BY path ORDER BY pv DESC`
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get page stats: %w", err)
+	}
+	defer rows.Close()
+
+	var result []model.PageDailyStat
+	for rows.Next() {
+		var s model.PageDailyStat
+		if err := rows.Scan(&s.Path, &s.PV, &s.UV); err != nil {
+			return nil, fmt.Errorf("scan page stat: %w", err)
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteStore) GetVisitLogs(subdomainID int64, project string, limit, offset int, pathFilter string) ([]model.VisitLog, int, error) {
+	// Count query
+	countQuery := `SELECT COUNT(*) FROM page_visits WHERE subdomain_id = ? AND project = ?`
+	dataQuery := `SELECT path, ip, referer, user_agent, visited_at
+				  FROM page_visits WHERE subdomain_id = ? AND project = ?`
+	args := []any{subdomainID, project}
+
+	if pathFilter != "" {
+		countQuery += ` AND path LIKE ?`
+		dataQuery += ` AND path LIKE ?`
+		args = append(args, pathFilter+"%")
+	}
+
+	var total int
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count visit logs: %w", err)
+	}
+
+	dataQuery += ` ORDER BY visited_at DESC LIMIT ? OFFSET ?`
+	queryArgs := append(args, limit, offset)
+
+	rows, err := s.db.Query(dataQuery, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get visit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var result []model.VisitLog
+	for rows.Next() {
+		var l model.VisitLog
+		if err := rows.Scan(&l.Path, &l.IP, &l.Referer, &l.UserAgent, &l.VisitedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan visit log: %w", err)
+		}
+		result = append(result, l)
+	}
+	return result, total, rows.Err()
+}
+
+func (s *SQLiteStore) CleanupVisitLogs(retentionDays int) (int64, error) {
+	res, err := s.db.Exec(
+		`DELETE FROM page_visits WHERE visited_at < strftime('%Y-%m-%d %H:%M:%S', 'now', ? || ' days')`,
+		fmt.Sprintf("-%d", retentionDays),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup visit logs: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+
+	// Also cleanup old daily IPs
+	s.db.Exec(
+		`DELETE FROM page_daily_ips WHERE date < date('now', ? || ' days')`,
+		fmt.Sprintf("-%d", retentionDays),
+	)
+
+	return affected, nil
 }
