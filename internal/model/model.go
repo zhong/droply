@@ -61,3 +61,17 @@ type AccessRule struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
+
+type VisitLog struct {
+	Path      string `json:"path"`
+	IP        string `json:"ip"`
+	Referer   string `json:"referer"`
+	UserAgent string `json:"user_agent"`
+	VisitedAt string `json:"visited_at"`
+}
+
+type PageDailyStat struct {
+	Path string `json:"path"`
+	PV   int    `json:"pv"`
+	UV   int    `json:"uv"`
+}

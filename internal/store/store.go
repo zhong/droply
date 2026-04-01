@@ -29,5 +29,9 @@ type Store interface {
 	DeleteAccessRule(subdomainID int64, projectID *int64) error
 	FindAccessRuleForSite(subdomainName string, projectName string) (*model.AccessRule, error)
 	HasAccessRules(subdomainID int64) (bool, error)
+	RecordVisit(subdomainID int64, project, path, ip, referer, userAgent string) error
+	GetPageStats(subdomainID int64, project, period string) ([]model.PageDailyStat, error)
+	GetVisitLogs(subdomainID int64, project string, limit, offset int, pathFilter string) ([]model.VisitLog, int, error)
+	CleanupVisitLogs(retentionDays int) (int64, error)
 	Close() error
 }
