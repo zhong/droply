@@ -153,7 +153,8 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the subdomain still exists in the database.
-	if _, err := s.store.GetSubdomainByName(subdomainName); err != nil {
+	sub, err := s.store.GetSubdomainByName(subdomainName)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -199,7 +200,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 			clientIP := getClientIP(r)
 			if isIPAllowed(clientIP, rule.AllowedIPs) {
 				// IP is whitelisted, serve directly.
-				s.serveFile(w, r, subdomainName, projectName, servePath)
+				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 				return
 			}
 			// If there's no password, just block.
@@ -212,7 +213,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		// Check cookie.
 		if rule.HasPassword {
 			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain, rule.PasswordHash) {
-				s.serveFile(w, r, subdomainName, projectName, servePath)
+				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 				return
 			}
 			// Show login page.
@@ -226,17 +227,23 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No rule — serve directly.
-	s.serveFile(w, r, subdomainName, projectName, servePath)
+	s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 }
 
 // serveFile serves a static file from the sites directory.
-func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomain, project, servePath string) {
+func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID int64, subdomain, project, servePath string) {
 	root := filepath.Join(s.sitesDir, subdomain, project)
 	// Use http.Dir + http.FileServer for proper file serving.
 	fs := http.FileServer(http.Dir(root))
 	// Rewrite the request path to servePath.
 	r.URL.Path = servePath
 	fs.ServeHTTP(w, r)
+
+	// Record visit asynchronously after serving the file.
+	if shouldTrack(servePath) {
+		normalizedPath := normalizePath(servePath)
+		s.recordVisit(subdomainID, project, normalizedPath, getClientIP(r), r.Referer(), r.UserAgent())
+	}
 }
 
 // renderLoginPage renders the login page template.
