@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"time"
 
 	"github.com/zhong/droply/internal/caddy"
 	"github.com/zhong/droply/internal/server"
@@ -27,6 +29,7 @@ func main() {
 	domain := flag.String("domain", "droplydoc.com", "base domain for subdomains")
 	caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
 	hmacSecret := flag.String("hmac-secret", "", "HMAC secret for cookie signing (auto-generated if empty)")
+	logRetention := flag.Int("log-retention-days", 30, "days to retain detailed visit logs")
 	flag.Parse()
 
 	dsn := fmt.Sprintf("%s/droply.db", *dataDir)
@@ -54,6 +57,32 @@ func main() {
 	if err := srv.RecoverCaddyRoutes(); err != nil {
 		log.Printf("Warning: route recovery failed: %v", err)
 	}
+
+	srv.StartAnalytics()
+
+	// Start cleanup goroutine
+	go func() {
+		if n, err := st.CleanupVisitLogs(*logRetention); err == nil && n > 0 {
+			log.Printf("Cleaned up %d expired visit logs", n)
+		}
+		for {
+			time.Sleep(24 * time.Hour)
+			if n, err := st.CleanupVisitLogs(*logRetention); err == nil && n > 0 {
+				log.Printf("Cleaned up %d expired visit logs", n)
+			}
+		}
+	}()
+
+	// Graceful shutdown: drain analytics channel on SIGINT/SIGTERM
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt)
+		<-sigCh
+		log.Println("Shutting down analytics...")
+		srv.ShutdownAnalytics()
+		st.Close()
+		os.Exit(0)
+	}()
 
 	siteHandler := srv.NewSiteHandler()
 	go func() {
