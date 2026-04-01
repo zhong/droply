@@ -296,6 +296,7 @@ Create `internal/server/analytics.go`:
 package server
 
 import (
+	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -358,7 +359,9 @@ func (s *Server) ShutdownAnalytics() {
 // processVisits consumes visit records from the channel and writes them to the store.
 func (s *Server) processVisits() {
 	for rec := range s.visitCh {
-		_ = s.store.RecordVisit(rec.SubdomainID, rec.Project, rec.Path, rec.IP, rec.Referer, rec.UserAgent)
+		if err := s.store.RecordVisit(rec.SubdomainID, rec.Project, rec.Path, rec.IP, rec.Referer, rec.UserAgent); err != nil {
+			log.Printf("analytics: failed to record visit: %v", err)
+		}
 	}
 	s.done <- struct{}{}
 }
@@ -864,7 +867,27 @@ git commit -m "feat(analytics): add CLI stats and logs commands"
 
 - [ ] **Step 1: Start analytics goroutine and add cleanup**
 
-In `cmd/droply-server/main.go`, add the `--log-retention-days` flag after the existing flags (after line 29):
+In `cmd/droply-server/main.go`, update the import block to add `"os/signal"`, `"os"`, and `"time"`:
+
+```go
+import (
+	"crypto/rand"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"time"
+
+	"github.com/zhong/droply/internal/caddy"
+	"github.com/zhong/droply/internal/server"
+	"github.com/zhong/droply/internal/store"
+)
+```
+
+Add the `--log-retention-days` flag after the existing flags (after line 29):
 
 ```go
 logRetention := flag.Int("log-retention-days", 30, "days to retain detailed visit logs")
@@ -877,7 +900,6 @@ srv.StartAnalytics()
 
 // Start cleanup goroutine
 go func() {
-	// Clean up on startup
 	if n, err := st.CleanupVisitLogs(*logRetention); err == nil && n > 0 {
 		log.Printf("Cleaned up %d expired visit logs", n)
 	}
@@ -888,9 +910,18 @@ go func() {
 		}
 	}
 }()
-```
 
-Add `"time"` to the imports.
+// Graceful shutdown: drain analytics channel on SIGINT/SIGTERM
+go func() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	<-sigCh
+	log.Println("Shutting down analytics...")
+	srv.ShutdownAnalytics()
+	st.Close()
+	os.Exit(0)
+}()
+```
 
 - [ ] **Step 2: Verify compilation**
 
@@ -913,7 +944,7 @@ git commit -m "feat(analytics): start analytics goroutine and log cleanup in ser
 
 - [ ] **Step 1: Write store tests**
 
-Create `internal/store/analytics_test.go`:
+Create `internal/store/analytics_test.go`. Note: `newTestStore` is already defined in `sqlite_test.go` in the same package — we only add `createTestSubdomain` as a new helper.
 
 ```go
 package store
@@ -921,16 +952,6 @@ package store
 import (
 	"testing"
 )
-
-func newTestStore(t *testing.T) *SQLiteStore {
-	t.Helper()
-	st, err := NewSQLiteStore(":memory:")
-	if err != nil {
-		t.Fatalf("create test store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
-}
 
 func createTestSubdomain(t *testing.T, st *SQLiteStore) int64 {
 	t.Helper()
@@ -1012,7 +1033,19 @@ func TestGetPageStatsPeriod(t *testing.T) {
 	if len(stats) != 2 {
 		t.Fatalf("expected 2 pages, got %d", len(stats))
 	}
-	// Should be ordered by PV desc (both have PV=1, so order may vary)
+}
+
+func TestGetPageStatsEmpty(t *testing.T) {
+	st := newTestStore(t)
+	subID := createTestSubdomain(t, st)
+
+	stats, err := st.GetPageStats(subID, "blog", "all")
+	if err != nil {
+		t.Fatalf("GetPageStats: %v", err)
+	}
+	if len(stats) != 0 {
+		t.Fatalf("expected 0 pages for unvisited project, got %d", len(stats))
+	}
 }
 
 func TestGetVisitLogsWithPathFilter(t *testing.T) {
@@ -1133,15 +1166,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zhong/droply/internal/server"
 	"github.com/zhong/droply/internal/store"
 )
 
-func setupAnalyticsEnv(t *testing.T, srv http.Handler) (token string, subName string) {
+// setupAnalyticsEnv creates a test user + subdomain and returns (token, subdomainName).
+// Uses the shared newTestServer helper from server_test.go.
+func setupAnalyticsEnv(t *testing.T, srv http.Handler) (token, subName string, st *store.SQLiteStore) {
 	t.Helper()
 	token = registerAndGetToken(t, srv, "analytics@example.com", "password123")
 
-	// Create subdomain
 	body, _ := json.Marshal(map[string]string{"name": "mysite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1152,20 +1185,26 @@ func setupAnalyticsEnv(t *testing.T, srv http.Handler) (token string, subName st
 		t.Fatalf("create subdomain: expected 201, got %d", rr.Code)
 	}
 
-	return token, "mysite"
+	return token, "mysite", nil
 }
 
-func TestGetStats(t *testing.T) {
+// newAnalyticsServer creates a test server and exposes the store for direct data insertion.
+func newAnalyticsServer(t *testing.T) (*server.Server, *store.SQLiteStore) {
+	t.Helper()
 	st, err := store.NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
+	t.Cleanup(func() { st.Close() })
 	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
+	return srv, st
+}
 
-	token, subName := setupAnalyticsEnv(t, srv)
+func TestGetStats(t *testing.T) {
+	srv, st := newAnalyticsServer(t)
+	token, subName, _ := setupAnalyticsEnv(t, srv)
 
-	// Insert some visits directly
+	// Get the subdomain ID (first subdomain = ID 1 in fresh DB)
 	st.RecordVisit(1, "blog", "/", "1.2.3.4", "", "")
 	st.RecordVisit(1, "blog", "/", "5.6.7.8", "", "")
 	st.RecordVisit(1, "blog", "/about", "1.2.3.4", "", "")
@@ -1203,16 +1242,9 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetStatsForbidden(t *testing.T) {
-	st, err := store.NewSQLiteStore(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
+	srv, _ := newAnalyticsServer(t)
+	_, _, _ = setupAnalyticsEnv(t, srv)
 
-	_, _ = setupAnalyticsEnv(t, srv)
-
-	// Different user
 	otherToken := registerAndGetToken(t, srv, "other@example.com", "password456")
 
 	req := httptest.NewRequest(http.MethodGet, "/subdomains/mysite/projects/blog/stats", nil)
@@ -1226,14 +1258,8 @@ func TestGetStatsForbidden(t *testing.T) {
 }
 
 func TestGetLogs(t *testing.T) {
-	st, err := store.NewSQLiteStore(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
-
-	token, subName := setupAnalyticsEnv(t, srv)
+	srv, st := newAnalyticsServer(t)
+	token, subName, _ := setupAnalyticsEnv(t, srv)
 
 	st.RecordVisit(1, "blog", "/hello", "1.2.3.4", "https://google.com", "Mozilla/5.0")
 
@@ -1262,14 +1288,8 @@ func TestGetLogs(t *testing.T) {
 }
 
 func TestGetStatsInvalidPeriod(t *testing.T) {
-	st, err := store.NewSQLiteStore(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
-
-	token, subName := setupAnalyticsEnv(t, srv)
+	srv, _ := newAnalyticsServer(t)
+	token, subName, _ := setupAnalyticsEnv(t, srv)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/stats?period=invalid", subName), nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -1278,6 +1298,34 @@ func TestGetStatsInvalidPeriod(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestGetLogsWithPathFilter(t *testing.T) {
+	srv, st := newAnalyticsServer(t)
+	token, subName, _ := setupAnalyticsEnv(t, srv)
+
+	st.RecordVisit(1, "blog", "/hello", "1.2.3.4", "", "")
+	st.RecordVisit(1, "blog", "/world", "1.2.3.4", "", "")
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/logs?path=/hello", subName), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Logs  []json.RawMessage `json:"logs"`
+		Total int               `json:"total"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("expected total=1 (path filter), got %d", resp.Total)
 	}
 }
 ```
