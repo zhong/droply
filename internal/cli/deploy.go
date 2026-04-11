@@ -205,7 +205,10 @@ func newDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srcDir := "."
-			pc, _ := LoadProjectConfig()
+			pc, err := loadOptionalProjectConfig()
+			if err != nil {
+				return err
+			}
 			if len(args) == 1 {
 				srcDir = args[0]
 			}

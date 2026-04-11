@@ -12,8 +12,11 @@ func resolveProject(cmd *cobra.Command) (sub, proj string, err error) {
 	proj, _ = cmd.Flags().GetString("project")
 
 	if sub == "" || proj == "" {
-		pc, pcErr := LoadProjectConfig()
-		if pcErr == nil {
+		pc, pcErr := loadOptionalProjectConfig()
+		if pcErr != nil {
+			return "", "", pcErr
+		}
+		if pc != nil {
 			if sub == "" {
 				sub = pc.Subdomain
 			}

@@ -24,11 +24,13 @@ func newProjectListCmd() *cobra.Command {
 		Short: "List projects in a subdomain",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sub == "" {
-				pc, err := LoadProjectConfig()
+				pc, err := loadOptionalProjectConfig()
 				if err != nil {
-					return fmt.Errorf("--sub is required (or set subdomain in .droply.toml): %w", err)
+					return err
 				}
-				sub = pc.Subdomain
+				if pc != nil {
+					sub = pc.Subdomain
+				}
 			}
 			if sub == "" {
 				return fmt.Errorf("subdomain is required: use --sub or set subdomain in .droply.toml")
@@ -69,11 +71,13 @@ func newProjectDeleteCmd() *cobra.Command {
 			projName := args[0]
 
 			if sub == "" {
-				pc, err := LoadProjectConfig()
+				pc, err := loadOptionalProjectConfig()
 				if err != nil {
-					return fmt.Errorf("--sub is required (or set subdomain in .droply.toml): %w", err)
+					return err
 				}
-				sub = pc.Subdomain
+				if pc != nil {
+					sub = pc.Subdomain
+				}
 			}
 			if sub == "" {
 				return fmt.Errorf("subdomain is required: use --sub or set subdomain in .droply.toml")

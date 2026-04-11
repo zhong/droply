@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -70,7 +72,44 @@ func LoadProjectConfig() (*ProjectConfig, error) {
 	var pc ProjectConfig
 	_, err := toml.DecodeFile(".droply.toml", &pc)
 	if err != nil {
-		return nil, err
+		return nil, formatProjectConfigError(err)
 	}
 	return &pc, nil
+}
+
+func loadOptionalProjectConfig() (*ProjectConfig, error) {
+	pc, err := LoadProjectConfig()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return pc, nil
+}
+
+func formatProjectConfigError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return err
+	}
+
+	if hint := projectConfigHint(err.Error()); hint != "" {
+		return fmt.Errorf("invalid .droply.toml: %s (%w)", hint, err)
+	}
+
+	return fmt.Errorf("invalid .droply.toml: %w", err)
+}
+
+func projectConfigHint(errMsg string) string {
+	switch {
+	case strings.Contains(errMsg, `last key "exclude_paths"`) && strings.Contains(errMsg, "destination has type slice"):
+		return `exclude_paths must be an array, e.g. exclude_paths = ["research"]`
+	case strings.Contains(errMsg, `last key "exclude_files"`) && strings.Contains(errMsg, "destination has type slice"):
+		return `exclude_files must be an array, e.g. exclude_files = ["secret.txt"]`
+	default:
+		return ""
+	}
 }

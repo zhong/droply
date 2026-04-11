@@ -22,14 +22,14 @@ func newStatsCmd() *cobra.Command {
 			}
 
 			if sub == "" || projectName == "" {
-				pc, err := LoadProjectConfig()
+				pc, err := loadOptionalProjectConfig()
 				if err != nil {
-					return fmt.Errorf("--sub and project name required (or set .droply.toml): %w", err)
+					return err
 				}
-				if sub == "" {
+				if pc != nil && sub == "" {
 					sub = pc.Subdomain
 				}
-				if projectName == "" {
+				if pc != nil && projectName == "" {
 					projectName = pc.Project
 				}
 			}
