@@ -328,9 +328,11 @@ droply domain list --sub alice --project blog</code></pre>
       <h3 data-i18n="cli.config" data-i18n-html="true">Project config <code>.droply.toml</code></h3>
       <div class="code-block">
         <pre><code>subdomain = "alice"
-project   = "blog"</code></pre>
+project   = "blog"
+exclude_paths = ["dist/private", "public/secret.txt"]
+exclude_files = ["draft.html", "robots-local.txt"]</code></pre>
       </div>
-      <p data-i18n="cli.config_desc" data-i18n-html="true">Place in your project root. No more flags needed for <code>droply deploy</code>.</p>
+      <p data-i18n="cli.config_desc" data-i18n-html="true">Place in your project root. No more flags needed for <code>droply deploy</code>, and you can exclude exact paths or file names from publishing.</p>
     </div>
   </div>
 </section>

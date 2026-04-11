@@ -42,7 +42,7 @@ func TestCreateTarGzFromDot(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(origDir) })
 
 	var buf bytes.Buffer
-	count, err := createTarGz(&buf, ".")
+	count, err := createTarGz(&buf, ".", tmpDir, nil)
 	if err != nil {
 		t.Fatalf("createTarGz: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestCreateTarGzExcludesHiddenDirs(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "public", "page.html"), []byte("page"), 0644)
 
 	var buf bytes.Buffer
-	count, err := createTarGz(&buf, tmpDir)
+	count, err := createTarGz(&buf, tmpDir, tmpDir, nil)
 	if err != nil {
 		t.Fatalf("createTarGz: %v", err)
 	}

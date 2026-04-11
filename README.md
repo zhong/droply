@@ -370,12 +370,18 @@ Create `.droply.toml` in your project root to avoid specifying flags every time:
 ```toml
 subdomain = "alice"
 project = "blog"
+exclude_paths = ["dist/private", "public/secret.txt"]
+exclude_files = ["draft.html", "robots-local.txt"]
 ```
 
 ```bash
 # With .droply.toml, just run:
 droply deploy
 ```
+
+`exclude_paths` uses exact relative paths from the project root. If a path points to a directory, the whole directory is excluded. If it points to a file, only that file is excluded.
+
+`exclude_files` uses exact file name matches and excludes matching files from any directory in the deployment source.
 
 #### Exclusion Rules
 
@@ -387,6 +393,8 @@ The following files and directories are automatically excluded during deployment
 - `.DS_Store`
 - `.env`
 - All hidden directories (starting with `.`)
+- Any exact paths listed in `.droply.toml` under `exclude_paths`
+- Any exact file names listed in `.droply.toml` under `exclude_files`
 
 #### Upload Limit
 

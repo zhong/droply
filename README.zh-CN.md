@@ -370,12 +370,18 @@ droply deploy ./dist --sub alice --project blog
 ```toml
 subdomain = "alice"
 project = "blog"
+exclude_paths = ["dist/private", "public/secret.txt"]
+exclude_files = ["draft.html", "robots-local.txt"]
 ```
 
 ```bash
 # 有 .droply.toml 后，直接运行即可
 droply deploy
 ```
+
+`exclude_paths` 按项目根目录的精确相对路径匹配。命中目录时会排除整个目录，命中文件时只排除该文件。
+
+`exclude_files` 按文件名精确匹配，会排除部署源目录中任意层级的同名文件。
 
 #### 打包排除规则
 
@@ -387,6 +393,8 @@ droply deploy
 - `.DS_Store`
 - `.env`
 - 所有隐藏目录（以 `.` 开头）
+- `.droply.toml` 中 `exclude_paths` 列出的精确路径
+- `.droply.toml` 中 `exclude_files` 列出的精确文件名
 
 #### 上传限制
 

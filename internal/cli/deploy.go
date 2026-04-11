@@ -36,32 +36,102 @@ var excludeDirs = map[string]bool{
 	".env":         true,
 }
 
+type deployExclusions struct {
+	paths map[string]struct{}
+	files map[string]struct{}
+}
+
+func newDeployExclusions(pc *ProjectConfig) *deployExclusions {
+	exclusions := &deployExclusions{
+		paths: make(map[string]struct{}),
+		files: make(map[string]struct{}),
+	}
+	if pc == nil {
+		return exclusions
+	}
+
+	for _, path := range pc.ExcludePaths {
+		normalized := normalizeExcludePath(path)
+		if normalized == "" {
+			continue
+		}
+		exclusions.paths[normalized] = struct{}{}
+	}
+	for _, file := range pc.ExcludeFiles {
+		file = strings.TrimSpace(file)
+		if file == "" {
+			continue
+		}
+		exclusions.files[file] = struct{}{}
+	}
+	return exclusions
+}
+
+func normalizeExcludePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(filepath.FromSlash(path))
+}
+
 // createTarGz walks srcDir and writes a gzipped tar archive to w.
 // It excludes hidden directories, node_modules, .git, __pycache__, .DS_Store, and .env.
 // Returns the number of files packaged.
-func createTarGz(w io.Writer, srcDir string) (int, error) {
+func createTarGz(w io.Writer, srcDir, projectRoot string, pc *ProjectConfig) (int, error) {
+	absSrcDir, err := filepath.Abs(srcDir)
+	if err != nil {
+		return 0, fmt.Errorf("resolve source dir: %w", err)
+	}
+
+	absProjectRoot := absSrcDir
+	if projectRoot != "" {
+		absProjectRoot, err = filepath.Abs(projectRoot)
+		if err != nil {
+			return 0, fmt.Errorf("resolve project root: %w", err)
+		}
+	}
+
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
+	exclusions := newDeployExclusions(pc)
 
 	var fileCount int
-	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(absSrcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
 		// Compute path relative to srcDir first, so root is handled
 		// before any name-based checks.
-		rel, err := filepath.Rel(srcDir, path)
+		rel, err := filepath.Rel(absSrcDir, path)
 		if err != nil {
 			return err
+		}
+
+		name := info.Name()
+		projectRel, err := filepath.Rel(absProjectRoot, path)
+		if err != nil {
+			return err
+		}
+		projectRel = filepath.Clean(projectRel)
+
+		if _, ok := exclusions.paths[projectRel]; ok {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !info.IsDir() {
+			if _, ok := exclusions.files[name]; ok {
+				return nil
+			}
 		}
 
 		// Skip root dir entry itself.
 		if rel == "." {
 			return nil
 		}
-
-		name := info.Name()
 
 		// Skip excluded names.
 		if excludeDirs[name] {
@@ -135,20 +205,18 @@ func newDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srcDir := "."
+			pc, _ := LoadProjectConfig()
 			if len(args) == 1 {
 				srcDir = args[0]
 			}
 
 			// Fall back to .droply.toml for sub and project.
-			if sub == "" || project == "" {
-				pc, err := LoadProjectConfig()
-				if err == nil {
-					if sub == "" {
-						sub = pc.Subdomain
-					}
-					if project == "" {
-						project = pc.Project
-					}
+			if pc != nil {
+				if sub == "" {
+					sub = pc.Subdomain
+				}
+				if project == "" {
+					project = pc.Project
 				}
 			}
 			if sub == "" {
@@ -167,7 +235,12 @@ func newDeployCmd() *cobra.Command {
 			defer tmpFile.Close()
 
 			fmt.Printf("Packaging %s...\n", srcDir)
-			packaged, err := createTarGz(tmpFile, srcDir)
+			projectRoot, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			packaged, err := createTarGz(tmpFile, srcDir, projectRoot, pc)
 			if err != nil {
 				return fmt.Errorf("package: %w", err)
 			}

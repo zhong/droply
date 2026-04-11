@@ -91,7 +91,7 @@ const translations = {
     "cli.access_remove": "移除规则",
     "cli.domains": "自定义域名",
     "cli.config": "项目配置文件 <code>.droply.toml</code>",
-    "cli.config_desc": "放在项目根目录，之后 <code>droply deploy</code> 无需传参。",
+    "cli.config_desc": "放在项目根目录，之后 <code>droply deploy</code> 无需传参，也可以配置不发布的精确路径和文件名。",
 
     // API
     "api.sub": "RESTful JSON API，地址 <code>api.droplydoc.com</code>，使用 <code>Bearer</code> token 认证。",

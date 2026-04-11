@@ -15,8 +15,10 @@ type Config struct {
 
 // ProjectConfig holds the per-project configuration read from .droply.toml.
 type ProjectConfig struct {
-	Subdomain string `toml:"subdomain"`
-	Project   string `toml:"project"`
+	Subdomain    string   `toml:"subdomain"`
+	Project      string   `toml:"project"`
+	ExcludePaths []string `toml:"exclude_paths"`
+	ExcludeFiles []string `toml:"exclude_files"`
 }
 
 // configDir returns the path to the droply config directory.
