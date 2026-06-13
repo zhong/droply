@@ -429,14 +429,63 @@ droply version
 
 ### Configuration
 
-CLI config file is located at `~/.config/droply/config.toml`:
+CLI config file is located at `~/.config/droply/config.toml` and supports multiple **contexts** (connection profiles) — one for each droply server you connect to.
 
 ```toml
+current_context = "default"
+
+[contexts.default]
 api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
+
+[contexts.paratera]
+api_url = "https://api.docs.paratera.co"
+token = "dp_yyyyyyyyyyyy"
 ```
 
-This file is automatically created and updated on login/register. For self-hosted instances, create the config file manually and set the `api_url`.
+This file is automatically created and updated on login/register. Old single-server config (top-level `api_url` + `token`) is **silently migrated** to `contexts.default` on first use.
+
+#### Working with Multiple Servers
+
+```bash
+# Login to a self-hosted server (creates a new context "paratera")
+droply auth login --api-url https://api.docs.paratera.co
+
+# Or name the context explicitly
+droply auth login --api-url https://api.docs.paratera.co --context corp
+
+# List configured contexts (* marks the active one)
+droply context list
+
+# Switch between servers
+droply context use paratera
+
+# Add a context without authenticating yet
+droply context add staging --api-url https://api.staging.example.com
+
+# Remove a context
+droply context remove staging
+
+# One-shot override (does not persist)
+droply --context paratera deploy
+```
+
+#### Per-Project Context Binding
+
+`.droply.toml` in a project directory can pin a specific context:
+
+```toml
+context = "paratera"
+subdomain = "alice"
+project = "blog"
+```
+
+When running `droply` commands inside that directory, the `paratera` context is used automatically.
+
+**Resolution priority** (highest to lowest):
+1. `--context X` flag on the command line
+2. `context = "X"` in `.droply.toml`
+3. `current_context` in `~/.config/droply/config.toml`
 
 ### Register and Login
 

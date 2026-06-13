@@ -431,14 +431,63 @@ droply version
 
 ### 配置
 
-CLI 配置文件位于 `~/.config/droply/config.toml`：
+CLI 配置文件位于 `~/.config/droply/config.toml`，支持多个 **context**（连接配置）—— 每个连接的 droply 服务器对应一个 context。
 
 ```toml
+current_context = "default"
+
+[contexts.default]
 api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
+
+[contexts.paratera]
+api_url = "https://api.docs.paratera.co"
+token = "dp_yyyyyyyyyyyy"
 ```
 
-登录或注册时会自动创建和更新此文件。如果使用自部署实例，先手动创建配置文件并修改 `api_url`。
+登录/注册时自动创建和更新此文件。旧的单服务器配置（顶层 `api_url` + `token`）会在首次使用时**静默迁移**为 `contexts.default`。
+
+#### 同时使用多个服务器
+
+```bash
+# 登录自建服务器（自动创建 "paratera" context）
+droply auth login --api-url https://api.docs.paratera.co
+
+# 或显式命名 context
+droply auth login --api-url https://api.docs.paratera.co --context corp
+
+# 列出所有 context（* 标记当前激活的）
+droply context list
+
+# 切换服务器
+droply context use paratera
+
+# 仅添加 context，暂不认证
+droply context add staging --api-url https://api.staging.example.com
+
+# 删除 context
+droply context remove staging
+
+# 临时覆盖单次操作（不持久化）
+droply --context paratera deploy
+```
+
+#### 项目级 context 绑定
+
+项目目录下的 `.droply.toml` 可以绑定特定的 context：
+
+```toml
+context = "paratera"
+subdomain = "alice"
+project = "blog"
+```
+
+在该目录下执行 `droply` 命令时自动使用 `paratera` context。
+
+**优先级**（高到低）：
+1. 命令行 `--context X`
+2. `.droply.toml` 中的 `context = "X"`
+3. `~/.config/droply/config.toml` 中的 `current_context`
 
 ### 注册和登录
 

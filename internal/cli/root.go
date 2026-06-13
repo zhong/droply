@@ -9,10 +9,19 @@ func NewRootCmd(version string) *cobra.Command {
 		Short: "droply — deploy static sites from the command line",
 	}
 
+	// Global --context flag overrides the active context for the current invocation.
+	root.PersistentFlags().String("context", "", "Override the active context for this command")
+	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if ctxName, err := cmd.Flags().GetString("context"); err == nil && ctxName != "" {
+			SetActiveContext(ctxName)
+		}
+	}
+
 	root.AddCommand(newRegisterCmd())
 	root.AddCommand(newLoginCmd())
 	root.AddCommand(newLogoutCmd())
 	root.AddCommand(newWhoamiCmd())
+	root.AddCommand(newContextCmd())
 	root.AddCommand(newSubdomainCmd())
 	root.AddCommand(newDeployCmd())
 	root.AddCommand(newListCmd())

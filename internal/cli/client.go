@@ -18,11 +18,11 @@ type APIClient struct {
 	HTTP    *http.Client
 }
 
-// NewAPIClient creates an APIClient from the given config.
-func NewAPIClient(cfg *Config) *APIClient {
+// NewAPIClient creates an APIClient from the given context.
+func NewAPIClient(ctx *Context) *APIClient {
 	return &APIClient{
-		BaseURL: cfg.APIURL,
-		Token:   cfg.Token,
+		BaseURL: ctx.APIURL,
+		Token:   ctx.Token,
 		HTTP:    &http.Client{},
 	}
 }

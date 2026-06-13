@@ -32,16 +32,85 @@ func readPassword(prompt string) string {
 	return string(b)
 }
 
+// resolveLoginTarget returns (contextName, context) for register/login commands.
+// If --api-url is set, it implies a new or named context; --context names it (default: derived from URL).
+// If neither flag is set, uses the currently active context.
+func resolveLoginTarget(cmd *cobra.Command) (string, *Context) {
+	apiURL, _ := cmd.Flags().GetString("api-url")
+	ctxName, _ := cmd.Flags().GetString("context")
+
+	full := LoadFullConfig()
+
+	if apiURL == "" && ctxName == "" {
+		// Use whatever is currently active.
+		name := resolveActiveContextName(full)
+		ctx := full.Contexts[name]
+		if ctx.APIURL == "" {
+			ctx.APIURL = defaultAPIURL
+		}
+		return name, &ctx
+	}
+
+	if ctxName == "" {
+		ctxName = deriveContextName(apiURL)
+	}
+	existing, ok := full.Contexts[ctxName]
+	if !ok {
+		existing = Context{}
+	}
+	if apiURL != "" {
+		existing.APIURL = apiURL
+	}
+	if existing.APIURL == "" {
+		existing.APIURL = defaultAPIURL
+	}
+	return ctxName, &existing
+}
+
+// deriveContextName extracts a short, sensible context name from an API URL.
+// e.g. "https://api.docs.paratera.co" → "paratera"
+// Fallback: "custom" if URL is empty or unparseable.
+func deriveContextName(apiURL string) string {
+	if apiURL == "" {
+		return "custom"
+	}
+	s := strings.TrimPrefix(apiURL, "https://")
+	s = strings.TrimPrefix(s, "http://")
+	s = strings.TrimPrefix(s, "api.")
+	if i := strings.Index(s, "/"); i >= 0 {
+		s = s[:i]
+	}
+	// Pick the second-level label if present.
+	// e.g. "docs.paratera.co" → "paratera"
+	parts := strings.Split(s, ".")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2]
+	}
+	if s == "" {
+		return "custom"
+	}
+	return s
+}
+
+func saveContext(name string, ctx *Context) error {
+	full := LoadFullConfig()
+	full.Contexts[name] = *ctx
+	if full.CurrentContext == "" {
+		full.CurrentContext = name
+	}
+	return SaveFullConfig(full)
+}
+
 func newRegisterCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "register",
 		Short: "Create a new droply account",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			name, ctx := resolveLoginTarget(cmd)
 			email := readInput("Email: ")
 			password := readPassword("Password: ")
 
-			cfg := LoadConfig()
-			client := NewAPIClient(cfg)
+			client := NewAPIClient(ctx)
 
 			var resp struct {
 				APIToken string `json:"api_token"`
@@ -53,26 +122,29 @@ func newRegisterCmd() *cobra.Command {
 				return err
 			}
 
-			cfg.Token = resp.APIToken
-			if err := SaveConfig(cfg); err != nil {
+			ctx.Token = resp.APIToken
+			if err := saveContext(name, ctx); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Println("Registered successfully. Token saved.")
+			fmt.Printf("Registered successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
 			return nil
 		},
 	}
+	cmd.Flags().String("api-url", "", "API URL of a droply server (creates or updates the named context)")
+	cmd.Flags().String("context", "", "Name for the context (default: derived from --api-url)")
+	return cmd
 }
 
 func newLoginCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Log in to your droply account",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			name, ctx := resolveLoginTarget(cmd)
 			email := readInput("Email: ")
 			password := readPassword("Password: ")
 
-			cfg := LoadConfig()
-			client := NewAPIClient(cfg)
+			client := NewAPIClient(ctx)
 
 			var resp struct {
 				APIToken string `json:"api_token"`
@@ -84,27 +156,33 @@ func newLoginCmd() *cobra.Command {
 				return err
 			}
 
-			cfg.Token = resp.APIToken
-			if err := SaveConfig(cfg); err != nil {
+			ctx.Token = resp.APIToken
+			if err := saveContext(name, ctx); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Println("Logged in successfully. Token saved.")
+			fmt.Printf("Logged in successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
 			return nil
 		},
 	}
+	cmd.Flags().String("api-url", "", "API URL of a droply server (creates or updates the named context)")
+	cmd.Flags().String("context", "", "Name for the context (default: derived from --api-url)")
+	return cmd
 }
 
 func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Clear your stored authentication token",
+		Short: "Clear the auth token for the active context",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := LoadConfig()
-			cfg.Token = ""
-			if err := SaveConfig(cfg); err != nil {
+			full := LoadFullConfig()
+			name := resolveActiveContextName(full)
+			ctx := full.Contexts[name]
+			ctx.Token = ""
+			full.Contexts[name] = ctx
+			if err := SaveFullConfig(full); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Println("Logged out. Token cleared.")
+			fmt.Printf("Logged out of context %q. Token cleared.\n", name)
 			return nil
 		},
 	}
@@ -113,14 +191,17 @@ func newLogoutCmd() *cobra.Command {
 func newWhoamiCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "whoami",
-		Short: "Show the current API URL and authentication status",
+		Short: "Show the active context and authentication status",
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := LoadConfig()
-			fmt.Printf("API URL: %s\n", cfg.APIURL)
-			if cfg.Token == "" {
+			full := LoadFullConfig()
+			name := resolveActiveContextName(full)
+			ctx := full.Contexts[name]
+			fmt.Printf("Context: %s\n", name)
+			fmt.Printf("API URL: %s\n", ctx.APIURL)
+			if ctx.Token == "" {
 				fmt.Println("Token:   (not set)")
 			} else {
-				masked := cfg.Token
+				masked := ctx.Token
 				if len(masked) > 8 {
 					masked = masked[:8] + strings.Repeat("*", len(masked)-8)
 				}
