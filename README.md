@@ -638,16 +638,42 @@ After setting access control, a copy-friendly share line is printed with the acc
 | `--project` | Project name (optional; omit for subdomain-level rules) |
 | `--ip` | Allowed IP or CIDR (repeatable for multiple entries) |
 | `--password` | Password (`auto` to generate, or a custom value, minimum 8 characters) |
+| `--wework` | Enable WeCom (WeWork) QR code login (any corp member) |
+| `--wework-user` | Allow specific WeCom user_id; repeatable; implies `--wework` |
 | `--expire` | Session TTL (e.g. `1h`, `24h`, `7d`, `never`, default `24h`) |
 
 #### How It Works
 
 - **IP whitelist**: Only requests from specified IPs/subnets are allowed
 - **Password protection**: Visitors enter a password on a login page; a cookie maintains the session
-- **Combined rules**: When both IP and password are configured, both must be satisfied (AND logic)
+- **WeCom QR code login**: Visitors scan a QR code with WeCom mobile app; session cookie is bound to the user_id and the configured allow-list
+- **Combined rules**: When multiple methods are configured, **any one passing grants access** (OR logic). IP is checked first; if not allowed, the visitor sees a login page showing whichever of password / WeCom buttons are enabled.
 - **Rule priority**: Project-level rules completely override subdomain-level rules
 
 Protected sites are reverse-proxied through Caddy to droply-server's site serving port (`:8081`), where the server handles verification.
+
+### WeCom (WeWork) QR Code Login
+
+droply supports WeCom QR code login as a third access control method (alongside IP whitelist and password). Visitors click a "Login with WeCom" button, scan with the WeCom mobile app, and gain access if their WeCom user_id is on the allow-list.
+
+**Quick start:**
+
+```bash
+# Server: configure WeCom OAuth (in /etc/systemd/system/droply.service)
+Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
+Environment="DROPLY_WEWORK_AGENT_ID=1000002"
+Environment="DROPLY_WEWORK_SECRET=xxx"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+
+# CLI: enable WeCom on a project (allow any corp member)
+droply access set --subdomain alice --project docs --wework
+
+# Or restrict to specific WeCom user_ids
+droply access set --subdomain alice --project docs \
+  --wework-user zhangsan --wework-user lisi
+```
+
+📖 **Full setup guide**: [docs/wework.md](docs/wework.md) covers creating the WeCom custom app, configuring trusted domains, the OAuth verification file, troubleshooting, and known limitations.
 
 ## API
 

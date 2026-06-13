@@ -640,16 +640,42 @@ droply access remove --subdomain alice --project blog
 | `--project` | 项目名称（可选，不指定则操作子域名级别） |
 | `--ip` | 允许的 IP 或 CIDR（可重复指定多个） |
 | `--password` | 密码（`auto` 自动生成，或指定自定义密码，最少 8 位） |
+| `--wework` | 启用企业微信扫码登录（允许任何企业成员） |
+| `--wework-user` | 仅允许指定的企业微信 user_id；可重复；隐式启用 `--wework` |
 | `--expire` | 会话过期时间（如 `1h`、`24h`、`7d`、`never`，默认 `24h`） |
 
 #### 工作原理
 
 - **IP 白名单**：只有来自指定 IP/子网的请求才能访问
 - **密码保护**：访问者需要在登录页输入密码，通过后设置 cookie 保持会话
-- **组合使用**：同时配置 IP 和密码时，两者都必须满足（AND 逻辑）
+- **企业微信扫码**：访问者用企业微信扫码登录，cookie 与 user_id 和白名单绑定
+- **组合使用**：同时配置多种方式时，**任一通过即可访问**（OR 逻辑）。IP 先校验；未命中则展示登录页，按配置显示密码框和/或扫码按钮
 - **规则优先级**：项目级规则完全覆盖子域名级规则
 
 受保护的站点会通过 Caddy 反代到 droply-server 的站点服务端口（`:8081`），由 server 处理验证逻辑。
+
+### 企业微信扫码登录
+
+droply 支持企业微信扫码登录作为第三种访问控制方式（与 IP 白名单、密码并列）。访问者点击 "使用企业微信登录" 按钮，用企业微信 App 扫码，如果其 user_id 在白名单中即可访问。
+
+**快速开始：**
+
+```bash
+# 服务端：配置企业微信 OAuth（在 /etc/systemd/system/droply.service 中）
+Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
+Environment="DROPLY_WEWORK_AGENT_ID=1000002"
+Environment="DROPLY_WEWORK_SECRET=xxx"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+
+# CLI：为项目启用扫码登录（允许任何企业成员）
+droply access set --subdomain alice --project docs --wework
+
+# 或限定指定 user_id
+droply access set --subdomain alice --project docs \
+  --wework-user zhangsan --wework-user lisi
+```
+
+📖 **完整配置指南**：[docs/wework-zh-CN.md](docs/wework-zh-CN.md) 涵盖创建企业微信自建应用、配置可信域名、OAuth 校验文件、故障排查、已知限制。
 
 ## API
 
