@@ -333,6 +333,10 @@ func TestWeWorkLoginPageShowsButton(t *testing.T) {
 	siteHandler := srv.NewSiteHandler()
 	req := httptest.NewRequest(http.MethodGet, "/app/index.html", nil)
 	req.Host = "wesite.droplydoc.com"
+	// Attach the "recently failed" marker so the handler renders the login
+	// page instead of auto-redirecting. (Without the marker, a WeCom-only
+	// rule would 302 straight to OAuth — covered by TestWeWorkAutoRedirect.)
+	req.AddCookie(&http.Cookie{Name: "_droply_wework_attempted", Value: "1"})
 	rr := httptest.NewRecorder()
 	siteHandler.ServeHTTP(rr, req)
 
@@ -380,9 +384,11 @@ func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
 
 	siteHandler := srv.NewSiteHandler()
 
-	// 1. Hit a protected page → login page rendered.
+	// 1. Hit a protected page with the "attempted" marker so we get the
+	//    login page (instead of an auto-redirect, which TestWeWorkAutoRedirect covers).
 	req := httptest.NewRequest(http.MethodGet, "/app/", nil)
 	req.Host = "wesite.droplydoc.com"
+	req.AddCookie(&http.Cookie{Name: "_droply_wework_attempted", Value: "1"})
 	rr := httptest.NewRecorder()
 	siteHandler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -613,6 +619,134 @@ func TestWeWorkAuthDispatchByUserAgent(t *testing.T) {
 					tc.userAgent, tc.wantInLocation, loc)
 			}
 		})
+	}
+}
+
+// TestWeWorkAutoRedirect verifies the auto-redirect-to-OAuth optimization
+// for WeCom-only access rules: a first hit on a protected page goes
+// straight to /_droply/wework/auth (no manual "Login" click required).
+func TestWeWorkAutoRedirect(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, nil)
+	defer mockAPI.Close()
+	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+	setupWeWorkSite(t, srv, nil) // wework-only, no password
+
+	siteHandler := srv.NewSiteHandler()
+	req := httptest.NewRequest(http.MethodGet, "/app/", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 auto-redirect, got %d:\n%s", rr.Code, rr.Body.String())
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/_droply/wework/auth?") {
+		t.Errorf("expected redirect to wework auth, got %q", loc)
+	}
+	// Original path should be preserved for callback to redirect back to.
+	if !strings.Contains(loc, url.QueryEscape("/app/")) {
+		t.Errorf("expected /app/ to be preserved in redirect param, got %q", loc)
+	}
+}
+
+// TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled verifies that when a rule
+// has both WeCom and password, the login page is shown (so users can pick),
+// not auto-redirected to WeCom OAuth.
+func TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, nil)
+	defer mockAPI.Close()
+	srv, sitesDir := newSiteServerWithWeWork(t, mockAPI.URL)
+
+	// Set up a rule with BOTH password and WeCom.
+	token := registerAndGetToken(t, srv, "both@example.com", "password123")
+	body, _ := json.Marshal(map[string]string{"name": "wesite"})
+	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create subdomain: %d %s", rr.Code, rr.Body.String())
+	}
+	deployProject(t, srv, token, "wesite", "app", map[string]string{"index.html": "ok"})
+	accessBody, _ := json.Marshal(map[string]interface{}{
+		"auto_password":  true,
+		"wework_enabled": true,
+	})
+	req = httptest.NewRequest(http.MethodPut, "/subdomains/wesite/projects/app/access", bytes.NewReader(accessBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set access: %d %s", rr.Code, rr.Body.String())
+	}
+	_ = sitesDir
+
+	siteHandler := srv.NewSiteHandler()
+	req = httptest.NewRequest(http.MethodGet, "/app/", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 login page when password also enabled, got %d", rr.Code)
+	}
+	body2 := rr.Body.String()
+	if !strings.Contains(body2, "Enter password") {
+		t.Errorf("expected password input in login page, body=%q", body2)
+	}
+	if !strings.Contains(body2, "Login with WeCom") {
+		t.Errorf("expected WeCom button in login page, body=%q", body2)
+	}
+}
+
+// TestWeWorkNoAutoRedirectAfterRecentFailure verifies that after an OAuth
+// attempt fails (marker cookie set), the next protected page hit renders the
+// login page instead of looping back into OAuth.
+func TestWeWorkNoAutoRedirectAfterRecentFailure(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, nil)
+	defer mockAPI.Close()
+	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+	setupWeWorkSite(t, srv, nil)
+
+	siteHandler := srv.NewSiteHandler()
+	req := httptest.NewRequest(http.MethodGet, "/app/", nil)
+	req.Host = "wesite.droplydoc.com"
+	// Simulate a recent failure by attaching the marker cookie.
+	req.AddCookie(&http.Cookie{Name: "_droply_wework_attempted", Value: "1"})
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 login page after recent failure, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Login with WeCom") {
+		t.Errorf("expected login page with WeCom button, got body=%q", rr.Body.String())
+	}
+}
+
+// TestWeWorkAutoRedirectDisabledWhenServerNotConfigured verifies that without
+// a WeCom-configured server (s.wework == nil), the login page is shown
+// instead of an auto-redirect (which would 503 immediately).
+func TestWeWorkAutoRedirectDisabledWhenServerNotConfigured(t *testing.T) {
+	srv, _ := newTestSiteServer(t) // no WeCom configured
+	setupWeWorkSite(t, srv, nil)
+
+	siteHandler := srv.NewSiteHandler()
+	req := httptest.NewRequest(http.MethodGet, "/app/", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 login page when WeCom not configured, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	// Login page should NOT show the WeCom button when server is unconfigured.
+	if strings.Contains(body, "Login with WeCom") {
+		t.Errorf("WeCom button should not be present when server unconfigured, body=%q", body)
 	}
 }
 

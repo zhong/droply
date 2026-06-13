@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -237,7 +238,19 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 				return
 			}
-			// Show login page.
+			// Auto-redirect to WeCom OAuth when the rule has only WeCom enabled
+			// (no password choice to make), the server is configured for WeCom,
+			// and the request is not bouncing back from a failed OAuth attempt.
+			// This skips the "Login with WeCom" button click in the common case.
+			if !rule.HasPassword && rule.WeWorkEnabled && s.wework != nil && !weworkRecentlyFailed(r) {
+				authURL := "/_droply/wework/auth?redirect=" +
+					url.QueryEscape(r.URL.RequestURI()) +
+					"&host=" + url.QueryEscape(r.Host)
+				http.Redirect(w, r, authURL, http.StatusFound)
+				return
+			}
+			// Show login page (covers password-only, password+WeCom, or a recent
+			// OAuth failure where we want the user to see what went wrong).
 			s.renderLoginPage(w, r, rule, "")
 			return
 		}

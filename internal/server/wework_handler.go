@@ -9,6 +9,38 @@ import (
 	"github.com/zhong/droply/internal/wework"
 )
 
+// weworkAttemptCookieName is set briefly when an OAuth attempt fails. While
+// it is present, the siteHandler shows the login page instead of auto-
+// redirecting back into OAuth, preventing infinite redirect loops on
+// persistent failures (invalid state, allow-list miss, IP error from WeCom).
+const weworkAttemptCookieName = "_droply_wework_attempted"
+
+// markWeWorkAttemptFailed sets a short-lived cookie so the next request to a
+// protected page renders the login form (with the WeCom button) rather than
+// auto-redirecting back into the OAuth flow.
+func markWeWorkAttemptFailed(w http.ResponseWriter, domain string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     weworkAttemptCookieName,
+		Value:    "1",
+		Path:     "/",
+		Domain:   domain,
+		MaxAge:   60, // 60 seconds — long enough to break a loop, short enough not to bother humans
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// weworkRecentlyFailed reports whether the request carries the failure marker
+// cookie set by markWeWorkAttemptFailed.
+func weworkRecentlyFailed(r *http.Request) bool {
+	c, err := r.Cookie(weworkAttemptCookieName)
+	if err != nil {
+		return false
+	}
+	return c.Value != ""
+}
+
 // weworkAuthHandler initiates the WeWork OAuth flow.
 // It validates the host/redirect, generates a state token, and redirects to WeWork.
 func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +135,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	stateData, ok := s.weworkState.Consume(state)
 	if !ok {
 		log.Printf("wework callback: invalid or expired state (state=%s)", state)
+		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, "", s.baseDomain))
 		http.Error(w, "invalid or expired state", http.StatusBadRequest)
 		return
 	}
@@ -111,6 +144,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := s.wework.GetUserIDByCode(code)
 	if err != nil {
 		log.Printf("wework callback: failed to get user ID (code=%s, err=%v)", truncate(code, 8), err)
+		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.Error(w, "WeWork login failed", http.StatusUnauthorized)
 		return
 	}
@@ -118,6 +152,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// Re-resolve rule (state could be stale if rule was deleted).
 	rule, err := s.store.FindAccessRuleForSite(stateData.Subdomain, stateData.Project)
 	if err != nil || rule == nil || !rule.WeWorkEnabled {
+		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.NotFound(w, r)
 		return
 	}
@@ -126,6 +161,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if !isWeWorkUserAllowed(userID, rule.AllowedWeWorkUsers) {
 		log.Printf("wework callback: user %q not in allow-list (subdomain=%s, project=%s, allowed=%v)",
 			userID, stateData.Subdomain, stateData.Project, rule.AllowedWeWorkUsers)
+		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.Error(w, "Access denied: user not in allow-list", http.StatusForbidden)
 		return
 	}
@@ -163,6 +199,18 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Clear any lingering "recently failed" marker so the next protected page
+	// view resumes auto-redirect behavior.
+	http.SetCookie(w, &http.Cookie{
+		Name:    weworkAttemptCookieName,
+		Value:   "",
+		Path:    "/",
+		Domain:  cookieDomain,
+		MaxAge:  -1,
+		Secure:  true,
+		HttpOnly: true,
 	})
 
 	// Build the absolute redirect URL. If the callback host differs from the

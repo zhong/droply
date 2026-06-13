@@ -200,7 +200,16 @@ Visit your protected site:
 https://alice.docs.paratera.co/docs/
 ```
 
-You should see a login page with a **"Login with WeCom"** button. Click it; you'll be redirected through WeCom's OAuth flow and back to the original URL upon successful scan.
+What happens depends on the access rule:
+
+- **WeCom-only rule** (no password): the browser is automatically redirected straight into the WeCom OAuth flow — no manual click required.
+  - Desktop browser → QR code page
+  - WeCom mobile app in-app browser → silent authorization
+- **WeCom + password rule**: a login page is shown with both a password input and a **"Login with WeCom"** button so the visitor can pick.
+
+After successful authorization the visitor is redirected to the original URL with a session cookie set.
+
+If the OAuth flow fails (state expired, allow-list miss, etc.), the user is shown the login page with the WeCom button instead of being looped back into another OAuth attempt — a short-lived cookie marker prevents redirect loops for ~60 seconds.
 
 To check the access rule is applied correctly:
 
