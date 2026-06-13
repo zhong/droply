@@ -30,6 +30,8 @@ func newAccessSetCmd() *cobra.Command {
 			ips, _ := cmd.Flags().GetStringSlice("ip")
 			password, _ := cmd.Flags().GetString("password")
 			expire, _ := cmd.Flags().GetString("expire")
+			weworkEnabled, _ := cmd.Flags().GetBool("wework")
+			weworkUsers, _ := cmd.Flags().GetStringSlice("wework-user")
 
 			if sub == "" {
 				return fmt.Errorf("--subdomain is required")
@@ -43,6 +45,14 @@ func newAccessSetCmd() *cobra.Command {
 				reqBody["auto_password"] = true
 			} else if password != "" {
 				reqBody["password"] = password
+			}
+			if weworkEnabled {
+				reqBody["wework_enabled"] = true
+			}
+			if len(weworkUsers) > 0 {
+				reqBody["allowed_wework_users"] = weworkUsers
+				// Implicitly enable WeWork when allow-list is provided.
+				reqBody["wework_enabled"] = true
 			}
 
 			if expire != "" {
@@ -105,6 +115,14 @@ func newAccessSetCmd() *cobra.Command {
 				}
 			}
 
+			if result["wework_enabled"] == true {
+				if users, ok := result["allowed_wework_users"].([]any); ok && len(users) > 0 {
+					fmt.Printf("  WeCom login: enabled (allow-list: %v)\n", users)
+				} else {
+					fmt.Println("  WeCom login: enabled (any corp member)")
+				}
+			}
+
 			return nil
 		},
 	}
@@ -114,6 +132,8 @@ func newAccessSetCmd() *cobra.Command {
 	cmd.Flags().StringSlice("ip", nil, "Allowed IP or CIDR (repeatable)")
 	cmd.Flags().String("password", "", "Password ('auto' to generate, or a custom value)")
 	cmd.Flags().String("expire", "24h", "Session expiry duration (e.g. 1h, 24h, 7d, never)")
+	cmd.Flags().Bool("wework", false, "Enable WeCom (WeWork) QR code login")
+	cmd.Flags().StringSlice("wework-user", nil, "Allowed WeCom user_id (repeatable; empty = any corp member; implies --wework)")
 
 	return cmd
 }
@@ -155,6 +175,13 @@ func newAccessGetCmd() *cobra.Command {
 				fmt.Println("  Password: (set)")
 				if ttl, ok := result["session_ttl"].(float64); ok {
 					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
+				}
+			}
+			if result["wework_enabled"] == true {
+				if users, ok := result["allowed_wework_users"].([]any); ok && len(users) > 0 {
+					fmt.Printf("  WeCom login: enabled (allow-list: %v)\n", users)
+				} else {
+					fmt.Println("  WeCom login: enabled (any corp member)")
 				}
 			}
 			return nil

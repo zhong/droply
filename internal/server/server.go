@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/zhong/droply/internal/model"
 	"github.com/zhong/droply/internal/store"
+	"github.com/zhong/droply/internal/wework"
 )
 
 type contextKey string
@@ -28,15 +30,17 @@ type CaddyClient interface {
 
 // Server holds all dependencies for the HTTP server.
 type Server struct {
-	store      store.Store
-	sitesDir   string
-	baseDomain string
-	caddy      CaddyClient
-	router     *chi.Mux
-	hmacKey    []byte
-	siteAddr   string
-	visitCh    chan visitRecord
-	done       chan struct{}
+	store       store.Store
+	sitesDir    string
+	baseDomain  string
+	caddy       CaddyClient
+	router      *chi.Mux
+	hmacKey     []byte
+	siteAddr    string
+	visitCh     chan visitRecord
+	done        chan struct{}
+	wework      *wework.Client
+	weworkState *wework.StateStore
 }
 
 // New creates a new Server and registers all routes.
@@ -53,6 +57,15 @@ func New(s store.Store, sitesDir, baseDomain string, caddy CaddyClient, hmacKey 
 	}
 	srv.router = srv.buildRouter()
 	return srv
+}
+
+// SetWeWork configures the WeWork OAuth client. State tokens expire after 10 minutes.
+// Call before starting the site handler. Passing nil disables WeWork login.
+func (s *Server) SetWeWork(client *wework.Client) {
+	s.wework = client
+	if client != nil {
+		s.weworkState = wework.NewStateStore(10 * time.Minute)
+	}
 }
 
 // ServeHTTP implements http.Handler.

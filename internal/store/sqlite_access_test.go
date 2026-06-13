@@ -10,7 +10,7 @@ func TestCreateAndGetAccessRule(t *testing.T) {
 	user, _ := s.CreateUser("access@example.com", "hash", "token-access")
 	sub, _ := s.CreateSubdomain(user.ID, "protected")
 
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1", "192.168.1.0/24"}, "bcrypt-hash", 3600)
+	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1", "192.168.1.0/24"}, "bcrypt-hash", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
 	}
@@ -67,13 +67,13 @@ func TestCreateOrUpdateAccessRuleUpsert(t *testing.T) {
 	user, _ := s.CreateUser("upsert@example.com", "hash", "token-upsert")
 	sub, _ := s.CreateSubdomain(user.ID, "upsertsite")
 
-	rule1, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "pass1", 3600)
+	rule1, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "pass1", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("first CreateOrUpdateAccessRule: %v", err)
 	}
 
 	// Update the same rule (same subdomain_id, nil project_id)
-	rule2, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.2", "10.0.0.3"}, "pass2", 7200)
+	rule2, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.2", "10.0.0.3"}, "pass2", 7200, false, nil)
 	if err != nil {
 		t.Fatalf("second CreateOrUpdateAccessRule: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestProjectLevelAccessRule(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "app")
 
 	projID := proj.ID
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.1"}, "projpass", 1800)
+	rule, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.1"}, "projpass", 1800, false, nil)
 	if err != nil {
 		t.Fatalf("CreateOrUpdateAccessRule project-level: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestDeleteAccessRule(t *testing.T) {
 	user, _ := s.CreateUser("del@example.com", "hash", "token-del")
 	sub, _ := s.CreateSubdomain(user.ID, "delsite")
 
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600)
+	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
 	}
@@ -152,14 +152,14 @@ func TestFindAccessRuleForSite(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "myapp")
 
 	// Create subdomain-level rule
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "subpass", 3600)
+	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "subpass", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("create subdomain rule: %v", err)
 	}
 
 	// Create project-level rule
 	projID := proj.ID
-	_, err = s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.2"}, "projpass", 1800)
+	_, err = s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.2"}, "projpass", 1800, false, nil)
 	if err != nil {
 		t.Fatalf("create project rule: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestHasAccessRules(t *testing.T) {
 		t.Error("expected false before creating rule")
 	}
 
-	_, err = s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600)
+	_, err = s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestAccessRuleCascadeDeleteProject(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "app")
 
 	projID := proj.ID
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, nil, "pass", 3600)
+	_, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, nil, "pass", 3600, false, nil)
 	if err != nil {
 		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
 	}

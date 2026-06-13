@@ -51,15 +51,17 @@ type DomainWithPath struct {
 }
 
 type AccessRule struct {
-	ID           int64     `json:"id"`
-	SubdomainID  int64     `json:"subdomain_id"`
-	ProjectID    *int64    `json:"project_id,omitempty"`
-	AllowedIPs   []string  `json:"allowed_ips,omitempty"`
-	PasswordHash string    `json:"-"`
-	HasPassword  bool      `json:"has_password"`
-	SessionTTL   int       `json:"session_ttl"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                 int64     `json:"id"`
+	SubdomainID        int64     `json:"subdomain_id"`
+	ProjectID          *int64    `json:"project_id,omitempty"`
+	AllowedIPs         []string  `json:"allowed_ips,omitempty"`
+	PasswordHash       string    `json:"-"`
+	HasPassword        bool      `json:"has_password"`
+	WeWorkEnabled      bool      `json:"wework_enabled"`
+	AllowedWeWorkUsers []string  `json:"allowed_wework_users,omitempty"`
+	SessionTTL         int       `json:"session_ttl"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type VisitLog struct {

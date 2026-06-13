@@ -36,6 +36,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := s.migrateWeWork(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate wework: %w", err)
+	}
 	return s, nil
 }
 
@@ -137,6 +141,45 @@ func (s *SQLiteStore) migrate() error {
 func parseTime(s string) time.Time {
 	t, _ := time.Parse(dtLayout, s)
 	return t
+}
+
+// migrateWeWork adds WeWork-related columns to access_rules. Idempotent via PRAGMA check.
+func (s *SQLiteStore) migrateWeWork() error {
+	cols, err := s.tableColumns("access_rules")
+	if err != nil {
+		return err
+	}
+	if !cols["wework_enabled"] {
+		if _, err := s.db.Exec(`ALTER TABLE access_rules ADD COLUMN wework_enabled INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add wework_enabled: %w", err)
+		}
+	}
+	if !cols["allowed_wework_users"] {
+		if _, err := s.db.Exec(`ALTER TABLE access_rules ADD COLUMN allowed_wework_users TEXT`); err != nil {
+			return fmt.Errorf("add allowed_wework_users: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) tableColumns(table string) (map[string]bool, error) {
+	rows, err := s.db.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return nil, fmt.Errorf("pragma table_info: %w", err)
+	}
+	defer rows.Close()
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dfltValue sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
+			return nil, fmt.Errorf("scan table_info: %w", err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // Close closes the underlying database connection.
@@ -551,7 +594,7 @@ func scanCustomDomain(row *sql.Row) (*model.CustomDomain, error) {
 
 // ---- Access Rules ----
 
-func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int64, allowedIPs []string, passwordHash string, sessionTTL int) (*model.AccessRule, error) {
+func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int64, allowedIPs []string, passwordHash string, sessionTTL int, weWorkEnabled bool, allowedWeWorkUsers []string) (*model.AccessRule, error) {
 	var ipsJSON interface{}
 	if len(allowedIPs) > 0 {
 		b, err := json.Marshal(allowedIPs)
@@ -566,6 +609,20 @@ func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int
 		pwHash = passwordHash
 	}
 
+	var weWorkUsersJSON interface{}
+	if len(allowedWeWorkUsers) > 0 {
+		b, err := json.Marshal(allowedWeWorkUsers)
+		if err != nil {
+			return nil, fmt.Errorf("marshal allowed_wework_users: %w", err)
+		}
+		weWorkUsersJSON = string(b)
+	}
+
+	weWorkInt := 0
+	if weWorkEnabled {
+		weWorkInt = 1
+	}
+
 	// Check if rule already exists (needed because UNIQUE doesn't match NULL=NULL)
 	existing, err := s.GetAccessRule(subdomainID, projectID)
 	if err != nil {
@@ -576,9 +633,10 @@ func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int
 		// Update existing rule
 		_, err = s.db.Exec(
 			`UPDATE access_rules SET allowed_ips = ?, password_hash = ?, session_ttl = ?,
+				wework_enabled = ?, allowed_wework_users = ?,
 				updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now')
 			 WHERE id = ?`,
-			ipsJSON, pwHash, sessionTTL, existing.ID,
+			ipsJSON, pwHash, sessionTTL, weWorkInt, weWorkUsersJSON, existing.ID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("update access rule: %w", err)
@@ -586,9 +644,9 @@ func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int
 	} else {
 		// Insert new rule
 		_, err = s.db.Exec(
-			`INSERT INTO access_rules (subdomain_id, project_id, allowed_ips, password_hash, session_ttl)
-			 VALUES (?, ?, ?, ?, ?)`,
-			subdomainID, projectID, ipsJSON, pwHash, sessionTTL,
+			`INSERT INTO access_rules (subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			subdomainID, projectID, ipsJSON, pwHash, sessionTTL, weWorkInt, weWorkUsersJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create access rule: %w", err)
@@ -602,12 +660,12 @@ func (s *SQLiteStore) GetAccessRule(subdomainID int64, projectID *int64) (*model
 	var row *sql.Row
 	if projectID == nil {
 		row = s.db.QueryRow(
-			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, created_at, updated_at
+			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
 			 FROM access_rules WHERE subdomain_id = ? AND project_id IS NULL`, subdomainID,
 		)
 	} else {
 		row = s.db.QueryRow(
-			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, created_at, updated_at
+			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
 			 FROM access_rules WHERE subdomain_id = ? AND project_id = ?`, subdomainID, *projectID,
 		)
 	}
@@ -623,7 +681,7 @@ func (s *SQLiteStore) GetAccessRule(subdomainID int64, projectID *int64) (*model
 
 func (s *SQLiteStore) getAccessRuleByID(id int64) (*model.AccessRule, error) {
 	row := s.db.QueryRow(
-		`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, created_at, updated_at
+		`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
 		 FROM access_rules WHERE id = ?`, id,
 	)
 	rule, err := scanAccessRule(row)
@@ -650,7 +708,7 @@ func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName st
 	// Try project-level first
 	if projectName != "" {
 		row := s.db.QueryRow(
-			`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.created_at, ar.updated_at
+			`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.wework_enabled, ar.allowed_wework_users, ar.created_at, ar.updated_at
 			 FROM access_rules ar
 			 JOIN subdomains s ON ar.subdomain_id = s.id
 			 JOIN projects p ON ar.project_id = p.id AND p.subdomain_id = s.id
@@ -668,7 +726,7 @@ func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName st
 
 	// Fall back to subdomain-level
 	row := s.db.QueryRow(
-		`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.created_at, ar.updated_at
+		`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.wework_enabled, ar.allowed_wework_users, ar.created_at, ar.updated_at
 		 FROM access_rules ar
 		 JOIN subdomains s ON ar.subdomain_id = s.id
 		 WHERE s.name = ? AND ar.project_id IS NULL`,
@@ -710,9 +768,11 @@ func scanAccessRule(row *sql.Row) (*model.AccessRule, error) {
 	var projectID sql.NullInt64
 	var allowedIPs sql.NullString
 	var passwordHash sql.NullString
+	var weWorkEnabled int
+	var allowedWeWorkUsers sql.NullString
 	var createdAt, updatedAt string
 
-	if err := row.Scan(&r.ID, &r.SubdomainID, &projectID, &allowedIPs, &passwordHash, &r.SessionTTL, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.SubdomainID, &projectID, &allowedIPs, &passwordHash, &r.SessionTTL, &weWorkEnabled, &allowedWeWorkUsers, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 
@@ -727,6 +787,12 @@ func scanAccessRule(row *sql.Row) (*model.AccessRule, error) {
 	if passwordHash.Valid {
 		r.PasswordHash = passwordHash.String
 		r.HasPassword = true
+	}
+	r.WeWorkEnabled = weWorkEnabled != 0
+	if allowedWeWorkUsers.Valid && allowedWeWorkUsers.String != "" {
+		if err := json.Unmarshal([]byte(allowedWeWorkUsers.String), &r.AllowedWeWorkUsers); err != nil {
+			return nil, fmt.Errorf("unmarshal allowed_wework_users: %w", err)
+		}
 	}
 	r.CreatedAt = parseTimeFlexible(createdAt)
 	r.UpdatedAt = parseTimeFlexible(updatedAt)

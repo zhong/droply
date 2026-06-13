@@ -14,6 +14,7 @@ import (
 	"github.com/zhong/droply/internal/caddy"
 	"github.com/zhong/droply/internal/server"
 	"github.com/zhong/droply/internal/store"
+	"github.com/zhong/droply/internal/wework"
 )
 
 var version string
@@ -30,6 +31,10 @@ func main() {
 	caddyAddr := flag.String("caddy-admin", "http://localhost:2019", "Caddy admin API address")
 	hmacSecret := flag.String("hmac-secret", "", "HMAC secret for cookie signing (auto-generated if empty)")
 	logRetention := flag.Int("log-retention-days", 30, "days to retain detailed visit logs")
+	weWorkCorpID := flag.String("wework-corp-id", os.Getenv("DROPLY_WEWORK_CORP_ID"), "WeWork corp ID for QR code login (also DROPLY_WEWORK_CORP_ID)")
+	weWorkAgentID := flag.String("wework-agent-id", os.Getenv("DROPLY_WEWORK_AGENT_ID"), "WeWork agent ID (also DROPLY_WEWORK_AGENT_ID)")
+	weWorkSecret := flag.String("wework-secret", os.Getenv("DROPLY_WEWORK_SECRET"), "WeWork agent secret (also DROPLY_WEWORK_SECRET)")
+	weWorkRedirectURI := flag.String("wework-redirect-uri", os.Getenv("DROPLY_WEWORK_REDIRECT_URI"), "WeWork OAuth callback URL, e.g. https://api.droplydoc.com/_droply/wework/callback (also DROPLY_WEWORK_REDIRECT_URI)")
 	flag.Parse()
 
 	dsn := fmt.Sprintf("%s/droply.db", *dataDir)
@@ -53,6 +58,20 @@ func main() {
 
 	siteProxyAddr := "localhost" + *siteAddr
 	srv := server.New(st, sitesDir, *domain, caddyClient, hmacKey, siteProxyAddr)
+
+	// Configure WeWork OAuth if all required fields are provided.
+	if *weWorkCorpID != "" && *weWorkAgentID != "" && *weWorkSecret != "" && *weWorkRedirectURI != "" {
+		weClient := wework.NewClient(wework.Config{
+			CorpID:      *weWorkCorpID,
+			AgentID:     *weWorkAgentID,
+			Secret:      *weWorkSecret,
+			RedirectURI: *weWorkRedirectURI,
+		})
+		srv.SetWeWork(weClient)
+		log.Printf("WeWork OAuth enabled (corp=%s, agent=%s)", *weWorkCorpID, *weWorkAgentID)
+	} else if *weWorkCorpID != "" || *weWorkAgentID != "" || *weWorkSecret != "" || *weWorkRedirectURI != "" {
+		log.Printf("WeWork OAuth NOT enabled: all of corp-id, agent-id, secret, redirect-uri are required")
+	}
 
 	if err := srv.RecoverCaddyRoutes(); err != nil {
 		log.Printf("Warning: route recovery failed: %v", err)

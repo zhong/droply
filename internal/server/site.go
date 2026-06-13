@@ -4,10 +4,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,9 +18,11 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
+
+	"github.com/zhong/droply/internal/model"
 )
 
-// loginPageTemplate is the HTML template for the password login page.
+// loginPageTemplate is the HTML template for the access login page (password and/or WeWork QR).
 var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,18 +37,29 @@ var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
   button { width: 100%; padding: 0.5rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
   button:hover { background: #555; }
   .error { color: #c00; font-size: 0.875rem; margin-bottom: 1rem; text-align: center; }
+  .divider { display: flex; align-items: center; margin: 1rem 0; color: #999; font-size: 0.75rem; }
+  .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #ddd; }
+  .divider span { padding: 0 0.5rem; }
+  .wework-btn { display: block; text-align: center; padding: 0.5rem; background: #07c160; color: #fff; text-decoration: none; border-radius: 4px; }
+  .wework-btn:hover { background: #05a050; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Password Required</h1>
+  <h1>Login Required</h1>
   {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+  {{if .ShowPassword}}
   <form method="POST" action="/_droply/login">
     <input type="password" name="password" placeholder="Enter password" autofocus required>
     <input type="hidden" name="redirect" value="{{.Redirect}}">
     <input type="hidden" name="host" value="{{.Host}}">
     <button type="submit">Login</button>
   </form>
+  {{end}}
+  {{if and .ShowPassword .ShowWeWork}}<div class="divider"><span>OR</span></div>{{end}}
+  {{if .ShowWeWork}}
+  <a class="wework-btn" href="/_droply/wework/auth?redirect={{.RedirectEnc}}&host={{.HostEnc}}">Login with WeCom</a>
+  {{end}}
 </div>
 </body>
 </html>`))
@@ -101,8 +116,15 @@ func (rl *rateLimiter) cleanup() {
 func (s *Server) NewSiteHandler() http.Handler {
 	rl := newRateLimiter()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/_droply/login" {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/_droply/login":
 			s.siteLoginHandler(w, r, rl)
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/_droply/wework/auth":
+			s.weworkAuthHandler(w, r)
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/_droply/wework/callback":
+			s.weworkCallbackHandler(w, r)
 			return
 		}
 		s.siteHandler(w, r)
@@ -203,21 +225,21 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 				return
 			}
-			// If there's no password, just block.
-			if !rule.HasPassword {
+			// If no other auth method, block.
+			if !rule.HasPassword && !rule.WeWorkEnabled {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
 		}
 
-		// Check cookie.
-		if rule.HasPassword {
-			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain, rule.PasswordHash) {
+		// Check cookie (works for both password and WeWork sessions).
+		if rule.HasPassword || rule.WeWorkEnabled {
+			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain, rule) {
 				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
 				return
 			}
 			// Show login page.
-			s.renderLoginPage(w, r, "")
+			s.renderLoginPage(w, r, rule, "")
 			return
 		}
 
@@ -246,13 +268,17 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID i
 	}
 }
 
-// renderLoginPage renders the login page template.
-func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, errorMsg string) {
+// renderLoginPage renders the login page template, showing password and/or WeWork buttons based on rule.
+func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *model.AccessRule, errorMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]string{
-		"Error":    errorMsg,
-		"Redirect": r.URL.RequestURI(),
-		"Host":     r.Host,
+	data := map[string]interface{}{
+		"Error":        errorMsg,
+		"Redirect":     r.URL.RequestURI(),
+		"RedirectEnc":  url.QueryEscape(r.URL.RequestURI()),
+		"Host":         r.Host,
+		"HostEnc":      url.QueryEscape(r.Host),
+		"ShowPassword": rule.HasPassword,
+		"ShowWeWork":   rule.WeWorkEnabled && s.wework != nil,
 	}
 	loginPageTemplate.Execute(w, data)
 }
@@ -312,7 +338,7 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ra
 		// Build a fake request with the redirect path for the login page rendering.
 		r.URL.Path = redirect
 		r.Host = host
-		s.renderLoginPage(w, r, "Incorrect password")
+		s.renderLoginPage(w, r, rule, "Incorrect password")
 		return
 	}
 
@@ -332,7 +358,7 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ra
 		}
 	}
 
-	cookieValue := s.signCookie(cookieSubdomain, cookieProject, expiry, rule.PasswordHash)
+	cookieValue := s.signCookie(cookieSubdomain, cookieProject, cookieAuthPwd, "", expiry, rule.PasswordHash)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "_droply_access",
 		Value:    cookieValue,
@@ -388,60 +414,147 @@ func isIPAllowed(clientIP string, allowedIPs []string) bool {
 	return false
 }
 
-// signCookie creates a signed cookie value in the format:
-// {subdomain}:{project_or_empty}:{expiry_unix}:{hmac_sha256_hex}
-// The passwordHash is included in the HMAC payload (not in the cookie value)
-// so that changing the password automatically invalidates existing cookies.
-func (s *Server) signCookie(subdomain, project string, expiry time.Time, passwordHash string) string {
+// Cookie format:
+//   New (v2): "v2:{sub}:{proj}:{authMethod}:{userid}:{expiry}:{sig}"
+//   Legacy:   "{sub}:{proj}:{expiry}:{sig}"  (password-only, kept for backward compat)
+//
+// authMethod is "pwd" or "wework". userid is empty for "pwd".
+// The HMAC payload includes a "hash material" derived from the rule:
+//   pwd:    rule.PasswordHash
+//   wework: sha256(JSON(allowedWeWorkUsers) || userid)
+// so that changing the password or the WeWork allow-list invalidates outstanding sessions.
+
+const (
+	cookieAuthPwd    = "pwd"
+	cookieAuthWeWork = "wework"
+)
+
+// signCookie creates a signed cookie value in the v2 format.
+func (s *Server) signCookie(subdomain, project, authMethod, userID string, expiry time.Time, hashMaterial string) string {
 	expiryStr := strconv.FormatInt(expiry.Unix(), 10)
-	payload := fmt.Sprintf("%s:%s:%s:%s", subdomain, project, expiryStr, passwordHash)
+	payload := fmt.Sprintf("v2:%s:%s:%s:%s:%s:%s", subdomain, project, authMethod, userID, expiryStr, hashMaterial)
 
 	mac := hmac.New(sha256.New, s.hmacKey)
 	mac.Write([]byte(payload))
 	sig := hex.EncodeToString(mac.Sum(nil))
 
-	return fmt.Sprintf("%s:%s:%s:%s", subdomain, project, expiryStr, sig)
+	return fmt.Sprintf("v2:%s:%s:%s:%s:%s:%s", subdomain, project, authMethod, userID, expiryStr, sig)
 }
 
-// isValidAccessCookie checks the _droply_access cookie for validity.
-// passwordHash is from the rule returned by FindAccessRuleForSite.
-// For subdomain-scoped cookies (cookieProj=="") where the passed rule is project-level,
-// the function looks up the subdomain-level rule to get the correct hash.
-func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string, isCustomDomain bool, passwordHash string) bool {
+// weWorkHashMaterial derives a stable hash material for WeWork cookie HMAC.
+// Bound to (allowedWeWorkUsers, userID) so that allow-list changes invalidate cookies
+// of users that are no longer authorized.
+func weWorkHashMaterial(allowedUsers []string, userID string) string {
+	// Use JSON for deterministic ordering; allowedUsers is stored as-given.
+	listJSON, _ := json.Marshal(allowedUsers)
+	h := sha256.New()
+	h.Write(listJSON)
+	h.Write([]byte("|"))
+	h.Write([]byte(userID))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// isValidAccessCookie checks the _droply_access cookie for validity against the given rule.
+// Supports both v2 (password + wework) and legacy (password-only) formats.
+func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string, isCustomDomain bool, rule *model.AccessRule) bool {
 	cookie, err := r.Cookie("_droply_access")
 	if err != nil {
 		return false
 	}
 
-	parts := strings.SplitN(cookie.Value, ":", 4)
-	if len(parts) != 4 {
+	if strings.HasPrefix(cookie.Value, "v2:") {
+		return s.validateV2Cookie(cookie.Value, subdomain, project, rule)
+	}
+	return s.validateLegacyCookie(cookie.Value, subdomain, project, rule)
+}
+
+func (s *Server) validateV2Cookie(value, subdomain, project string, rule *model.AccessRule) bool {
+	// v2:{sub}:{proj}:{authMethod}:{userid}:{expiry}:{sig}
+	parts := strings.SplitN(value, ":", 7)
+	if len(parts) != 7 || parts[0] != "v2" {
+		return false
+	}
+	cookieSub := parts[1]
+	cookieProj := parts[2]
+	authMethod := parts[3]
+	cookieUserID := parts[4]
+	expiryStr := parts[5]
+	sig := parts[6]
+
+	expiryUnix, err := strconv.ParseInt(expiryStr, 10, 64)
+	if err != nil || time.Now().Unix() > expiryUnix {
+		return false
+	}
+	if cookieSub != subdomain {
 		return false
 	}
 
+	// Resolve hash material based on auth method and the rule scope the cookie was issued for.
+	scopeRule := rule
+	if cookieProj == "" && project != "" {
+		// Cookie is subdomain-scoped but we matched a project-level rule. Re-look the subdomain rule.
+		sr, err := s.store.FindAccessRuleForSite(cookieSub, "")
+		if err != nil || sr == nil {
+			return false
+		}
+		scopeRule = sr
+	}
+
+	var hashMaterial string
+	switch authMethod {
+	case cookieAuthPwd:
+		if !scopeRule.HasPassword {
+			return false
+		}
+		hashMaterial = scopeRule.PasswordHash
+	case cookieAuthWeWork:
+		if !scopeRule.WeWorkEnabled {
+			return false
+		}
+		// Re-check user is still allowed (list may have changed → hash material changes → sig fails anyway,
+		// but explicit check shortcircuits and gives clearer behavior).
+		if !isWeWorkUserAllowed(cookieUserID, scopeRule.AllowedWeWorkUsers) {
+			return false
+		}
+		hashMaterial = weWorkHashMaterial(scopeRule.AllowedWeWorkUsers, cookieUserID)
+	default:
+		return false
+	}
+
+	payload := fmt.Sprintf("v2:%s:%s:%s:%s:%s:%s", cookieSub, cookieProj, authMethod, cookieUserID, expiryStr, hashMaterial)
+	mac := hmac.New(sha256.New, s.hmacKey)
+	mac.Write([]byte(payload))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
+		return false
+	}
+
+	if cookieProj == "" {
+		return true
+	}
+	return cookieProj == project
+}
+
+func (s *Server) validateLegacyCookie(value, subdomain, project string, rule *model.AccessRule) bool {
+	parts := strings.SplitN(value, ":", 4)
+	if len(parts) != 4 {
+		return false
+	}
 	cookieSub := parts[0]
 	cookieProj := parts[1]
 	expiryStr := parts[2]
 	sig := parts[3]
 
-	// Check expiry first (cheap, no DB needed).
 	expiryUnix, err := strconv.ParseInt(expiryStr, 10, 64)
-	if err != nil {
+	if err != nil || time.Now().Unix() > expiryUnix {
 		return false
 	}
-	if time.Now().Unix() > expiryUnix {
-		return false
-	}
-
-	// Check scope: cookie subdomain must match.
 	if cookieSub != subdomain {
 		return false
 	}
 
-	// Determine the correct passwordHash for HMAC verification.
-	hashForVerify := passwordHash
+	hashForVerify := rule.PasswordHash
 	if cookieProj == "" && project != "" {
-		// Subdomain-scoped cookie but we were given a project-level rule's hash.
-		// Look up the subdomain-level rule to get the correct hash.
 		subRule, err := s.store.FindAccessRuleForSite(cookieSub, "")
 		if err != nil || subRule == nil {
 			return false
@@ -449,7 +562,6 @@ func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string,
 		hashForVerify = subRule.PasswordHash
 	}
 
-	// Verify HMAC with passwordHash included in payload.
 	payload := fmt.Sprintf("%s:%s:%s:%s", cookieSub, cookieProj, expiryStr, hashForVerify)
 	mac := hmac.New(sha256.New, s.hmacKey)
 	mac.Write([]byte(payload))
@@ -458,11 +570,21 @@ func (s *Server) isValidAccessCookie(r *http.Request, subdomain, project string,
 		return false
 	}
 
-	// Subdomain-level cookie (empty project) grants access to all projects.
 	if cookieProj == "" {
 		return true
 	}
-
-	// Project-level cookie must match the requested project.
 	return cookieProj == project
+}
+
+// isWeWorkUserAllowed returns true if the userID is in allowedUsers, or if allowedUsers is empty (any user).
+func isWeWorkUserAllowed(userID string, allowedUsers []string) bool {
+	if len(allowedUsers) == 0 {
+		return true
+	}
+	for _, u := range allowedUsers {
+		if u == userID {
+			return true
+		}
+	}
+	return false
 }

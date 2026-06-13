@@ -25,25 +25,31 @@ func generatePassword() string {
 }
 
 type setAccessRequest struct {
-	AllowedIPs   []string `json:"allowed_ips,omitempty"`
-	Password     string   `json:"password,omitempty"`
-	AutoPassword bool     `json:"auto_password,omitempty"`
-	SessionTTL   int      `json:"session_ttl,omitempty"`
+	AllowedIPs         []string `json:"allowed_ips,omitempty"`
+	Password           string   `json:"password,omitempty"`
+	AutoPassword       bool     `json:"auto_password,omitempty"`
+	SessionTTL         int      `json:"session_ttl,omitempty"`
+	WeWorkEnabled      bool     `json:"wework_enabled,omitempty"`
+	AllowedWeWorkUsers []string `json:"allowed_wework_users,omitempty"`
 }
 
 type setAccessResponse struct {
-	ID                int64    `json:"id"`
-	AllowedIPs        []string `json:"allowed_ips,omitempty"`
-	HasPassword       bool     `json:"has_password"`
-	SessionTTL        int      `json:"session_ttl"`
-	GeneratedPassword string   `json:"generated_password,omitempty"`
+	ID                 int64    `json:"id"`
+	AllowedIPs         []string `json:"allowed_ips,omitempty"`
+	HasPassword        bool     `json:"has_password"`
+	WeWorkEnabled      bool     `json:"wework_enabled"`
+	AllowedWeWorkUsers []string `json:"allowed_wework_users,omitempty"`
+	SessionTTL         int      `json:"session_ttl"`
+	GeneratedPassword  string   `json:"generated_password,omitempty"`
 }
 
 type getAccessResponse struct {
-	ID         int64    `json:"id"`
-	AllowedIPs []string `json:"allowed_ips,omitempty"`
-	HasPassword bool    `json:"has_password"`
-	SessionTTL int      `json:"session_ttl"`
+	ID                 int64    `json:"id"`
+	AllowedIPs         []string `json:"allowed_ips,omitempty"`
+	HasPassword        bool     `json:"has_password"`
+	WeWorkEnabled      bool     `json:"wework_enabled"`
+	AllowedWeWorkUsers []string `json:"allowed_wework_users,omitempty"`
+	SessionTTL         int      `json:"session_ttl"`
 }
 
 // handleSetAccess sets access rules at the subdomain level.
@@ -113,9 +119,9 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		return
 	}
 
-	// At least one of allowed_ips or password/auto_password must be provided.
-	if len(req.AllowedIPs) == 0 && req.Password == "" && !req.AutoPassword {
-		jsonError(w, "at least one of allowed_ips or password/auto_password is required", http.StatusBadRequest)
+	// At least one of allowed_ips or password/auto_password or wework must be provided.
+	if len(req.AllowedIPs) == 0 && req.Password == "" && !req.AutoPassword && !req.WeWorkEnabled {
+		jsonError(w, "at least one of allowed_ips, password/auto_password, or wework_enabled is required", http.StatusBadRequest)
 		return
 	}
 
@@ -171,7 +177,13 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		passwordHash = string(hash)
 	}
 
-	rule, err := s.store.CreateOrUpdateAccessRule(sub.ID, projectID, req.AllowedIPs, passwordHash, ttl)
+	// Validate: WeWork allow-list requires WeWork enabled.
+	if len(req.AllowedWeWorkUsers) > 0 && !req.WeWorkEnabled {
+		jsonError(w, "allowed_wework_users requires wework_enabled=true", http.StatusBadRequest)
+		return
+	}
+
+	rule, err := s.store.CreateOrUpdateAccessRule(sub.ID, projectID, req.AllowedIPs, passwordHash, ttl, req.WeWorkEnabled, req.AllowedWeWorkUsers)
 	if err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -183,11 +195,13 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 	}
 
 	resp := setAccessResponse{
-		ID:                rule.ID,
-		AllowedIPs:        rule.AllowedIPs,
-		HasPassword:       rule.HasPassword,
-		SessionTTL:        rule.SessionTTL,
-		GeneratedPassword: generatedPassword,
+		ID:                 rule.ID,
+		AllowedIPs:         rule.AllowedIPs,
+		HasPassword:        rule.HasPassword,
+		WeWorkEnabled:      rule.WeWorkEnabled,
+		AllowedWeWorkUsers: rule.AllowedWeWorkUsers,
+		SessionTTL:         rule.SessionTTL,
+		GeneratedPassword:  generatedPassword,
 	}
 	jsonResponse(w, resp, http.StatusOK)
 }
@@ -228,10 +242,12 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 	}
 
 	resp := getAccessResponse{
-		ID:          rule.ID,
-		AllowedIPs:  rule.AllowedIPs,
-		HasPassword: rule.HasPassword,
-		SessionTTL:  rule.SessionTTL,
+		ID:                 rule.ID,
+		AllowedIPs:         rule.AllowedIPs,
+		HasPassword:        rule.HasPassword,
+		WeWorkEnabled:      rule.WeWorkEnabled,
+		AllowedWeWorkUsers: rule.AllowedWeWorkUsers,
+		SessionTTL:         rule.SessionTTL,
 	}
 	jsonResponse(w, resp, http.StatusOK)
 }
