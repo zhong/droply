@@ -47,7 +47,17 @@ info()    { printf "${GREEN}==>${RESET} ${BOLD}%s${RESET}\n" "$1"; }
 warn()    { printf "${YELLOW}==> WARNING:${RESET} %s\n" "$1"; }
 error()   { printf "${RED}==> ERROR:${RESET} %s\n" "$1" >&2; exit 1; }
 step()    { printf "\n${CYAN}[Step %s]${RESET} ${BOLD}%s${RESET}\n" "$1" "$2"; }
-ask()     { printf "${BOLD}%s${RESET} " "$1"; read -r REPLY; echo "$REPLY"; }
+# ask() must print the prompt to stderr so that $(ask "...") only captures the user's reply,
+# and must read from /dev/tty so it works when the script is piped from curl (where stdin is the script body).
+ask() {
+    printf "${BOLD}%s${RESET} " "$1" >&2
+    if [ -r /dev/tty ]; then
+        read -r REPLY </dev/tty
+    else
+        read -r REPLY
+    fi
+    echo "$REPLY"
+}
 
 # ─── Pre-flight checks ───────────────────────────────────────────────
 
@@ -339,12 +349,12 @@ write_caddyfile_ondemand() {
     admin localhost:2019
     on_demand_tls {
         ask http://localhost:8080/_droply/tls-check
-        interval 10s
-        burst 1
     }
 }
 
 # Wildcard on-demand TLS: Caddy obtains a certificate for each subdomain on first access.
+# Rate limiting and DoS protection are enforced by the ask endpoint
+# (only registered subdomains and verified custom domains return 200).
 *.${DOMAIN}, ${DOMAIN} {
     tls {
         on_demand

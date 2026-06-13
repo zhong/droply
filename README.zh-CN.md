@@ -223,8 +223,6 @@ Caddy 在子域名首次访问时自动签发证书。需要 80 + 443 端口可�
     admin localhost:2019
     on_demand_tls {
         ask http://localhost:8080/_droply/tls-check
-        interval 10s
-        burst 1
     }
 }
 

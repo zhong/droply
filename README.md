@@ -223,8 +223,6 @@ Create `/etc/caddy/Caddyfile`:
     admin localhost:2019
     on_demand_tls {
         ask http://localhost:8080/_droply/tls-check
-        interval 10s
-        burst 1
     }
 }
 
