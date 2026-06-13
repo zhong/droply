@@ -128,17 +128,34 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	hashMaterial := weWorkHashMaterial(rule.AllowedWeWorkUsers, userID)
 	cookieValue := s.signCookie(cookieSubdomain, cookieProject, cookieAuthWeWork, userID, expiry, hashMaterial)
+
+	// Compute cookie Domain so the session is readable from the original
+	// subdomain after we redirect back. If the OAuth callback host differs
+	// from the requesting host (e.g. login.docs.paratera.co handling the
+	// callback for its.docs.paratera.co), scope the cookie to the shared
+	// parent domain so both subdomains see it.
+	cookieDomain := cookieParentDomain(r.Host, stateData.Host, s.baseDomain)
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "_droply_access",
 		Value:    cookieValue,
 		Path:     "/",
+		Domain:   cookieDomain,
 		Expires:  expiry,
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	http.Redirect(w, r, stateData.Redirect, http.StatusFound)
+	// Build the absolute redirect URL. If the callback host differs from the
+	// requesting host (state was generated on a different subdomain), redirect
+	// back to the original host using the stored path; otherwise use the path
+	// directly so it resolves against the current host.
+	target := stateData.Redirect
+	if stateData.Host != "" && !sameHost(stateData.Host, r.Host) {
+		target = "https://" + stateData.Host + stateData.Redirect
+	}
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 // truncate shortens s to at most n characters, appending "..." if truncated.
@@ -148,4 +165,44 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// sameHost compares two host strings case-insensitively, ignoring an optional port.
+func sameHost(a, b string) bool {
+	return strings.EqualFold(stripPort(a), stripPort(b))
+}
+
+func stripPort(host string) string {
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		// Ignore IPv6 brackets edge case — droply hosts are domain names.
+		return host[:i]
+	}
+	return host
+}
+
+// cookieParentDomain decides what to set on the Cookie's Domain attribute so
+// that the session survives a redirect from the OAuth callback host back to
+// the original requesting subdomain. When both hosts share baseDomain as a
+// suffix and they differ from each other, scope the cookie to ".baseDomain"
+// so every subdomain can read it. When they match (or no cross-host hop is
+// happening), return "" to keep the cookie host-only (safer default).
+func cookieParentDomain(callbackHost, originHost, baseDomain string) string {
+	if baseDomain == "" {
+		return ""
+	}
+	cb := stripPort(callbackHost)
+	or := stripPort(originHost)
+	if or == "" || sameHost(cb, or) {
+		return ""
+	}
+	suffix := "." + baseDomain
+	if !strings.HasSuffix(strings.ToLower(cb), suffix) || !strings.HasSuffix(strings.ToLower(or), suffix) {
+		return ""
+	}
+	return baseDomain
+}
+
+// CookieParentDomainForTest exposes cookieParentDomain for the external test package.
+func CookieParentDomainForTest(callbackHost, originHost, baseDomain string) string {
+	return cookieParentDomain(callbackHost, originHost, baseDomain)
 }

@@ -424,6 +424,135 @@ func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
 		t.Errorf("expected redirect to WeCom SSO login URL, got %q", rr.Header().Get("Location"))
 	}
 }
+// TestWeWorkCallbackCrossSubdomainRedirect verifies the fix for a 404 that
+// occurred in production (login.docs.paratera.co/vpn/) when:
+//   - User starts login on its.docs.paratera.co (state stored with this host)
+//   - WeCom redirects callback to a different host (login.docs.paratera.co)
+//   - Old code redirected to stateData.Redirect "/vpn/" → resolved against
+//     the callback host → "https://login.docs.paratera.co/vpn/" → 404
+//
+// Fix: when callback host != state host, redirect to absolute URL on the
+// original host, and set the cookie Domain to the parent so the redirected
+// request can read the session.
+func TestWeWorkCallbackCrossSubdomainRedirect(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, map[string]string{"code-1": "alice"})
+	defer mockAPI.Close()
+	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+	setupWeWorkSite(t, srv, []string{"alice"})
+
+	siteHandler := srv.NewSiteHandler()
+
+	// Step 1: User starts login on the original subdomain "wesite".
+	req := httptest.NewRequest(http.MethodGet,
+		"/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	state := extractQueryParam(rr.Header().Get("Location"), "state")
+	if state == "" {
+		t.Fatal("no state from auth handler")
+	}
+
+	// Step 2: WeCom redirects callback to a DIFFERENT host ("login").
+	req = httptest.NewRequest(http.MethodGet,
+		"/_droply/wework/callback?code=code-1&state="+state, nil)
+	req.Host = "login.droplydoc.com" // intentionally different from state host
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 after callback, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// The redirect must be an absolute URL pointing at the ORIGINAL host,
+	// not a relative path that would resolve against the callback host.
+	loc := rr.Header().Get("Location")
+	if loc != "https://wesite.droplydoc.com/app/" {
+		t.Errorf("expected absolute redirect to original host, got %q", loc)
+	}
+
+	// The cookie must be scoped to the parent domain so the original host
+	// can read it after the redirect.
+	var cookie *http.Cookie
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "_droply_access" {
+			cookie = c
+			break
+		}
+	}
+	if cookie == nil {
+		t.Fatal("expected _droply_access cookie")
+	}
+	if cookie.Domain != "droplydoc.com" {
+		t.Errorf("expected cookie Domain=droplydoc.com (parent), got %q", cookie.Domain)
+	}
+}
+
+// TestWeWorkCallbackSameHostNoDomainAttribute verifies that when the callback
+// arrives on the same host the user started on, the cookie is set host-only
+// (no Domain attribute) — the safer default that doesn't leak the session
+// to sibling subdomains.
+func TestWeWorkCallbackSameHostNoDomainAttribute(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, map[string]string{"code-1": "alice"})
+	defer mockAPI.Close()
+	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+	setupWeWorkSite(t, srv, []string{"alice"})
+
+	siteHandler := srv.NewSiteHandler()
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	state := extractQueryParam(rr.Header().Get("Location"), "state")
+
+	// Callback on the SAME host as the original request.
+	req = httptest.NewRequest(http.MethodGet,
+		"/_droply/wework/callback?code=code-1&state="+state, nil)
+	req.Host = "wesite.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	// Same-host case: relative redirect is fine.
+	if loc := rr.Header().Get("Location"); loc != "/app/" {
+		t.Errorf("expected relative redirect /app/, got %q", loc)
+	}
+
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "_droply_access" {
+			if c.Domain != "" {
+				t.Errorf("expected host-only cookie when no host hop, got Domain=%q", c.Domain)
+			}
+			return
+		}
+	}
+	t.Fatal("expected _droply_access cookie")
+}
+
+func TestCookieParentDomain(t *testing.T) {
+	cases := []struct {
+		callback, origin, base, want string
+	}{
+		{"login.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", "docs.paratera.co"},
+		{"its.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", ""},
+		{"login.docs.paratera.co", "", "docs.paratera.co", ""},
+		{"login.docs.paratera.co", "evil.com", "docs.paratera.co", ""},
+		{"login.docs.paratera.co", "its.docs.paratera.co", "", ""},
+		{"LOGIN.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", "docs.paratera.co"},
+	}
+	for _, c := range cases {
+		got := server.CookieParentDomainForTest(c.callback, c.origin, c.base)
+		if got != c.want {
+			t.Errorf("CookieParentDomainForTest(%q,%q,%q) = %q, want %q",
+				c.callback, c.origin, c.base, got, c.want)
+		}
+	}
+}
+
 // extractQueryParam pulls a query parameter out of a URL string. Empty if not found.
 func extractQueryParam(rawURL, key string) string {
 	idx := strings.Index(rawURL, "?")
