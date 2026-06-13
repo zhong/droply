@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,6 +46,54 @@ func TestGetAuthorizeURL(t *testing.T) {
 	}
 	if q.Get("state") != "state-xyz" {
 		t.Errorf("state: got %q", q.Get("state"))
+	}
+}
+
+func TestGetMobileAuthorizeURL(t *testing.T) {
+	c := NewClient(Config{
+		CorpID:      "corp123",
+		AgentID:     "1000002",
+		Secret:      "secret",
+		RedirectURI: "https://example.com/cb",
+	})
+
+	got := c.GetMobileAuthorizeURL("state-mob")
+
+	// Must keep #wechat_redirect fragment for WeCom in-app browser to follow it.
+	if !strings.HasSuffix(got, "#wechat_redirect") {
+		t.Errorf("expected #wechat_redirect suffix, got %q", got)
+	}
+	urlPart := strings.TrimSuffix(got, "#wechat_redirect")
+	u, err := url.Parse(urlPart)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	if u.Host != "open.weixin.qq.com" {
+		t.Errorf("host: got %q want open.weixin.qq.com", u.Host)
+	}
+	if u.Path != "/connect/oauth2/authorize" {
+		t.Errorf("path: got %q want /connect/oauth2/authorize", u.Path)
+	}
+
+	q := u.Query()
+	if q.Get("appid") != "corp123" {
+		t.Errorf("appid: got %q want corp123", q.Get("appid"))
+	}
+	if q.Get("redirect_uri") != "https://example.com/cb" {
+		t.Errorf("redirect_uri mismatch: %q", q.Get("redirect_uri"))
+	}
+	if q.Get("response_type") != "code" {
+		t.Errorf("response_type: got %q want code", q.Get("response_type"))
+	}
+	if q.Get("scope") != "snsapi_base" {
+		t.Errorf("scope: got %q want snsapi_base", q.Get("scope"))
+	}
+	if q.Get("agentid") != "1000002" {
+		t.Errorf("agentid: got %q want 1000002", q.Get("agentid"))
+	}
+	if q.Get("state") != "state-mob" {
+		t.Errorf("state: got %q want state-mob", q.Get("state"))
 	}
 }
 

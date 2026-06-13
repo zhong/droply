@@ -96,12 +96,13 @@ func newSiteServerWithWeWork(t *testing.T, mockAPIURL string) (*server.Server, s
 	srv := server.New(st, sitesDir, "droplydoc.com", nil, []byte("test-hmac-secret-key-1234567890"), "localhost:8081")
 
 	weClient := wework.NewClient(wework.Config{
-		CorpID:       "corp-test",
-		AgentID:      "1000",
-		Secret:       "sec",
-		RedirectURI:  "https://api.droplydoc.com/_droply/wework/callback",
-		AuthorizeURL: mockAPIURL + "/wwlogin/sso/login",
-		APIBaseURL:   mockAPIURL,
+		CorpID:             "corp-test",
+		AgentID:            "1000",
+		Secret:             "sec",
+		RedirectURI:        "https://api.droplydoc.com/_droply/wework/callback",
+		AuthorizeURL:       mockAPIURL + "/wwlogin/sso/login",
+		MobileAuthorizeURL: mockAPIURL + "/connect/oauth2/authorize",
+		APIBaseURL:         mockAPIURL,
 	})
 	srv.SetWeWork(weClient)
 	return srv, sitesDir
@@ -550,6 +551,68 @@ func TestCookieParentDomain(t *testing.T) {
 			t.Errorf("CookieParentDomainForTest(%q,%q,%q) = %q, want %q",
 				c.callback, c.origin, c.base, got, c.want)
 		}
+	}
+}
+
+// TestWeWorkAuthDispatchByUserAgent verifies the UA-based routing fix:
+//   - Desktop / regular mobile browsers → SSO login (PC QR code page)
+//   - WeCom in-app browser ("wxwork/") → snsapi_base mobile OAuth (silent)
+//
+// Regression for the case where users opening the link inside WeCom got the
+// QR code page instead of being silently signed in.
+func TestWeWorkAuthDispatchByUserAgent(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, nil)
+	defer mockAPI.Close()
+
+	cases := []struct {
+		name        string
+		userAgent   string
+		wantInLocation string
+	}{
+		{
+			name:        "desktop chrome",
+			userAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+			wantInLocation: "/wwlogin/sso/login",
+		},
+		{
+			name:        "wecom ios",
+			userAgent:   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) wxwork/5.0.10 MicroMessenger/7.0.1",
+			wantInLocation: "/connect/oauth2/authorize",
+		},
+		{
+			name:        "wecom android",
+			userAgent:   "Mozilla/5.0 (Linux; Android 13) wxwork/4.1.36 MicroMessenger/8.0",
+			wantInLocation: "/connect/oauth2/authorize",
+		},
+		{
+			name:        "plain wechat (not wecom) → still PC QR",
+			userAgent:   "Mozilla/5.0 (iPhone) MicroMessenger/8.0",
+			wantInLocation: "/wwlogin/sso/login",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+			setupWeWorkSite(t, srv, []string{"alice"})
+
+			siteHandler := srv.NewSiteHandler()
+			req := httptest.NewRequest(http.MethodGet,
+				"/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
+			req.Host = "wesite.droplydoc.com"
+			req.Header.Set("User-Agent", tc.userAgent)
+			rr := httptest.NewRecorder()
+			siteHandler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusFound {
+				t.Fatalf("expected 302, got %d", rr.Code)
+			}
+			loc := rr.Header().Get("Location")
+			if !strings.Contains(loc, tc.wantInLocation) {
+				t.Errorf("UA %q: expected redirect to contain %q, got %q",
+					tc.userAgent, tc.wantInLocation, loc)
+			}
+		})
 	}
 }
 

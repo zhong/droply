@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	defaultAuthorizeURL = "https://login.work.weixin.qq.com/wwlogin/sso/login"
-	defaultAPIBaseURL   = "https://qyapi.weixin.qq.com"
+	defaultAuthorizeURL       = "https://login.work.weixin.qq.com/wwlogin/sso/login"
+	defaultMobileAuthorizeURL = "https://open.weixin.qq.com/connect/oauth2/authorize"
+	defaultAPIBaseURL         = "https://qyapi.weixin.qq.com"
 )
 
 // Config holds WeWork OAuth configuration.
@@ -21,35 +22,41 @@ type Config struct {
 	RedirectURI string
 
 	// Optional overrides for testing.
-	AuthorizeURL string
-	APIBaseURL   string
-	HTTPClient   *http.Client
+	AuthorizeURL       string // PC web QR code login endpoint
+	MobileAuthorizeURL string // WeCom in-app OAuth endpoint
+	APIBaseURL         string
+	HTTPClient         *http.Client
 }
 
 // Client wraps WeWork OAuth API calls.
 type Client struct {
-	corpID       string
-	agentID      string
-	secret       string
-	redirectURI  string
-	authorizeURL string
-	apiBaseURL   string
-	httpClient   *http.Client
+	corpID             string
+	agentID            string
+	secret             string
+	redirectURI        string
+	authorizeURL       string
+	mobileAuthorizeURL string
+	apiBaseURL         string
+	httpClient         *http.Client
 }
 
 // NewClient creates a new WeWork OAuth client.
 func NewClient(config Config) *Client {
 	c := &Client{
-		corpID:       config.CorpID,
-		agentID:      config.AgentID,
-		secret:       config.Secret,
-		redirectURI:  config.RedirectURI,
-		authorizeURL: config.AuthorizeURL,
-		apiBaseURL:   config.APIBaseURL,
-		httpClient:   config.HTTPClient,
+		corpID:             config.CorpID,
+		agentID:            config.AgentID,
+		secret:             config.Secret,
+		redirectURI:        config.RedirectURI,
+		authorizeURL:       config.AuthorizeURL,
+		mobileAuthorizeURL: config.MobileAuthorizeURL,
+		apiBaseURL:         config.APIBaseURL,
+		httpClient:         config.HTTPClient,
 	}
 	if c.authorizeURL == "" {
 		c.authorizeURL = defaultAuthorizeURL
+	}
+	if c.mobileAuthorizeURL == "" {
+		c.mobileAuthorizeURL = defaultMobileAuthorizeURL
 	}
 	if c.apiBaseURL == "" {
 		c.apiBaseURL = defaultAPIBaseURL
@@ -73,6 +80,23 @@ func (c *Client) GetAuthorizeURL(state string) string {
 	q.Set("state", state)
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// GetMobileAuthorizeURL returns the WeWork OAuth URL for users already
+// inside the WeCom mobile app (in-app browser). Uses snsapi_base scope to
+// silently authorize without showing a QR code.
+// https://developer.work.weixin.qq.com/document/path/91022
+func (c *Client) GetMobileAuthorizeURL(state string) string {
+	u, _ := url.Parse(c.mobileAuthorizeURL)
+	q := u.Query()
+	q.Set("appid", c.corpID)
+	q.Set("redirect_uri", c.redirectURI)
+	q.Set("response_type", "code")
+	q.Set("scope", "snsapi_base")
+	q.Set("agentid", c.agentID)
+	q.Set("state", state)
+	u.RawQuery = q.Encode()
+	return u.String() + "#wechat_redirect"
 }
 
 // UserInfo represents WeWork user information.

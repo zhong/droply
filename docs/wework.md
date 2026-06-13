@@ -285,7 +285,14 @@ The `--wework-user` allow-list uses WeCom's internal `user_id`, not display name
 
 ### 4. External (non-corp) users
 
-The OAuth flow uses `snsapi_base` scope, which only returns user IDs for members of your WeCom corp. External contacts who scan will hit an error. This is intentional — droply is designed for internal access control.
+The OAuth flow auto-selects the right endpoint based on the visitor's User-Agent:
+
+- **Inside the WeCom mobile app** (User-Agent contains `wxwork/`): uses `snsapi_base` scope for silent authorization — the user is signed in without ever seeing a QR code, because the WeCom in-app browser already has a session.
+- **All other browsers** (desktop Chrome/Safari, mobile Safari, etc.): uses the SSO login endpoint that renders a QR code page. Users scan with the WeCom mobile app to authenticate.
+
+Both flows hit the same `auth/getuserinfo` API to exchange the OAuth code for a WeCom user_id, so the rest of the login pipeline is identical.
+
+External contacts who scan/visit will hit an error. This is intentional — droply is designed for internal access control.
 
 ---
 

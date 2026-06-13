@@ -285,7 +285,14 @@ droply 没有内置 handler 来服务企业微信的域名校验文件，需要�
 
 ### 4. 外部联系人
 
-OAuth 使用 `snsapi_base` 作用域，只对企业内部成员返回 user_id。外部联系人扫码会报错。这是设计预期 —— droply 面向的是内部访问控制场景。
+OAuth 流程会根据访问者的 User-Agent 自动选择端点：
+
+- **在企业微信 App 内**（User-Agent 包含 `wxwork/`）：使用 `snsapi_base` 作用域静默授权 —— 用户无需扫码即可登录，因为企业微信内嵌浏览器已有会话
+- **其他浏览器**（桌面 Chrome/Safari、手机 Safari 等）：使用 SSO 登录端点显示二维码页，用户用企业微信 App 扫码登录
+
+两种流程最终都调用同一个 `auth/getuserinfo` API 用 code 换 user_id，所以后续登录逻辑完全一致。
+
+外部联系人扫码 / 访问会报错。这是设计预期 —— droply 面向的是内部访问控制场景。
 
 ---
 

@@ -63,8 +63,26 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authURL := s.wework.GetAuthorizeURL(state)
+	// Choose the right authorization endpoint based on the User-Agent.
+	// Inside the WeCom mobile app the in-app browser is already signed in,
+	// so we use snsapi_base for silent authorization (no QR code). Outside
+	// (desktop Chrome/Safari, mobile Safari, etc.) we use the SSO endpoint
+	// that renders a QR code page.
+	var authURL string
+	if isWeComUserAgent(r.UserAgent()) {
+		authURL = s.wework.GetMobileAuthorizeURL(state)
+	} else {
+		authURL = s.wework.GetAuthorizeURL(state)
+	}
 	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// isWeComUserAgent reports whether the request comes from inside the WeCom
+// mobile app's embedded browser. The WeCom UA contains "wxwork/" (the
+// trailing slash is important — it distinguishes WeCom from regular WeChat,
+// which only has "MicroMessenger" and cannot use snsapi_base for WeCom OAuth).
+func isWeComUserAgent(ua string) bool {
+	return strings.Contains(ua, "wxwork/")
 }
 
 // weworkCallbackHandler handles the WeWork OAuth callback.
