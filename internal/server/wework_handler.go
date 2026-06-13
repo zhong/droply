@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -83,6 +84,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	stateData, ok := s.weworkState.Consume(state)
 	if !ok {
+		log.Printf("wework callback: invalid or expired state (state=%s)", state)
 		http.Error(w, "invalid or expired state", http.StatusBadRequest)
 		return
 	}
@@ -90,6 +92,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for user_id.
 	userID, err := s.wework.GetUserIDByCode(code)
 	if err != nil {
+		log.Printf("wework callback: failed to get user ID (code=%s, err=%v)", truncate(code, 8), err)
 		http.Error(w, "WeWork login failed", http.StatusUnauthorized)
 		return
 	}
@@ -103,6 +106,8 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check allow-list.
 	if !isWeWorkUserAllowed(userID, rule.AllowedWeWorkUsers) {
+		log.Printf("wework callback: user %q not in allow-list (subdomain=%s, project=%s, allowed=%v)",
+			userID, stateData.Subdomain, stateData.Project, rule.AllowedWeWorkUsers)
 		http.Error(w, "Access denied: user not in allow-list", http.StatusForbidden)
 		return
 	}
@@ -134,4 +139,13 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	http.Redirect(w, r, stateData.Redirect, http.StatusFound)
+}
+
+// truncate shortens s to at most n characters, appending "..." if truncated.
+// Safe for any length input (no panic on short strings).
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
