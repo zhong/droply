@@ -128,13 +128,50 @@ droply deploy
 curl -fsSL https://droplydoc.com/setup.sh | sudo bash
 ```
 
-脚本会安装 droply-server、Caddy（含 Cloudflare DNS 模块）、配置 systemd 服务并启动。过程中会提示输入域名和 Cloudflare API Token。
+脚本会提示你选择 **TLS 模式**：
+
+| 模式 | 适用场景 | 要求 |
+|------|----------|------|
+| **on-demand**（默认） | 大多数用户、新增子域 <50 张/周 | 80 + 443 端口可达、A 记录指向服务器 |
+| **cloudflare** | 大量子域，或 80 端口不可用 | Cloudflare API Token |
+| **manual** | 企业 PKI、自建 CA、隔离环境 | 自带证书文件 |
+
+**on-demand 模式**（推荐）**无需任何 DNS API 配置** —— 只要把 A 记录指向服务器即可，无论 DNS 在哪家服务商（阿里云/腾讯云/GoDaddy/公司 DNS）。Caddy 在每个子域名首次访问时通过 HTTP-01 challenge 自动签发独立证书（首次访问延迟 2-5 秒，之后立即返回）。
 
 非交互式部署：
 
 ```bash
-DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+# on-demand 模式（默认）
+DOMAIN=example.com TLS_MODE=on-demand curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+
+# cloudflare 模式（通配符证书）
+DOMAIN=example.com TLS_MODE=cloudflare CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+
+# manual 模式（自带证书）
+DOMAIN=example.com TLS_MODE=manual CERT_PATH=/path/to/cert.pem KEY_PATH=/path/to/key.pem \
+  curl -fsSL https://droplydoc.com/setup.sh | sudo bash
 ```
+
+### TLS 模式对比
+
+```
+┌──────────────────┬──────────────┬────────────────┬─────────────────┐
+│                  │ On-Demand    │ Cloudflare     │ Manual          │
+├──────────────────┼──────────────┼────────────────┼─────────────────┤
+│ 需要 DNS API     │ 否           │ 是             │ 否              │
+│ 需要 80 端口     │ 是           │ 否             │ 否              │
+│ 证书类型         │ 单子域名     │ 通配符         │ 用户自带        │
+│ 首次访问延迟     │ 2-5 秒       │ 无             │ 无              │
+│ LE 限流影响      │ 50/周/注册域 │ 不受影响       │ 不适用          │
+│ 子域规模         │ 数百         │ 无限           │ 受证书限制      │
+└──────────────────┴──────────────┴────────────────┴─────────────────┘
+```
+
+**如何选择：**
+
+- **on-demand**：大多数部署的默认选择。和任何 DNS 服务商兼容（无需 API 集成），只需配置 A 记录即可使用。
+- **cloudflare**：有大量子域（数百以上）或需要关闭 80 端口（如企业防火墙限制）时使用。需要 Cloudflare DNS 和 API Token。
+- **manual**：使用企业内部 PKI、自定义证书颁发机构或隔离网络环境。
 
 <details>
 <summary>手动部署</summary>
@@ -146,42 +183,129 @@ DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | 
   - `A` 记录：`droplydoc.com` → 服务器 IP
   - `A` 记录：`*.droplydoc.com` → 服务器 IP
   - `A` 记录：`api.droplydoc.com` → 服务器 IP
-- 安装 [Caddy](https://caddyserver.com/docs/install)（需要支持 DNS challenge 的版本以启用通配符证书）
+- 安装 [Caddy](https://caddyserver.com/docs/install)
 
 ### 1. 安装 Caddy
 
-通配符证书需要 DNS challenge，需使用包含 DNS provider 模块的 Caddy。以 Cloudflare 为例：
+**on-demand 或 manual 模式**（大多数用户）：
 
 ```bash
-# 使用 xcaddy 编译带 Cloudflare DNS 模块的 Caddy
-# 注意：--replace 用于绕过 Cloudflare 新版 API Token（cfut_/cfat_ 前缀）的兼容性问题
-# 参考：https://github.com/caddy-dns/cloudflare/issues/125
-# 上游修复合并后可移除 --replace 行
-xcaddy build \
-  --with github.com/caddy-dns/cloudflare \
-  --replace github.com/caddy-dns/cloudflare=github.com/ogerman/cloudflare@master
+curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
+sudo mv /tmp/caddy /usr/bin/caddy
+sudo chmod +x /usr/bin/caddy
+```
+
+**cloudflare 模式**（通配符证书，需要 DNS-01）：
+
+```bash
+# 如未安装 Go
+curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+export PATH="/usr/local/go/bin:$PATH"
+
+# 安装 xcaddy 并编译带 Cloudflare DNS 模块的 Caddy
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+~/go/bin/xcaddy build --with github.com/caddy-dns/cloudflare
 sudo mv caddy /usr/bin/caddy
 ```
 
-### 2. 获取 Cloudflare API Token
+### 2. TLS 配置
 
-Caddy 需要 Cloudflare API Token 来完成通配符证书（`*.droplydoc.com`）和 `api.droplydoc.com` 证书的 DNS challenge 验证。
+从下面三种模式中选择一种。
 
-1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-2. 点击 **Create Token**
-3. 使用 **Edit zone DNS** 模板，或手动创建 Token：
-   - **Permissions**: Zone → DNS → Edit
-   - **Zone Resources**: Include → Specific zone → `droplydoc.com`
-4. 复制生成的 Token
+#### 方案 A：On-Demand TLS（推荐）
 
-将 Token 存储到服务器：
+Caddy 在子域名首次访问时自动签发证书。需要 80 + 443 端口可达。
+
+创建 `/etc/caddy/Caddyfile`：
+
+```caddyfile
+{
+    admin localhost:2019
+    on_demand_tls {
+        ask http://localhost:8080/_droply/tls-check
+        interval 10s
+        burst 1
+    }
+}
+
+*.droplydoc.com, droplydoc.com {
+    tls {
+        on_demand
+    }
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    tls {
+        on_demand
+    }
+    reverse_proxy localhost:8080
+}
+```
+
+#### 方案 B：Cloudflare DNS（通配符证书）
+
+一张通配符证书覆盖所有子域。需要 Cloudflare API Token。
+
+1. 在 [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) 创建 API Token
+   - **Permissions**：Zone → DNS → Edit
+   - **Zone Resources**：Include → Specific zone → `droplydoc.com`
+
+2. 保存 Token：
 
 ```bash
-# 创建 Caddy 环境变量文件（仅 root 可读）
 sudo tee /etc/caddy/env > /dev/null << 'EOF'
-CLOUDFLARE_API_TOKEN=你的-cloudflare-api-token
+CLOUDFLARE_API_TOKEN=你的-token
 EOF
 sudo chmod 600 /etc/caddy/env
+```
+
+3. 创建 `/etc/caddy/Caddyfile`：
+
+```caddyfile
+{
+    admin localhost:2019
+}
+
+*.droplydoc.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    reverse_proxy localhost:8080
+}
+```
+
+#### 方案 C：Manual（自带证书）
+
+使用自己的证书文件（例如来自企业 PKI）。
+
+```bash
+# 将证书和私钥复制到 /etc/caddy/
+sudo cp /path/to/cert.pem /etc/caddy/cert.pem
+sudo cp /path/to/key.pem /etc/caddy/key.pem
+sudo chmod 600 /etc/caddy/key.pem
+```
+
+创建 `/etc/caddy/Caddyfile`：
+
+```caddyfile
+{
+    admin localhost:2019
+}
+
+*.droplydoc.com {
+    tls /etc/caddy/cert.pem /etc/caddy/key.pem
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    tls /etc/caddy/cert.pem /etc/caddy/key.pem
+    reverse_proxy localhost:8080
+}
 ```
 
 ### 3. 部署 droply-server
@@ -190,8 +314,11 @@ sudo chmod 600 /etc/caddy/env
 # 创建数据目录
 sudo mkdir -p /data/droply/sites
 
-# 将编译好的二进制文件复制到服务器
-scp bin/droply-server your-server:/usr/local/bin/
+# 下载最新版本
+VERSION=$(curl -fsSL https://api.github.com/repos/zhong/droply/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+curl -fsSL -o /tmp/droply-server "https://github.com/zhong/droply/releases/download/${VERSION}/droply-server-linux-amd64"
+sudo mv /tmp/droply-server /usr/local/bin/droply-server
+sudo chmod +x /usr/local/bin/droply-server
 
 # 创建 systemd 服务
 sudo tee /etc/systemd/system/droply.service > /dev/null << 'EOF'
@@ -213,6 +340,7 @@ User=www-data
 WantedBy=multi-user.target
 EOF
 
+sudo systemctl daemon-reload
 sudo systemctl enable --now droply
 ```
 
@@ -226,59 +354,59 @@ sudo systemctl enable --now droply
 | `--domain` | `droplydoc.com` | 基础域名 |
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
 | `--hmac-secret` | （自动生成） | Cookie 签名密钥（留空则自动生成并持久化到 `hmac.key`） |
+| `--wework-corp-id` | | 企业微信 Corp ID（可选，扫码登录） |
+| `--wework-agent-id` | | 企业微信 Agent ID（可选） |
+| `--wework-secret` | | 企业微信 Agent Secret（可选） |
+| `--wework-redirect-uri` | | 企业微信 OAuth 回调 URL（可选） |
 
-### 4. 配置 Caddy
-
-创建 `/etc/caddy/Caddyfile`：
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-# 通配符证书，通过 DNS challenge 签发
-*.droplydoc.com {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-
-    # 所有子域名请求代理到 droply-server 的站点处理器，
-    # 由站点处理器提供文件服务并执行访问控制。
-    reverse_proxy localhost:8081
-}
-
-# API 端点 — 自动获取独立证书
-api.droplydoc.com {
-    reverse_proxy localhost:8080
-}
-```
-
-更新 Caddy 的 systemd 服务以加载环境变量文件：
+### 4. 启动 Caddy
 
 ```bash
-# 编辑 Caddy 的 systemd override
-sudo systemctl edit caddy
-```
+# 创建 Caddy systemd 服务
+sudo tee /etc/systemd/system/caddy.service > /dev/null << 'EOF'
+[Unit]
+Description=Caddy
+After=network.target network-online.target
+Requires=network-online.target
 
-添加以下内容：
-
-```ini
 [Service]
-EnvironmentFile=/etc/caddy/env
+Type=notify
+ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+EnvironmentFile=-/etc/caddy/env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
 ```
 
-然后启动/重启：
+### 5. 验证
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl restart caddy
+# 检查服务状态
+sudo systemctl status droply caddy
+
+# 测试 API
+curl https://api.droplydoc.com
+
+# 查看日志
+sudo journalctl -u droply -f
+sudo journalctl -u caddy -f
 ```
 
-droply-server 启动时会通过 Caddy Admin API 自动注册子域名路由，无需手动配置。
+droply-server 启动时会通过 Caddy Admin API 自动注册自定义域名路由。
 
 </details>
 
-### 5. 数据目录结构
+### 数据目录结构
 
 ```
 /data/droply/

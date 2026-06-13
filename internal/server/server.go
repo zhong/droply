@@ -82,6 +82,9 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Post("/auth/register", s.handleRegister)
 	r.Post("/auth/login", s.handleLogin)
 
+	// Public TLS check endpoint for Caddy on-demand TLS
+	r.Get("/_droply/tls-check", s.handleTLSCheck)
+
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)

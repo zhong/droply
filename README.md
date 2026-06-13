@@ -128,13 +128,50 @@ Set up a complete droply server on a fresh VPS (Ubuntu/Debian):
 curl -fsSL https://droplydoc.com/setup.sh | sudo bash
 ```
 
-This installs droply-server, Caddy (with Cloudflare DNS module), configures systemd services, and starts everything. You'll be prompted for your domain and Cloudflare API token.
+The script will prompt you to choose a **TLS mode**:
+
+| Mode | Best For | Requirements |
+|------|----------|--------------|
+| **on-demand** (default) | Most users, <50 new subdomains/week | Ports 80 + 443 open, A records pointing to server |
+| **cloudflare** | Large subdomain count, or port 80 unavailable | Cloudflare API token |
+| **manual** | Corporate PKI, custom CA, airgapped | Your own certificate files |
+
+**On-demand mode** (recommended) requires **zero DNS API configuration** — just point your A records to the server and droply handles the rest. Caddy obtains individual certificates per subdomain using HTTP-01 challenge on first access (2-5 second delay on first visit, instant thereafter).
 
 For non-interactive setup:
 
 ```bash
-DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+# On-demand mode (default)
+DOMAIN=example.com TLS_MODE=on-demand curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+
+# Cloudflare mode (wildcard certificate)
+DOMAIN=example.com TLS_MODE=cloudflare CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+
+# Manual mode (bring your own certs)
+DOMAIN=example.com TLS_MODE=manual CERT_PATH=/path/to/cert.pem KEY_PATH=/path/to/key.pem \
+  curl -fsSL https://droplydoc.com/setup.sh | sudo bash
 ```
+
+### TLS Mode Comparison
+
+```
+┌──────────────────┬──────────────┬────────────────┬─────────────────┐
+│                  │ On-Demand    │ Cloudflare     │ Manual          │
+├──────────────────┼──────────────┼────────────────┼─────────────────┤
+│ DNS API needed   │ No           │ Yes            │ No              │
+│ Port 80 needed   │ Yes          │ No             │ No              │
+│ Cert type        │ Per-subdomain│ Wildcard       │ User-provided   │
+│ First-visit lag  │ 2-5 sec      │ None           │ None            │
+│ LE rate limit    │ 50/week/dom  │ Unaffected     │ N/A             │
+│ Subdomain scale  │ Hundreds     │ Unlimited      │ Per cert limit  │
+└──────────────────┴──────────────┴────────────────┴─────────────────┘
+```
+
+**When to use each mode:**
+
+- **On-demand**: Default choice for most deployments. Works with any DNS provider (no API integration needed). Just configure A records and you're done.
+- **Cloudflare**: When you have hundreds of subdomains or need to close port 80 (e.g., corporate firewall). Requires Cloudflare DNS and an API token.
+- **Manual**: Enterprise environments with internal PKI, custom certificate authorities, or airgapped networks.
 
 <details>
 <summary>Manual setup</summary>
@@ -146,42 +183,129 @@ DOMAIN=example.com CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | 
   - `A` record: `droplydoc.com` → server IP
   - `A` record: `*.droplydoc.com` → server IP
   - `A` record: `api.droplydoc.com` → server IP
-- [Caddy](https://caddyserver.com/docs/install) installed (with DNS challenge support for wildcard certificates)
+- [Caddy](https://caddyserver.com/docs/install) installed
 
 ### 1. Install Caddy
 
-Wildcard certificates require DNS challenge. Use a Caddy build with a DNS provider module. Example with Cloudflare:
+**For on-demand or manual TLS modes** (most users):
 
 ```bash
-# Build Caddy with Cloudflare DNS module using xcaddy
-# Note: --replace is needed to work around a compatibility issue with Cloudflare's
-# new API token format (cfut_/cfat_ prefixes). See: https://github.com/caddy-dns/cloudflare/issues/125
-# Once the upstream fix is merged, you can remove the --replace line.
-xcaddy build \
-  --with github.com/caddy-dns/cloudflare \
-  --replace github.com/caddy-dns/cloudflare=github.com/ogerman/cloudflare@master
+curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
+sudo mv /tmp/caddy /usr/bin/caddy
+sudo chmod +x /usr/bin/caddy
+```
+
+**For Cloudflare mode** (wildcard certificates via DNS-01):
+
+```bash
+# Install Go if needed
+curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+export PATH="/usr/local/go/bin:$PATH"
+
+# Install xcaddy and build Caddy with Cloudflare DNS module
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+~/go/bin/xcaddy build --with github.com/caddy-dns/cloudflare
 sudo mv caddy /usr/bin/caddy
 ```
 
-### 2. Obtain Cloudflare API Token
+### 2. TLS Configuration
 
-Caddy needs a Cloudflare API token to complete DNS challenges for wildcard certificates (`*.droplydoc.com`) and the `api.droplydoc.com` certificate.
+Choose your TLS mode below.
 
-1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-2. Click **Create Token**
-3. Use the **Edit zone DNS** template, or create a custom token with:
+#### Option A: On-Demand TLS (recommended)
+
+Caddy obtains certificates dynamically on first subdomain access. Requires port 80 + 443 open.
+
+Create `/etc/caddy/Caddyfile`:
+
+```caddyfile
+{
+    admin localhost:2019
+    on_demand_tls {
+        ask http://localhost:8080/_droply/tls-check
+        interval 10s
+        burst 1
+    }
+}
+
+*.droplydoc.com, droplydoc.com {
+    tls {
+        on_demand
+    }
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    tls {
+        on_demand
+    }
+    reverse_proxy localhost:8080
+}
+```
+
+#### Option B: Cloudflare DNS (wildcard certificate)
+
+One wildcard certificate covers all subdomains. Requires Cloudflare API token.
+
+1. Obtain a Cloudflare API token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
    - **Permissions**: Zone → DNS → Edit
    - **Zone Resources**: Include → Specific zone → `droplydoc.com`
-4. Copy the generated token
 
-Store the token on your server for Caddy to use:
+2. Store the token:
 
 ```bash
-# Create environment file for Caddy (readable only by root)
 sudo tee /etc/caddy/env > /dev/null << 'EOF'
-CLOUDFLARE_API_TOKEN=your-cloudflare-api-token-here
+CLOUDFLARE_API_TOKEN=your-token-here
 EOF
 sudo chmod 600 /etc/caddy/env
+```
+
+3. Create `/etc/caddy/Caddyfile`:
+
+```caddyfile
+{
+    admin localhost:2019
+}
+
+*.droplydoc.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    reverse_proxy localhost:8080
+}
+```
+
+#### Option C: Manual (bring your own certs)
+
+Use your own certificate files (e.g., from corporate PKI).
+
+```bash
+# Copy your cert and key to /etc/caddy/
+sudo cp /path/to/cert.pem /etc/caddy/cert.pem
+sudo cp /path/to/key.pem /etc/caddy/key.pem
+sudo chmod 600 /etc/caddy/key.pem
+```
+
+Create `/etc/caddy/Caddyfile`:
+
+```caddyfile
+{
+    admin localhost:2019
+}
+
+*.droplydoc.com {
+    tls /etc/caddy/cert.pem /etc/caddy/key.pem
+    reverse_proxy localhost:8081
+}
+
+api.droplydoc.com {
+    tls /etc/caddy/cert.pem /etc/caddy/key.pem
+    reverse_proxy localhost:8080
+}
 ```
 
 ### 3. Deploy droply-server
@@ -190,8 +314,11 @@ sudo chmod 600 /etc/caddy/env
 # Create data directory
 sudo mkdir -p /data/droply/sites
 
-# Copy the compiled binary to your server
-scp bin/droply-server your-server:/usr/local/bin/
+# Download latest release
+VERSION=$(curl -fsSL https://api.github.com/repos/zhong/droply/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+curl -fsSL -o /tmp/droply-server "https://github.com/zhong/droply/releases/download/${VERSION}/droply-server-linux-amd64"
+sudo mv /tmp/droply-server /usr/local/bin/droply-server
+sudo chmod +x /usr/local/bin/droply-server
 
 # Create systemd service
 sudo tee /etc/systemd/system/droply.service > /dev/null << 'EOF'
@@ -213,6 +340,7 @@ User=www-data
 WantedBy=multi-user.target
 EOF
 
+sudo systemctl daemon-reload
 sudo systemctl enable --now droply
 ```
 
@@ -226,59 +354,57 @@ sudo systemctl enable --now droply
 | `--domain` | `droplydoc.com` | Base domain |
 | `--caddy-admin` | `http://localhost:2019` | Caddy Admin API address |
 | `--hmac-secret` | (auto-generated) | Cookie signing key (auto-generated and persisted to `hmac.key` if empty) |
+| `--wework-corp-id` | | WeWork corp ID for QR code login (optional) |
+| `--wework-agent-id` | | WeWork agent ID (optional) |
+| `--wework-secret` | | WeWork agent secret (optional) |
+| `--wework-redirect-uri` | | WeWork OAuth callback URL (optional) |
 
-### 4. Configure Caddy
-
-Create `/etc/caddy/Caddyfile`:
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-# Wildcard certificate for all subdomains via DNS challenge
-*.droplydoc.com {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-
-    # Proxy all subdomain requests to droply-server's site handler,
-    # which serves files and enforces access control.
-    reverse_proxy localhost:8081
-}
-
-# API endpoint — gets its own certificate automatically
-api.droplydoc.com {
-    reverse_proxy localhost:8080
-}
-```
-
-Update the Caddy systemd service to load the environment file:
+### 4. Start Caddy
 
 ```bash
-# Override Caddy's systemd unit to include the env file
-sudo systemctl edit caddy
-```
+# Create Caddy systemd service
+sudo tee /etc/systemd/system/caddy.service > /dev/null << 'EOF'
+[Unit]
+Description=Caddy
+After=network.target network-online.target
+Requires=network-online.target
 
-Add the following:
-
-```ini
 [Service]
-EnvironmentFile=/etc/caddy/env
+Type=notify
+ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+EnvironmentFile=-/etc/caddy/env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
 ```
 
-Then start/restart:
+### 5. Verify
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl restart caddy
-```
+# Check services
+sudo systemctl status droply caddy
 
-droply-server automatically registers subdomain routes via the Caddy Admin API on startup. No manual configuration needed.
+# Test API
+curl https://api.droplydoc.com
+
+# Logs
+sudo journalctl -u droply -f
+sudo journalctl -u caddy -f
+```
 
 </details>
 
-### 5. Data Directory Structure
+### Data Directory Structure
 
 ```
 /data/droply/
