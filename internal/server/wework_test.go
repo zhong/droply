@@ -3,8 +3,11 @@ package server_test
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -359,6 +362,66 @@ func TestWeWorkAuthHandlerNotConfigured(t *testing.T) {
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503 when WeWork not configured, got %d", rr.Code)
+	}
+}
+
+// TestWeWorkLoginPageButtonHrefIsClickable is a regression test for a bug where
+// the login page's "Login with WeCom" button href was double-URL-encoded:
+// renderLoginPage called url.QueryEscape() on the redirect path, and then
+// html/template did URL escaping again on the attribute value. Clicking the
+// resulting link yielded ?redirect=%252Fvpn%252F, which the auth handler then
+// parsed as project name "%2Fvpn%2F" → 404.
+func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
+	mockAPI := newWeWorkMockAPI(t, nil)
+	defer mockAPI.Close()
+	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
+	setupWeWorkSite(t, srv, nil)
+
+	siteHandler := srv.NewSiteHandler()
+
+	// 1. Hit a protected page → login page rendered.
+	req := httptest.NewRequest(http.MethodGet, "/app/", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 login page, got %d", rr.Code)
+	}
+
+	// 2. Extract the WeCom link href from the rendered HTML.
+	hrefRe := regexp.MustCompile(`href="(/_droply/wework/auth\?[^"]+)"`)
+	m := hrefRe.FindStringSubmatch(rr.Body.String())
+	if m == nil {
+		t.Fatalf("did not find wework auth href in login page body:\n%s", rr.Body.String())
+	}
+	// HTML-decode the href to get the URL as the browser would see it.
+	href := html.UnescapeString(m[1])
+
+	// Sanity-check: redirect query param should decode to a path with a leading slash,
+	// not to a double-encoded value like "%2Fapp%2F".
+	u, err := url.Parse(href)
+	if err != nil {
+		t.Fatalf("parse href %q: %v", href, err)
+	}
+	gotRedirect := u.Query().Get("redirect")
+	if !strings.HasPrefix(gotRedirect, "/") {
+		t.Errorf("redirect param %q is not a clean path; likely double-encoded", gotRedirect)
+	}
+	if strings.Contains(gotRedirect, "%2F") || strings.Contains(gotRedirect, "%25") {
+		t.Errorf("redirect param %q still contains literal percent-escapes — double encoding bug", gotRedirect)
+	}
+
+	// 3. Follow the link → auth handler should redirect to WeCom (302), not 404.
+	req = httptest.NewRequest(http.MethodGet, href, nil)
+	req.Host = "wesite.droplydoc.com"
+	rr = httptest.NewRecorder()
+	siteHandler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 redirect to WeCom OAuth after clicking login button, got %d:\n%s\n(href was %q)",
+			rr.Code, rr.Body.String(), href)
+	}
+	if !strings.Contains(rr.Header().Get("Location"), "/connect/oauth2/authorize") {
+		t.Errorf("expected redirect to WeCom authorize URL, got %q", rr.Header().Get("Location"))
 	}
 }
 

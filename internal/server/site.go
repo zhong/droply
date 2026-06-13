@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"net"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,7 +57,7 @@ var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
   {{end}}
   {{if and .ShowPassword .ShowWeWork}}<div class="divider"><span>OR</span></div>{{end}}
   {{if .ShowWeWork}}
-  <a class="wework-btn" href="/_droply/wework/auth?redirect={{.RedirectEnc}}&host={{.HostEnc}}">Login with WeCom</a>
+  <a class="wework-btn" href="/_droply/wework/auth?redirect={{.Redirect | urlquery}}&host={{.Host | urlquery}}">Login with WeCom</a>
   {{end}}
 </div>
 </body>
@@ -274,9 +273,7 @@ func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *m
 	data := map[string]interface{}{
 		"Error":        errorMsg,
 		"Redirect":     r.URL.RequestURI(),
-		"RedirectEnc":  url.QueryEscape(r.URL.RequestURI()),
 		"Host":         r.Host,
-		"HostEnc":      url.QueryEscape(r.Host),
 		"ShowPassword": rule.HasPassword,
 		"ShowWeWork":   rule.WeWorkEnabled && s.wework != nil,
 	}
