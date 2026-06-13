@@ -97,10 +97,10 @@ func newSiteServerWithWeWork(t *testing.T, mockAPIURL string) (*server.Server, s
 
 	weClient := wework.NewClient(wework.Config{
 		CorpID:       "corp-test",
-		AgentID:     "1000",
+		AgentID:      "1000",
 		Secret:       "sec",
 		RedirectURI:  "https://api.droplydoc.com/_droply/wework/callback",
-		AuthorizeURL: mockAPIURL + "/connect/oauth2/authorize",
+		AuthorizeURL: mockAPIURL + "/wwlogin/sso/login",
 		APIBaseURL:   mockAPIURL,
 	})
 	srv.SetWeWork(weClient)
@@ -166,14 +166,14 @@ func TestWeWorkAuthRedirectsToAuthorizeURL(t *testing.T) {
 		t.Fatalf("expected 302, got %d: %s", rr.Code, rr.Body.String())
 	}
 	loc := rr.Header().Get("Location")
-	if !strings.Contains(loc, "/connect/oauth2/authorize") {
-		t.Errorf("expected redirect to authorize URL, got %q", loc)
+	if !strings.Contains(loc, "/wwlogin/sso/login") {
+		t.Errorf("expected redirect to SSO login URL, got %q", loc)
+	}
+	if !strings.Contains(loc, "login_type=CorpApp") {
+		t.Errorf("expected login_type=CorpApp in redirect, got %q", loc)
 	}
 	if !strings.Contains(loc, "state=") {
 		t.Errorf("expected state in redirect URL, got %q", loc)
-	}
-	if !strings.Contains(loc, "#wechat_redirect") {
-		t.Errorf("expected wechat_redirect fragment, got %q", loc)
 	}
 }
 
@@ -420,11 +420,10 @@ func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
 		t.Fatalf("expected 302 redirect to WeCom OAuth after clicking login button, got %d:\n%s\n(href was %q)",
 			rr.Code, rr.Body.String(), href)
 	}
-	if !strings.Contains(rr.Header().Get("Location"), "/connect/oauth2/authorize") {
-		t.Errorf("expected redirect to WeCom authorize URL, got %q", rr.Header().Get("Location"))
+	if !strings.Contains(rr.Header().Get("Location"), "/wwlogin/sso/login") {
+		t.Errorf("expected redirect to WeCom SSO login URL, got %q", rr.Header().Get("Location"))
 	}
 }
-
 // extractQueryParam pulls a query parameter out of a URL string. Empty if not found.
 func extractQueryParam(rawURL, key string) string {
 	idx := strings.Index(rawURL, "?")

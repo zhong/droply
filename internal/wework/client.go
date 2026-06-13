@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultAuthorizeURL = "https://open.weixin.qq.com/connect/oauth2/authorize"
+	defaultAuthorizeURL = "https://login.work.weixin.qq.com/wwlogin/sso/login"
 	defaultAPIBaseURL   = "https://qyapi.weixin.qq.com"
 )
 
@@ -60,19 +60,19 @@ func NewClient(config Config) *Client {
 	return c
 }
 
-// GetAuthorizeURL returns the WeWork OAuth authorization URL.
-// User should be redirected to this URL to scan QR code.
-// https://developer.work.weixin.qq.com/document/path/91022
+// GetAuthorizeURL returns the WeWork QR code login URL for PC web browsers.
+// User should be redirected to this URL to scan with WeCom mobile app.
+// https://developer.work.weixin.qq.com/document/path/98152
 func (c *Client) GetAuthorizeURL(state string) string {
 	u, _ := url.Parse(c.authorizeURL)
 	q := u.Query()
+	q.Set("login_type", "CorpApp")
 	q.Set("appid", c.corpID)
+	q.Set("agentid", c.agentID)
 	q.Set("redirect_uri", c.redirectURI)
-	q.Set("response_type", "code")
-	q.Set("scope", "snsapi_base")
 	q.Set("state", state)
 	u.RawQuery = q.Encode()
-	return u.String() + "#wechat_redirect"
+	return u.String()
 }
 
 // UserInfo represents WeWork user information.

@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
@@ -18,29 +17,31 @@ func TestGetAuthorizeURL(t *testing.T) {
 	})
 
 	got := c.GetAuthorizeURL("state-xyz")
-	if !strings.HasSuffix(got, "#wechat_redirect") {
-		t.Errorf("expected #wechat_redirect suffix, got %q", got)
-	}
-
-	// Parse the URL part before the fragment.
-	urlPart := strings.TrimSuffix(got, "#wechat_redirect")
-	u, err := url.Parse(urlPart)
+	u, err := url.Parse(got)
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}
 
+	// SSO login endpoint uses login.work.weixin.qq.com
+	if u.Host != "login.work.weixin.qq.com" {
+		t.Errorf("host: got %q want login.work.weixin.qq.com", u.Host)
+	}
+	if u.Path != "/wwlogin/sso/login" {
+		t.Errorf("path: got %q want /wwlogin/sso/login", u.Path)
+	}
+
 	q := u.Query()
+	if q.Get("login_type") != "CorpApp" {
+		t.Errorf("login_type: got %q want CorpApp", q.Get("login_type"))
+	}
 	if q.Get("appid") != "corp123" {
 		t.Errorf("appid: got %q want corp123", q.Get("appid"))
 	}
+	if q.Get("agentid") != "1000002" {
+		t.Errorf("agentid: got %q want 1000002", q.Get("agentid"))
+	}
 	if q.Get("redirect_uri") != "https://example.com/cb" {
 		t.Errorf("redirect_uri mismatch: %q", q.Get("redirect_uri"))
-	}
-	if q.Get("response_type") != "code" {
-		t.Errorf("response_type: got %q", q.Get("response_type"))
-	}
-	if q.Get("scope") != "snsapi_base" {
-		t.Errorf("scope: got %q", q.Get("scope"))
 	}
 	if q.Get("state") != "state-xyz" {
 		t.Errorf("state: got %q", q.Get("state"))
