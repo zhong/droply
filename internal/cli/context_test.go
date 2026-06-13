@@ -78,10 +78,10 @@ func TestSaveAndLoadMultipleContexts(t *testing.T) {
 	withTempHome(t)
 
 	full := &Config{
-		CurrentContext: "paratera",
+		CurrentContext: "staging",
 		Contexts: map[string]Context{
 			defaultContextName: {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
-			"paratera":         {APIURL: "https://api.docs.paratera.co", Token: "dp_para"},
+			"staging":         {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
 	if err := SaveFullConfig(full); err != nil {
@@ -89,19 +89,19 @@ func TestSaveAndLoadMultipleContexts(t *testing.T) {
 	}
 
 	got := LoadFullConfig()
-	if got.CurrentContext != "paratera" {
+	if got.CurrentContext != "staging" {
 		t.Errorf("CurrentContext: got %q", got.CurrentContext)
 	}
-	if got.Contexts["paratera"].Token != "dp_para" {
-		t.Errorf("paratera token mismatch: %q", got.Contexts["paratera"].Token)
+	if got.Contexts["staging"].Token != "dp_para" {
+		t.Errorf("staging token mismatch: %q", got.Contexts["staging"].Token)
 	}
 	if got.Contexts[defaultContextName].APIURL != "https://api.droplydoc.com" {
 		t.Errorf("default APIURL mismatch")
 	}
 
-	// LoadConfig should return the active context (paratera).
+	// LoadConfig should return the active context (staging).
 	ctx := LoadConfig()
-	if ctx.APIURL != "https://api.docs.paratera.co" || ctx.Token != "dp_para" {
+	if ctx.APIURL != "https://api.example.com" || ctx.Token != "dp_para" {
 		t.Errorf("active context wrong: APIURL=%q Token=%q", ctx.APIURL, ctx.Token)
 	}
 }
@@ -113,7 +113,7 @@ func TestActiveContextOverride(t *testing.T) {
 		CurrentContext: "default",
 		Contexts: map[string]Context{
 			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
-			"paratera": {APIURL: "https://api.docs.paratera.co", Token: "dp_para"},
+			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
 	if err := SaveFullConfig(full); err != nil {
@@ -125,8 +125,8 @@ func TestActiveContextOverride(t *testing.T) {
 		t.Errorf("without override: got %q want dp_default", got)
 	}
 
-	// With override: paratera wins.
-	SetActiveContext("paratera")
+	// With override: staging wins.
+	SetActiveContext("staging")
 	defer SetActiveContext("")
 	if got := LoadConfig().Token; got != "dp_para" {
 		t.Errorf("with override: got %q want dp_para", got)
@@ -167,16 +167,16 @@ func TestProjectConfigContextOverride(t *testing.T) {
 		CurrentContext: "default",
 		Contexts: map[string]Context{
 			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
-			"paratera": {APIURL: "https://api.docs.paratera.co", Token: "dp_para"},
+			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
 	if err := SaveFullConfig(full); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	// Create a project dir with .droply.toml pointing at paratera.
+	// Create a project dir with .droply.toml pointing at staging.
 	projDir := t.TempDir()
-	projConfig := `context = "paratera"
+	projConfig := `context = "staging"
 subdomain = "alice"
 project = "blog"
 `
@@ -190,10 +190,10 @@ project = "blog"
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	// LoadConfig should resolve to paratera even though current_context is default.
+	// LoadConfig should resolve to staging even though current_context is default.
 	ctx := LoadConfig()
 	if ctx.Token != "dp_para" {
-		t.Errorf("expected paratera token, got %q (APIURL=%q)", ctx.Token, ctx.APIURL)
+		t.Errorf("expected staging token, got %q (APIURL=%q)", ctx.Token, ctx.APIURL)
 	}
 }
 
@@ -204,7 +204,7 @@ func TestExplicitOverrideBeatsProjectConfig(t *testing.T) {
 		CurrentContext: "default",
 		Contexts: map[string]Context{
 			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
-			"paratera": {APIURL: "https://api.docs.paratera.co", Token: "dp_para"},
+			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
 			"corp":     {APIURL: "https://api.corp.local", Token: "dp_corp"},
 		},
 	}
@@ -213,7 +213,7 @@ func TestExplicitOverrideBeatsProjectConfig(t *testing.T) {
 	}
 
 	projDir := t.TempDir()
-	projConfig := `context = "paratera"
+	projConfig := `context = "staging"
 `
 	if err := os.WriteFile(filepath.Join(projDir, ".droply.toml"), []byte(projConfig), 0644); err != nil {
 		t.Fatalf("write project config: %v", err)
@@ -224,7 +224,7 @@ func TestExplicitOverrideBeatsProjectConfig(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	// --context corp should override project config's paratera.
+	// --context corp should override project config's staging.
 	SetActiveContext("corp")
 	defer SetActiveContext("")
 
@@ -238,7 +238,7 @@ func TestDeriveContextName(t *testing.T) {
 		in, want string
 	}{
 		{"https://api.droplydoc.com", "droplydoc"},
-		{"https://api.docs.paratera.co", "paratera"},
+		{"https://api.staging.example.com", "example"},
 		{"http://api.example.com/path", "example"},
 		{"https://localhost", "localhost"},
 		{"", "custom"},

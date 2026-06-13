@@ -185,8 +185,8 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Compute cookie Domain so the session is readable from the original
 	// subdomain after we redirect back. If the OAuth callback host differs
-	// from the requesting host (e.g. login.docs.paratera.co handling the
-	// callback for its.docs.paratera.co), scope the cookie to the shared
+	// from the requesting host (e.g. login.example.com handling the
+	// callback for its.example.com), scope the cookie to the shared
 	// parent domain so both subdomains see it.
 	cookieDomain := cookieParentDomain(r.Host, stateData.Host, s.baseDomain)
 

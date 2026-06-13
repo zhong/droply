@@ -438,8 +438,8 @@ current_context = "default"
 api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
 
-[contexts.paratera]
-api_url = "https://api.docs.paratera.co"
+[contexts.staging]
+api_url = "https://api.staging.example.com"
 token = "dp_yyyyyyyyyyyy"
 ```
 
@@ -448,26 +448,26 @@ This file is automatically created and updated on login/register. Old single-ser
 #### Working with Multiple Servers
 
 ```bash
-# Login to a self-hosted server (creates a new context "paratera")
-droply auth login --api-url https://api.docs.paratera.co
+# Login to a self-hosted server with an explicit context name
+droply auth login --api-url https://api.staging.example.com --context staging
 
-# Or name the context explicitly
-droply auth login --api-url https://api.docs.paratera.co --context corp
+# Or omit --context and droply derives one from the URL
+droply auth login --api-url https://api.staging.example.com   # context "example"
 
 # List configured contexts (* marks the active one)
 droply context list
 
 # Switch between servers
-droply context use paratera
+droply context use staging
 
 # Add a context without authenticating yet
-droply context add staging --api-url https://api.staging.example.com
+droply context add corp --api-url https://api.corp.example.com
 
 # Remove a context
-droply context remove staging
+droply context remove corp
 
 # One-shot override (does not persist)
-droply --context paratera deploy
+droply --context staging deploy
 ```
 
 #### Per-Project Context Binding
@@ -475,12 +475,12 @@ droply --context paratera deploy
 `.droply.toml` in a project directory can pin a specific context:
 
 ```toml
-context = "paratera"
+context = "staging"
 subdomain = "alice"
 project = "blog"
 ```
 
-When running `droply` commands inside that directory, the `paratera` context is used automatically.
+When running `droply` commands inside that directory, the `staging` context is used automatically.
 
 **Resolution priority** (highest to lowest):
 1. `--context X` flag on the command line
@@ -663,7 +663,7 @@ droply supports WeCom QR code login as a third access control method (alongside 
 Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
 Environment="DROPLY_WEWORK_AGENT_ID=1000002"
 Environment="DROPLY_WEWORK_SECRET=xxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
 
 # CLI: enable WeCom on a project (allow any corp member)
 droply access set --subdomain alice --project docs --wework

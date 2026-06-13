@@ -432,11 +432,11 @@ func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
 	}
 }
 // TestWeWorkCallbackCrossSubdomainRedirect verifies the fix for a 404 that
-// occurred in production (login.docs.paratera.co/vpn/) when:
-//   - User starts login on its.docs.paratera.co (state stored with this host)
-//   - WeCom redirects callback to a different host (login.docs.paratera.co)
+// occurred in production (login.example.com/vpn/) when:
+//   - User starts login on its.example.com (state stored with this host)
+//   - WeCom redirects callback to a different host (login.example.com)
 //   - Old code redirected to stateData.Redirect "/vpn/" → resolved against
-//     the callback host → "https://login.docs.paratera.co/vpn/" → 404
+//     the callback host → "https://login.example.com/vpn/" → 404
 //
 // Fix: when callback host != state host, redirect to absolute URL on the
 // original host, and set the cookie Domain to the parent so the redirected
@@ -544,12 +544,12 @@ func TestCookieParentDomain(t *testing.T) {
 	cases := []struct {
 		callback, origin, base, want string
 	}{
-		{"login.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", "docs.paratera.co"},
-		{"its.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", ""},
-		{"login.docs.paratera.co", "", "docs.paratera.co", ""},
-		{"login.docs.paratera.co", "evil.com", "docs.paratera.co", ""},
-		{"login.docs.paratera.co", "its.docs.paratera.co", "", ""},
-		{"LOGIN.docs.paratera.co", "its.docs.paratera.co", "docs.paratera.co", "docs.paratera.co"},
+		{"login.example.com", "its.example.com", "example.com", "example.com"},
+		{"its.example.com", "its.example.com", "example.com", ""},
+		{"login.example.com", "", "example.com", ""},
+		{"login.example.com", "evil.com", "example.com", ""},
+		{"login.example.com", "its.example.com", "", ""},
+		{"LOGIN.example.com", "its.example.com", "example.com", "example.com"},
 	}
 	for _, c := range cases {
 		got := server.CookieParentDomainForTest(c.callback, c.origin, c.base)

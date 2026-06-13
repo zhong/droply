@@ -68,7 +68,7 @@ func resolveLoginTarget(cmd *cobra.Command) (string, *Context) {
 }
 
 // deriveContextName extracts a short, sensible context name from an API URL.
-// e.g. "https://api.docs.paratera.co" → "paratera"
+// e.g. "https://api.staging.example.com" → "example"
 // Fallback: "custom" if URL is empty or unparseable.
 func deriveContextName(apiURL string) string {
 	if apiURL == "" {
@@ -81,7 +81,7 @@ func deriveContextName(apiURL string) string {
 		s = s[:i]
 	}
 	// Pick the second-level label if present.
-	// e.g. "docs.paratera.co" → "paratera"
+	// e.g. "staging.example.com" → "example"
 	parts := strings.Split(s, ".")
 	if len(parts) >= 2 {
 		return parts[len(parts)-2]

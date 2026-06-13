@@ -440,8 +440,8 @@ current_context = "default"
 api_url = "https://api.droplydoc.com"
 token = "dp_xxxxxxxxxxxx"
 
-[contexts.paratera]
-api_url = "https://api.docs.paratera.co"
+[contexts.staging]
+api_url = "https://api.staging.example.com"
 token = "dp_yyyyyyyyyyyy"
 ```
 
@@ -450,26 +450,26 @@ token = "dp_yyyyyyyyyyyy"
 #### 同时使用多个服务器
 
 ```bash
-# 登录自建服务器（自动创建 "paratera" context）
-droply auth login --api-url https://api.docs.paratera.co
+# 显式指定 context 名登录自建服务器
+droply auth login --api-url https://api.staging.example.com --context staging
 
-# 或显式命名 context
-droply auth login --api-url https://api.docs.paratera.co --context corp
+# 或省略 --context，droply 自动从 URL 派生
+droply auth login --api-url https://api.staging.example.com   # 派生为 context "example"
 
 # 列出所有 context（* 标记当前激活的）
 droply context list
 
 # 切换服务器
-droply context use paratera
+droply context use staging
 
 # 仅添加 context，暂不认证
-droply context add staging --api-url https://api.staging.example.com
+droply context add corp --api-url https://api.corp.example.com
 
 # 删除 context
-droply context remove staging
+droply context remove corp
 
 # 临时覆盖单次操作（不持久化）
-droply --context paratera deploy
+droply --context staging deploy
 ```
 
 #### 项目级 context 绑定
@@ -477,12 +477,12 @@ droply --context paratera deploy
 项目目录下的 `.droply.toml` 可以绑定特定的 context：
 
 ```toml
-context = "paratera"
+context = "staging"
 subdomain = "alice"
 project = "blog"
 ```
 
-在该目录下执行 `droply` 命令时自动使用 `paratera` context。
+在该目录下执行 `droply` 命令时自动使用 `staging` context。
 
 **优先级**（高到低）：
 1. 命令行 `--context X`
@@ -665,7 +665,7 @@ droply 支持企业微信扫码登录作为第三种访问控制方式（与 IP 
 Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
 Environment="DROPLY_WEWORK_AGENT_ID=1000002"
 Environment="DROPLY_WEWORK_SECRET=xxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
 
 # CLI：为项目启用扫码登录（允许任何企业成员）
 droply access set --subdomain alice --project docs --wework

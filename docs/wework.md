@@ -74,7 +74,7 @@ WeCom QR code login is one of three access control methods in droply (alongside 
 In the app detail page → **网页授权及 JS-SDK** (Web Authorization & JS-SDK) → **设置可信域名** (Set Trusted Domain):
 
 ```
-Trusted domain: docs.paratera.co   ← your droply base domain (without leading dot)
+Trusted domain: example.com   ← your droply base domain (without leading dot)
 ```
 
 WeCom will require you to download a verification file (e.g. `WW_verify_AbCdEf123.txt`) and host it at the root of your domain to prove ownership.
@@ -83,7 +83,7 @@ WeCom will require you to download a verification file (e.g. `WW_verify_AbCdEf12
 >
 > **Option A — Static file via Caddy**: Add a temporary route in `/etc/caddy/Caddyfile`:
 > ```caddyfile
-> docs.paratera.co {
+> example.com {
 >     handle /WW_verify_AbCdEf123.txt {
 >         respond "AbCdEf123" 200
 >     }
@@ -105,12 +105,12 @@ Add these environment variables to your `/etc/systemd/system/droply.service`:
 Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
 Environment="DROPLY_WEWORK_AGENT_ID=1000002"
 Environment="DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
 ExecStart=/usr/local/bin/droply-server \
   --addr :8080 \
   --site-addr :8081 \
   --data-dir /data/droply \
-  --domain docs.paratera.co \
+  --domain example.com \
   --caddy-admin http://localhost:2019
 Restart=always
 User=www-data
@@ -123,16 +123,16 @@ ExecStart=/usr/local/bin/droply-server \
   --wework-corp-id ww1234567890abcdef \
   --wework-agent-id 1000002 \
   --wework-secret xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  --wework-redirect-uri https://login.docs.paratera.co/_droply/wework/callback \
-  --domain docs.paratera.co \
+  --wework-redirect-uri https://login.example.com/_droply/wework/callback \
+  --domain example.com \
   ...
 ```
 
 **Important constraints on `DROPLY_WEWORK_REDIRECT_URI`:**
 
 1. The host **must** be one of your droply subdomains (not `api.`), because the callback is served by the site server on port `:8081`.
-2. WeCom only allows **one** redirect URI per app. If you want multiple sites (`alice.docs.paratera.co`, `bob.docs.paratera.co`) to share WeCom login, you must use a single "login portal" subdomain (e.g. `login.docs.paratera.co`) for the callback.
-3. After the callback, the session cookie is scoped to the callback host. If you visit `alice.docs.paratera.co` first, you'll need to ensure the cookie can be read there too — see **Known Limitations** below.
+2. WeCom only allows **one** redirect URI per app. If you want multiple sites (`alice.example.com`, `bob.example.com`) to share WeCom login, you must use a single "login portal" subdomain (e.g. `login.example.com`) for the callback.
+3. After the callback, the session cookie is scoped to the callback host. If you visit `alice.example.com` first, you'll need to ensure the cookie can be read there too — see **Known Limitations** below.
 
 Reload systemd and restart:
 
@@ -197,7 +197,7 @@ Project-level rules override subdomain-level rules entirely.
 Visit your protected site:
 
 ```
-https://alice.docs.paratera.co/docs/
+https://alice.example.com/docs/
 ```
 
 What happens depends on the access rule:
@@ -282,7 +282,7 @@ WeCom allows only one OAuth callback URL per app. droply uses a fixed `--wework-
 **Current workarounds**:
 
 - **One app per subdomain**: register a separate WeCom app per subdomain, run multiple droply-server processes
-- **Parent-domain cookies** (planned): scope the cookie to `.docs.paratera.co` so all subdomains share the session (sacrifices isolation between subdomains)
+- **Parent-domain cookies** (planned): scope the cookie to `.example.com` so all subdomains share the session (sacrifices isolation between subdomains)
 
 ### 2. Verification file hosting
 

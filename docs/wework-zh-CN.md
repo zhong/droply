@@ -74,7 +74,7 @@
 在应用详情页 → **网页授权及 JS-SDK** → **设置可信域名**：
 
 ```
-可信域名：docs.paratera.co   ← 你 droply 的 base domain（不带前导点）
+可信域名：example.com   ← 你 droply 的 base domain（不带前导点）
 ```
 
 企业微信会要求你下载一个校验文件（如 `WW_verify_AbCdEf123.txt`），放到该域名根路径下来证明你拥有该域名。
@@ -83,7 +83,7 @@
 >
 > **方案 A — 用 Caddy 静态托管**：在 `/etc/caddy/Caddyfile` 中临时加一条路由：
 > ```caddyfile
-> docs.paratera.co {
+> example.com {
 >     handle /WW_verify_AbCdEf123.txt {
 >         respond "AbCdEf123" 200
 >     }
@@ -105,12 +105,12 @@
 Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
 Environment="DROPLY_WEWORK_AGENT_ID=1000002"
 Environment="DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.docs.paratera.co/_droply/wework/callback"
+Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
 ExecStart=/usr/local/bin/droply-server \
   --addr :8080 \
   --site-addr :8081 \
   --data-dir /data/droply \
-  --domain docs.paratera.co \
+  --domain example.com \
   --caddy-admin http://localhost:2019
 Restart=always
 User=www-data
@@ -123,16 +123,16 @@ ExecStart=/usr/local/bin/droply-server \
   --wework-corp-id ww1234567890abcdef \
   --wework-agent-id 1000002 \
   --wework-secret xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  --wework-redirect-uri https://login.docs.paratera.co/_droply/wework/callback \
-  --domain docs.paratera.co \
+  --wework-redirect-uri https://login.example.com/_droply/wework/callback \
+  --domain example.com \
   ...
 ```
 
 **`DROPLY_WEWORK_REDIRECT_URI` 的关键约束：**
 
 1. host **必须**是 droply 的某个站点子域（不能是 `api.`），因为回调由站点服务（:8081）处理
-2. 企业微信每个应用只允许配置**一个**回调 URL。如果你想让多个子域（`alice.docs.paratera.co`、`bob.docs.paratera.co`）都用扫码登录，必须用一个"登录中转"子域（如 `login.docs.paratera.co`）作为回调
-3. 回调成功后 cookie 的作用域是回调 host。如果你访问的是 `alice.docs.paratera.co`，需要确保 cookie 能在那边读到 —— 详见 **已知限制**
+2. 企业微信每个应用只允许配置**一个**回调 URL。如果你想让多个子域（`alice.example.com`、`bob.example.com`）都用扫码登录，必须用一个"登录中转"子域（如 `login.example.com`）作为回调
+3. 回调成功后 cookie 的作用域是回调 host。如果你访问的是 `alice.example.com`，需要确保 cookie 能在那边读到 —— 详见 **已知限制**
 
 重新加载 systemd 并重启：
 
@@ -197,7 +197,7 @@ droply access set --subdomain alice --wework
 访问受保护的站点：
 
 ```
-https://alice.docs.paratera.co/docs/
+https://alice.example.com/docs/
 ```
 
 实际行为取决于访问规则：
@@ -282,7 +282,7 @@ HMAC payload 包含 `sha256(allowed_users_json + userid)`，所以：
 **当前变通方案**：
 
 - **每个子域用单独应用**：为每个子域注册一个独立的企业微信应用，运行多个 droply-server 实例
-- **父域 cookie**（计划中）：把 cookie 作用域设为 `.docs.paratera.co`，让所有子域共享会话（代价：子域之间的隔离变弱）
+- **父域 cookie**（计划中）：把 cookie 作用域设为 `.example.com`，让所有子域共享会话（代价：子域之间的隔离变弱）
 
 ### 2. 校验文件托管
 
