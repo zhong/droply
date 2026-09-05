@@ -8,4 +8,4 @@ GOBIN="$test_tools" go install "github.com/letsencrypt/pebble/v2/cmd/pebble@$ver
 GOBIN="$test_tools" go install "github.com/letsencrypt/pebble/v2/cmd/pebble-challtestsrv@$version"
 PEBBLE_DIR="$(go env GOMODCACHE)/github.com/letsencrypt/pebble/v2@$version"
 export PEBBLE_DIR
-PATH="$test_tools:$PATH" DROPLY_ACME_INTEGRATION=1 go test -tags=integration -race ./internal/certificates -count=1
+PATH="$test_tools:$PATH" DROPLY_ACME_INTEGRATION=1 sh scripts/test-required.sh TestLocalACME ./internal/certificates -race

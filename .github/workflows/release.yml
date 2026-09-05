@@ -4,18 +4,28 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    uses: ./.github/workflows/ci.yml
+
+  acceptance:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: CGO_ENABLED=0 go test ./...
+      - name: Controlled ACME
+        run: sh scripts/test-acme.sh
+      - name: Restore into a new directory and serve real HTTP and TLS
+        run: sh scripts/test-required.sh TestRestoreRealHTTPAndTLSAccessDomainsAndRollback ./internal/backup
 
   build:
-    needs: test
+    needs: [test, acceptance]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,8 +43,8 @@ jobs:
             goarch: amd64
             binaries: cli
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Build
