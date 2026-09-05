@@ -76,11 +76,11 @@ func newAccessSetCmd() *cobra.Command {
 			}
 
 			var result map[string]any
-			if err := client.doJSON("PUT", apiPath, reqBody, &result); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "PUT", apiPath, reqBody, &result); err != nil {
 				return err
 			}
 
-			fmt.Println("Access control updated.")
+			fmt.Fprintln(cmd.OutOrStdout(), "Access control updated.")
 
 			// Determine password to display.
 			var displayPassword string
@@ -103,27 +103,27 @@ func newAccessSetCmd() *cobra.Command {
 					ttl = t
 				}
 
-				fmt.Println(buildShareLine(siteURL, displayPassword, ips, ttl))
+				fmt.Fprintln(cmd.OutOrStdout(), buildShareLine(siteURL, displayPassword, ips, ttl))
 			} else {
 				// Fallback: original format for non-standard API URLs.
 				if ips := result["allowed_ips"]; ips != nil {
-					fmt.Printf("  IP whitelist: %v\n", ips)
+					fmt.Fprintf(cmd.OutOrStdout(), "  IP whitelist: %v\n", ips)
 				}
 				if displayPassword != "" {
-					fmt.Printf("  Password: %s\n", displayPassword)
+					fmt.Fprintf(cmd.OutOrStdout(), "  Password: %s\n", displayPassword)
 				} else if result["has_password"] == true {
-					fmt.Println("  Password: (set)")
+					fmt.Fprintln(cmd.OutOrStdout(), "  Password: (set)")
 				}
 				if ttl, ok := result["session_ttl"].(float64); ok {
-					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
+					fmt.Fprintf(cmd.OutOrStdout(), "  Session TTL: %s\n", formatTTL(ttl))
 				}
 			}
 
 			if result["wework_enabled"] == true {
 				if users, ok := result["allowed_wework_users"].([]any); ok && len(users) > 0 {
-					fmt.Printf("  WeCom login: enabled (allow-list: %v)\n", users)
+					fmt.Fprintf(cmd.OutOrStdout(), "  WeCom login: enabled (allow-list: %v)\n", users)
 				} else {
-					fmt.Println("  WeCom login: enabled (any corp member)")
+					fmt.Fprintln(cmd.OutOrStdout(), "  WeCom login: enabled (any corp member)")
 				}
 			}
 
@@ -167,7 +167,7 @@ func newAccessGetCmd() *cobra.Command {
 			}
 
 			var result map[string]any
-			if err := client.doJSON("GET", apiPath, nil, &result); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "GET", apiPath, nil, &result); err != nil {
 				return err
 			}
 
@@ -175,21 +175,21 @@ func newAccessGetCmd() *cobra.Command {
 			if project != "" {
 				target = sub + "/" + project
 			}
-			fmt.Printf("Access control for %s:\n", target)
+			fmt.Fprintf(cmd.OutOrStdout(), "Access control for %s:\n", target)
 			if ips := result["allowed_ips"]; ips != nil {
-				fmt.Printf("  IP whitelist: %v\n", ips)
+				fmt.Fprintf(cmd.OutOrStdout(), "  IP whitelist: %v\n", ips)
 			}
 			if result["has_password"] == true {
-				fmt.Println("  Password: (set)")
+				fmt.Fprintln(cmd.OutOrStdout(), "  Password: (set)")
 				if ttl, ok := result["session_ttl"].(float64); ok {
-					fmt.Printf("  Session TTL: %s\n", formatTTL(ttl))
+					fmt.Fprintf(cmd.OutOrStdout(), "  Session TTL: %s\n", formatTTL(ttl))
 				}
 			}
 			if result["wework_enabled"] == true {
 				if users, ok := result["allowed_wework_users"].([]any); ok && len(users) > 0 {
-					fmt.Printf("  WeCom login: enabled (allow-list: %v)\n", users)
+					fmt.Fprintf(cmd.OutOrStdout(), "  WeCom login: enabled (allow-list: %v)\n", users)
 				} else {
-					fmt.Println("  WeCom login: enabled (any corp member)")
+					fmt.Fprintln(cmd.OutOrStdout(), "  WeCom login: enabled (any corp member)")
 				}
 			}
 			return nil
@@ -226,7 +226,7 @@ func newAccessRemoveCmd() *cobra.Command {
 				apiPath = fmt.Sprintf("/subdomains/%s/projects/%s/access", sub, project)
 			}
 
-			if err := client.doJSON("DELETE", apiPath, nil, nil); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "DELETE", apiPath, nil, nil); err != nil {
 				return err
 			}
 
@@ -234,7 +234,7 @@ func newAccessRemoveCmd() *cobra.Command {
 			if project != "" {
 				target = sub + "/" + project
 			}
-			fmt.Printf("Access control removed for %s.\n", target)
+			fmt.Fprintf(cmd.OutOrStdout(), "Access control removed for %s.\n", target)
 			return nil
 		},
 	}

@@ -71,7 +71,7 @@ func TestProjectTokenCommandRealAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	var response any
-	if err = NewAPIClient(&Context{APIURL: owner.APIURL, Token: issued.Token}).doJSON(http.MethodGet, "/subdomains/alice/projects/site/deployments", nil, &response); err == nil {
+	if err = NewAPIClient(&Context{APIURL: owner.APIURL, Token: issued.Token}).doJSONContext(t.Context(), http.MethodGet, "/subdomains/alice/projects/site/deployments", nil, &response); err == nil {
 		t.Fatal("revoked credential still authenticates")
 	}
 	for _, args := range [][]string{{"project-token", "create", "--scope", "admin"}, {"project-token", "create", "--expires-in", "0s"}, {"project-token", "create", "--expires-in", "9000h"}, {"project-token", "revoke", "-1"}} {

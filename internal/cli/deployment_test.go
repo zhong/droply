@@ -60,7 +60,7 @@ func deploymentCommandFixture(t *testing.T) (func(...string) (string, error), fu
 		var response struct {
 			Token string `json:"api_token"`
 		}
-		if err := anonymous.doJSON("POST", "/auth/register", map[string]string{"email": name + "@example.com", "password": "test-password"}, &response); err != nil {
+		if err := anonymous.doJSONContext(t.Context(), "POST", "/auth/register", map[string]string{"email": name + "@example.com", "password": "test-password"}, &response); err != nil {
 			t.Fatal(err)
 		}
 		tokens[name] = response.Token
@@ -72,7 +72,7 @@ func deploymentCommandFixture(t *testing.T) (func(...string) (string, error), fu
 		}
 	}
 	selectUser("owner")
-	if err := NewAPIClient(mustLoadConfig(t)).doJSON("POST", "/subdomains", map[string]string{"name": "alice"}, nil); err != nil {
+	if err := NewAPIClient(mustLoadConfig(t)).doJSONContext(t.Context(), "POST", "/subdomains", map[string]string{"name": "alice"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	projectDir := t.TempDir()

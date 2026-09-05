@@ -59,19 +59,19 @@ func newLogsCmd() *cobra.Command {
 				} `json:"logs"`
 				Total int `json:"total"`
 			}
-			if err := client.doJSON("GET", apiPath, nil, &resp); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "GET", apiPath, nil, &resp); err != nil {
 				return err
 			}
 
-			fmt.Printf("Project: %s/%s  |  Showing %d of %d logs\n\n", sub, projectName, len(resp.Logs), resp.Total)
+			fmt.Fprintf(cmd.OutOrStdout(), "Project: %s/%s  |  Showing %d of %d logs\n\n", sub, projectName, len(resp.Logs), resp.Total)
 
 			if len(resp.Logs) == 0 {
-				fmt.Println("No visit logs found.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No visit logs found.")
 				return nil
 			}
 
 			for _, l := range resp.Logs {
-				fmt.Printf("  %s  %s  %s  %s\n", l.VisitedAt, l.Path, l.IP, truncate(l.Referer, 40))
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  %s  %s\n", l.VisitedAt, l.Path, l.IP, truncate(l.Referer, 40))
 			}
 			return nil
 		},

@@ -31,10 +31,10 @@ func newSubdomainCreateCmd() *cobra.Command {
 			client := NewAPIClient(cfg)
 
 			var result map[string]any
-			if err := client.doJSON("POST", "/subdomains", map[string]string{"name": name}, &result); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "POST", "/subdomains", map[string]string{"name": name}, &result); err != nil {
 				return err
 			}
-			fmt.Printf("Subdomain %q created successfully.\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Subdomain %q created successfully.\n", name)
 			return nil
 		},
 	}
@@ -55,15 +55,15 @@ func newSubdomainListCmd() *cobra.Command {
 				Name         string `json:"name"`
 				ProjectCount int    `json:"project_count"`
 			}
-			if err := client.doJSON("GET", "/subdomains", nil, &subdomains); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "GET", "/subdomains", nil, &subdomains); err != nil {
 				return err
 			}
 			if len(subdomains) == 0 {
-				fmt.Println("No subdomains found.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No subdomains found.")
 				return nil
 			}
 			for _, s := range subdomains {
-				fmt.Printf("%-32s  %d project(s)\n", s.Name, s.ProjectCount)
+				fmt.Fprintf(cmd.OutOrStdout(), "%-32s  %d project(s)\n", s.Name, s.ProjectCount)
 			}
 			return nil
 		},
@@ -83,10 +83,10 @@ func newSubdomainDeleteCmd() *cobra.Command {
 			}
 			client := NewAPIClient(cfg)
 
-			if err := client.doJSON("DELETE", "/subdomains/"+name, nil, nil); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "DELETE", "/subdomains/"+name, nil, nil); err != nil {
 				return err
 			}
-			fmt.Printf("Subdomain %q deleted.\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Subdomain %q deleted.\n", name)
 			return nil
 		},
 	}

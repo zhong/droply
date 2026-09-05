@@ -14,7 +14,7 @@ func newVersionCmd(version string) *cobra.Command {
 			if version == "" {
 				version = "dev"
 			}
-			fmt.Println(version)
+			fmt.Fprintln(cmd.OutOrStdout(), version)
 		},
 	}
 }

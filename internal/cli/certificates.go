@@ -17,7 +17,7 @@ func newCertificateCmd() *cobra.Command {
 				return err
 			}
 			var status map[string]any
-			if err := NewAPIClient(ctx).doJSON(http.MethodGet, "/certificates/"+url.PathEscape(args[0]), nil, &status); err != nil {
+			if err := NewAPIClient(ctx).doJSONContext(cmd.Context(), http.MethodGet, "/certificates/"+url.PathEscape(args[0]), nil, &status); err != nil {
 				return err
 			}
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(status)

@@ -23,7 +23,7 @@ func newMemberCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/members", nil, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, path+"/members", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -42,7 +42,7 @@ func newMemberCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodPut, path+"/members", map[string]string{"email": args[0], "role": role}, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodPut, path+"/members", map[string]string{"email": args[0], "role": role}, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -61,7 +61,7 @@ func newMemberCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodDelete, path+"/members/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodDelete, path+"/members/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"user_id": id, "removed": true})
@@ -77,7 +77,7 @@ func newProjectsCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodGet, "/projects", nil, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, "/projects", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)

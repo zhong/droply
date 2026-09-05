@@ -32,7 +32,7 @@ func newAuditCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"?"+query.Encode(), nil, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, path+"?"+query.Encode(), nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)

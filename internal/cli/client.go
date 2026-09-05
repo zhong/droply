@@ -32,7 +32,7 @@ func NewAPIClient(ctx *Context) *APIClient {
 // doJSON performs a JSON request against the API. If body is non-nil it is
 // marshalled as the request body. The response is decoded into result if
 // non-nil. An error is returned for non-2xx responses.
-func (c *APIClient) doJSON(method, path string, body any, result any) error {
+func (c *APIClient) doJSONContext(ctx context.Context, method, path string, body any, result any) error {
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -42,7 +42,7 @@ func (c *APIClient) doJSON(method, path string, body any, result any) error {
 		reqBody = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest(method, c.BaseURL+path, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, reqBody)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -59,23 +59,9 @@ func (c *APIClient) doJSON(method, path string, body any, result any) error {
 	}
 	defer resp.Body.Close()
 
-	respBytes, err := io.ReadAll(resp.Body)
+	respBytes, err := readAPIResponse(resp)
 	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResp struct {
-			Error        string `json:"error"`
-			DeploymentID int64  `json:"deployment_id"`
-			Version      int    `json:"version"`
-		}
-		if jsonErr := json.Unmarshal(respBytes, &errResp); jsonErr == nil {
-			if msg := errResp.Error; msg != "" {
-				return fmt.Errorf("API error: %s", msg)
-			}
-		}
-		return fmt.Errorf("API error: status %d", resp.StatusCode)
+		return err
 	}
 
 	if result != nil && len(respBytes) > 0 {
@@ -84,11 +70,6 @@ func (c *APIClient) doJSON(method, path string, body any, result any) error {
 		}
 	}
 	return nil
-}
-
-// uploadFile uploads filePath as a multipart form to the given API path.
-func (c *APIClient) uploadFile(path, filePath string) (map[string]any, error) {
-	return c.uploadFileContext(context.Background(), path, filePath)
 }
 
 func (c *APIClient) uploadFileContext(ctx context.Context, path, filePath string) (map[string]any, error) {
@@ -126,6 +107,19 @@ func (c *APIClient) uploadFileContext(ctx context.Context, path, filePath string
 	}
 	defer resp.Body.Close()
 
+	respBytes, err := readAPIResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+func readAPIResponse(resp *http.Response) ([]byte, error) {
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
@@ -133,9 +127,7 @@ func (c *APIClient) uploadFileContext(ctx context.Context, path, filePath string
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var errResp struct {
-			Error        string `json:"error"`
-			DeploymentID int64  `json:"deployment_id"`
-			Version      int    `json:"version"`
+			Error string `json:"error"`
 		}
 		if jsonErr := json.Unmarshal(respBytes, &errResp); jsonErr == nil {
 			if msg := errResp.Error; msg != "" {
@@ -145,9 +137,5 @@ func (c *APIClient) uploadFileContext(ctx context.Context, path, filePath string
 		return nil, fmt.Errorf("API error: status %d", resp.StatusCode)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return result, nil
+	return respBytes, nil
 }

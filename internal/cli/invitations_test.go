@@ -69,10 +69,10 @@ func TestInvitationCommandRealAPI(t *testing.T) {
 	}
 	client := NewAPIClient(&Context{APIURL: api.URL})
 	body := map[string]string{"email": "member@example.com", "password": "test-password", "invite": created.Token}
-	if err := client.doJSON("POST", "/auth/register", body, &account); err != nil {
+	if err := client.doJSONContext(t.Context(), "POST", "/auth/register", body, &account); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.doJSON("POST", "/auth/register", body, nil); err == nil {
+	if err := client.doJSONContext(t.Context(), "POST", "/auth/register", body, nil); err == nil {
 		t.Fatal("invitation reused")
 	}
 	t.Setenv("DROPLY_TOKEN", account.Token)
@@ -92,7 +92,7 @@ func TestInvitationCommandRealAPI(t *testing.T) {
 	}
 	body["email"] = "other@example.com"
 	body["invite"] = created.Token
-	if err := client.doJSON("POST", "/auth/register", body, nil); err == nil {
+	if err := client.doJSONContext(t.Context(), "POST", "/auth/register", body, nil); err == nil {
 		t.Fatal("revoked invitation accepted")
 	}
 }
