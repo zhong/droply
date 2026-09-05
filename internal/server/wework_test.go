@@ -761,15 +761,12 @@ func TestWeWorkAutoRedirectDisabledWhenServerNotConfigured(t *testing.T) {
 
 // extractQueryParam pulls a query parameter out of a URL string. Empty if not found.
 func extractQueryParam(rawURL, key string) string {
-	idx := strings.Index(rawURL, "?")
-	if idx < 0 {
+	_, query, found := strings.Cut(rawURL, "?")
+	if !found {
 		return ""
 	}
 	// Trim fragment if present.
-	q := rawURL[idx+1:]
-	if hash := strings.Index(q, "#"); hash >= 0 {
-		q = q[:hash]
-	}
+	q, _, _ := strings.Cut(query, "#")
 	for _, pair := range strings.Split(q, "&") {
 		kv := strings.SplitN(pair, "=", 2)
 		if len(kv) == 2 && kv[0] == key {

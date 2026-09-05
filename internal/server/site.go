@@ -581,10 +581,10 @@ func (s *Server) requestSiteTarget(r *http.Request) *model.SiteTarget {
 	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	suffix := "." + s.baseDomain
-	if !strings.HasSuffix(host, suffix) {
+	label, ok := strings.CutSuffix(host, suffix)
+	if !ok {
 		return nil
 	}
-	label := strings.TrimSuffix(host, suffix)
 	target, _ := s.store.GetSiteTarget(r.Context(), label)
 	return target
 }

@@ -38,8 +38,7 @@ func (s *Server) AllowedTLSHost(host string) bool {
 	}
 
 	// Direct subdomain of base: must be a single label, must exist in store.
-	if suffix := "." + base; strings.HasSuffix(host, suffix) {
-		sub := strings.TrimSuffix(host, suffix)
+	if sub, ok := strings.CutSuffix(host, "."+base); ok {
 		if sub == "" || strings.Contains(sub, ".") {
 			return false
 		}
