@@ -44,3 +44,11 @@ build-linux-amd64:
 
 build-windows-amd64:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-windows-amd64.exe ./cmd/droply
+
+.PHONY: website check-website
+# Prepare the standalone script downloads before publishing website/.
+website:
+	sh scripts/website-scripts.sh
+
+check-website:
+	sh scripts/website-scripts.sh --check
