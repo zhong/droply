@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,7 +282,38 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 
 // serveFile serves a static file from the sites directory.
 func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID int64, subdomain, project, servePath string) {
-	root := filepath.Join(s.sitesDir, subdomain, project)
+	if err := s.PrepareDeployments(r.Context()); err != nil {
+		http.Error(w, "deployment storage unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	s.deploymentMu.RLock()
+	defer s.deploymentMu.RUnlock()
+	proj, err := s.store.GetProject(subdomainID, project)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	deployment, err := s.store.GetActiveDeployment(r.Context(), proj.ID)
+	if err != nil || !deployment.Available {
+		http.NotFound(w, r)
+		return
+	}
+	root := s.artifacts.Path(deployment.ArtifactID)
+	if root == "" {
+		http.Error(w, "artifact unavailable", 503)
+		return
+	}
+	// Timestamp validators have only second precision and can otherwise keep an
+	// older deployment cached after a rapid publish or rollback. Bind validators
+	// to both the immutable artifact and the requested representation instead.
+	etag := sha256.Sum256([]byte(deployment.Checksum + "\x00" + servePath))
+	w.Header().Set("ETag", `"`+hex.EncodeToString(etag[:])+`"`)
+	r = r.Clone(r.Context())
+	r.Header.Del("If-Modified-Since")
+	if value := r.Header.Get("If-Range"); value != "" && !strings.HasPrefix(value, `"`) {
+		r.Header.Del("Range")
+		r.Header.Del("If-Range")
+	}
 	// Use http.Dir + http.FileServer for proper file serving.
 	fs := http.FileServer(http.Dir(root))
 	// Rewrite the request path to servePath.

@@ -86,6 +86,12 @@ func (s *Server) handleDeleteSubdomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.PrepareDeployments(r.Context()); err != nil {
+		jsonError(w, "deployment storage unavailable", 503)
+		return
+	}
+	s.deploymentMu.Lock()
+	defer s.deploymentMu.Unlock()
 	if err := s.store.DeleteSubdomain(user.ID, subName); err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return

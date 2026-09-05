@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/zhong/droply/internal/certificates"
 	"net/http"
 	"net/netip"
 	"sync"
@@ -12,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/zhong/droply/internal/artifacts"
+	"github.com/zhong/droply/internal/certificates"
 	"github.com/zhong/droply/internal/model"
 	"github.com/zhong/droply/internal/store"
 	"github.com/zhong/droply/internal/wework"
@@ -23,33 +24,40 @@ const userContextKey contextKey = "user"
 
 // Server holds all dependencies for the HTTP server.
 type Server struct {
-	certificates   *certificates.Manager
-	analyticsStart sync.Once
-	analyticsStop  sync.Once
-	visitsMu       sync.RWMutex
-	visitsClosed   bool
-	store          store.Store
-	dnsResolver    DNSResolver
-	trustedProxies []netip.Prefix
-	sitesDir       string
-	baseDomain     string
-	router         *chi.Mux
-	hmacKey        []byte
-	visitCh        chan visitRecord
-	done           chan struct{}
-	wework         *wework.Client
-	weworkState    *wework.StateStore
+	uploadMu          sync.Mutex
+	deploymentMu      sync.RWMutex
+	prepareOnce       sync.Once
+	prepareError      error
+	artifacts         *artifacts.Store
+	deploymentOptions DeploymentOptions
+	certificates      *certificates.Manager
+	analyticsStart    sync.Once
+	analyticsStop     sync.Once
+	visitsMu          sync.RWMutex
+	visitsClosed      bool
+	store             store.Store
+	dnsResolver       DNSResolver
+	trustedProxies    []netip.Prefix
+	sitesDir          string
+	baseDomain        string
+	router            *chi.Mux
+	hmacKey           []byte
+	visitCh           chan visitRecord
+	done              chan struct{}
+	wework            *wework.Client
+	weworkState       *wework.StateStore
 }
 
 // New creates a new Server and registers all routes.
 func New(s store.Store, sitesDir, baseDomain string, hmacKey []byte) *Server {
 	srv := &Server{
-		store:      s,
-		sitesDir:   sitesDir,
-		baseDomain: baseDomain,
-		hmacKey:    hmacKey,
-		visitCh:    make(chan visitRecord, 1000),
-		done:       make(chan struct{}),
+		deploymentOptions: DeploymentOptions{RetainCount: 10, RetainDays: 30, OrphanGrace: time.Hour},
+		store:             s,
+		sitesDir:          sitesDir,
+		baseDomain:        baseDomain,
+		hmacKey:           hmacKey,
+		visitCh:           make(chan visitRecord, 1000),
+		done:              make(chan struct{}),
 	}
 	srv.router = srv.buildRouter()
 	return srv
@@ -95,6 +103,9 @@ func (s *Server) buildRouter() *chi.Mux {
 
 		r.Post("/subdomains/{sub}/projects/{project}/deploy", s.handleDeploy)
 		r.Get("/subdomains/{sub}/projects/{project}/deployments", s.handleListDeployments)
+		r.Post("/subdomains/{sub}/projects/{project}/rollback/{version}", s.handleRollback)
+		r.Get("/subdomains/{sub}/projects/{project}/cleanup", s.handleDeploymentCleanup)
+		r.Post("/subdomains/{sub}/projects/{project}/cleanup", s.handleDeploymentCleanup)
 
 		r.Post("/subdomains/{sub}/projects/{project}/domains", s.handleCreateDomain)
 		r.Get("/subdomains/{sub}/projects/{project}/domains", s.handleListDomains)

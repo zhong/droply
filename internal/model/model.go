@@ -27,13 +27,19 @@ type Project struct {
 }
 
 type Deployment struct {
-	ID        int64     `json:"id"`
-	ProjectID int64     `json:"project_id"`
-	Version   int       `json:"version"`
-	FileCount int       `json:"file_count"`
-	TotalSize int64     `json:"total_size"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ArtifactID    string    `json:"artifact_id,omitempty"`
+	ArtifactState string    `json:"artifact_state"`
+	Available     bool      `json:"available"`
+	FailureReason string    `json:"failure_reason,omitempty"`
+	Checksum      string    `json:"checksum,omitempty"`
+	Production    bool      `json:"production"`
+	ID            int64     `json:"id"`
+	ProjectID     int64     `json:"project_id"`
+	Version       int       `json:"version"`
+	FileCount     int       `json:"file_count"`
+	TotalSize     int64     `json:"total_size"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type CustomDomain struct {

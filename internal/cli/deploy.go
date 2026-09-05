@@ -155,7 +155,7 @@ func createTarGz(w io.Writer, srcDir, projectRoot string, pc *ProjectConfig) (in
 		if err != nil {
 			return err
 		}
-		hdr.Name = rel
+		hdr.Name = filepath.ToSlash(rel)
 		if info.IsDir() {
 			hdr.Name += "/"
 		}

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -80,7 +81,7 @@ func newDeployTestServer(t *testing.T) (*server.Server, string) {
 }
 
 func TestDeploy(t *testing.T) {
-	srv, sitesDir := newDeployTestServer(t)
+	srv, _ := newDeployTestServer(t)
 	token := registerAndGetToken(t, srv, "alice@example.com", "password123")
 
 	// Create subdomain first.
@@ -127,16 +128,16 @@ func TestDeploy(t *testing.T) {
 	}
 
 	// Verify files exist on disk.
-	if _, err := os.Stat(filepath.Join(sitesDir, "alice", "mysite", "index.html")); err != nil {
+	if _, err := readSiteFile(srv, "alice.droplydoc.com", "/mysite/index.html"); err != nil {
 		t.Fatalf("index.html not on disk: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(sitesDir, "alice", "mysite", "style.css")); err != nil {
+	if _, err := readSiteFile(srv, "alice.droplydoc.com", "/mysite/style.css"); err != nil {
 		t.Fatalf("style.css not on disk: %v", err)
 	}
 }
 
 func TestRedeployOverwritesFiles(t *testing.T) {
-	srv, sitesDir := newDeployTestServer(t)
+	srv, _ := newDeployTestServer(t)
 	token := registerAndGetToken(t, srv, "redeploy@example.com", "password123")
 
 	// Create subdomain.
@@ -172,7 +173,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 	}
 
 	// Verify first deploy content.
-	content1, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "index.html"))
+	content1, err := readSiteFile(srv, "redeployer.droplydoc.com", "/mysite/index.html")
 	if err != nil {
 		t.Fatalf("read index.html after first deploy: %v", err)
 	}
@@ -202,7 +203,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 	}
 
 	// Verify files were ACTUALLY overwritten with new content.
-	content2, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "index.html"))
+	content2, err := readSiteFile(srv, "redeployer.droplydoc.com", "/mysite/index.html")
 	if err != nil {
 		t.Fatalf("read index.html after second deploy: %v", err)
 	}
@@ -210,7 +211,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 		t.Fatalf("REDEPLOY BUG: index.html was NOT updated!\n  expected: %q\n  got:      %q", "<html><body>Version 2 UPDATED</body></html>", string(content2))
 	}
 
-	cssContent, err := os.ReadFile(filepath.Join(sitesDir, "redeployer", "mysite", "style.css"))
+	cssContent, err := readSiteFile(srv, "redeployer.droplydoc.com", "/mysite/style.css")
 	if err != nil {
 		t.Fatalf("read style.css after second deploy: %v", err)
 	}
@@ -275,7 +276,7 @@ func createTarGzWithFileInfoHeader(t *testing.T, files map[string]string) *bytes
 }
 
 func TestDeployWithFileInfoHeader(t *testing.T) {
-	srv, sitesDir := newDeployTestServer(t)
+	srv, _ := newDeployTestServer(t)
 	token := registerAndGetToken(t, srv, "fih@example.com", "password123")
 
 	body, _ := json.Marshal(map[string]string{"name": "fihtest"})
@@ -312,7 +313,7 @@ func TestDeployWithFileInfoHeader(t *testing.T) {
 	}
 
 	// Verify files on disk.
-	content, err := os.ReadFile(filepath.Join(sitesDir, "fihtest", "site", "index.html"))
+	content, err := readSiteFile(srv, "fihtest.droplydoc.com", "/site/index.html")
 	if err != nil {
 		t.Fatalf("index.html not on disk: %v", err)
 	}
@@ -388,4 +389,19 @@ func stringContains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// Observe published content through the supported HTTP boundary.
+func readSiteFile(srv *server.Server, host, path string) ([]byte, error) {
+	req := httptest.NewRequest("GET", path, nil)
+	req.Host = host
+	w := httptest.NewRecorder()
+	srv.NewSiteHandler().ServeHTTP(w, req)
+	if w.Code == 301 && len(path) >= 10 && path[len(path)-10:] == "index.html" {
+		return readSiteFile(srv, host, path[:len(path)-10])
+	}
+	if w.Code != 200 {
+		return nil, fmt.Errorf("site returned %d: %s", w.Code, w.Body.String())
+	}
+	return w.Body.Bytes(), nil
 }

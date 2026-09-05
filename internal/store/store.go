@@ -1,6 +1,9 @@
 package store
 
-import "github.com/zhong/droply/internal/model"
+import (
+	"context"
+	"github.com/zhong/droply/internal/model"
+)
 
 type Store interface {
 	CreateUser(email, hashedPassword, apiToken string) (*model.User, error)
@@ -14,6 +17,18 @@ type Store interface {
 	GetProject(subdomainID int64, name string) (*model.Project, error)
 	ListProjects(subdomainID int64) ([]model.Project, error)
 	DeleteProject(subdomainID int64, name string) error
+	BeginDeployment(context.Context, int64, string) (*model.Deployment, error)
+	CommitDeployment(context.Context, int64, int, int64, string) error
+	FailDeployment(context.Context, int64, string) error
+	GetActiveDeployment(context.Context, int64) (*model.Deployment, error)
+	GetDeployment(context.Context, int64, int) (*model.Deployment, error)
+	ListAllDeployments(context.Context) ([]model.Deployment, error)
+	AttachLegacyArtifact(context.Context, int64, string, int, int64, string) error
+	SwitchDeployment(context.Context, int64, int) (*model.Deployment, bool, error)
+	DeploymentReferenced(context.Context, int64) (bool, error)
+	MarkArtifactDeleting(context.Context, int64) error
+	SetArtifactState(context.Context, int64, string) error
+	PutDeploymentReference(context.Context, int64, string, int64) error
 	CreateDeployment(projectID int64, fileCount int, totalSize int64) (*model.Deployment, error)
 	ActivateDeployment(deploymentID int64) error
 	ListDeployments(projectID int64) ([]model.Deployment, error)

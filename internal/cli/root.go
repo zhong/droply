@@ -24,6 +24,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newContextCmd())
 	root.AddCommand(newSubdomainCmd())
 	root.AddCommand(newDeployCmd())
+	root.AddCommand(newDeploymentCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newDomainCmd())
 	root.AddCommand(newCertificateCmd())
