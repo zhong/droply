@@ -26,7 +26,7 @@ type cleanupReport struct {
 }
 
 func (s *Server) handleDeploymentCleanup(w http.ResponseWriter, r *http.Request) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}

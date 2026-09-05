@@ -57,7 +57,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 			if _, err := st.PutProjectMember(t.Context(), project.ID, member.Email, "deployer"); err != nil {
 				t.Fatal(err)
 			}
-			barrier := &publicationRoleBarrier{Store: st, at: 2, ready: make(chan struct{})}
+			barrier := &publicationRoleBarrier{Store: st, at: 1, ready: make(chan struct{})}
 			srv := New(barrier, t.TempDir(), "example.test", []byte("publication-test-key"))
 			if err := srv.PrepareDeployments(t.Context()); err != nil {
 				t.Fatal(err)
@@ -91,7 +91,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 				}
 				credentialID = credential.ID
 				raw = value
-				barrier.at = 3
+				barrier.at = 2
 			}
 			srv.deploymentMu.Lock()
 			locked := true
@@ -103,6 +103,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 			result := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
 				r := httptest.NewRequest("POST", "/subdomains/team/projects/site/"+tc.action, nil)
+				r.Host = "api.example.test"
 				r.Header.Set("Authorization", "Bearer "+raw)
 				w := httptest.NewRecorder()
 				srv.ServeHTTP(w, r)

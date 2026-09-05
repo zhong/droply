@@ -12,28 +12,6 @@ import (
 	"github.com/zhong/droply/internal/store"
 )
 
-func (s *Server) ownedProject(w http.ResponseWriter, r *http.Request) *model.Project {
-	sub, err := s.store.GetSubdomainByName(chi.URLParam(r, "sub"))
-	if err != nil {
-		jsonError(w, "subdomain not found", 404)
-		return nil
-	}
-	if !s.canAccessSubdomainProject(r, sub) {
-		jsonError(w, "forbidden", 403)
-		return nil
-	}
-	project, err := s.authorizedProject(r, sub.ID, chi.URLParam(r, "project"))
-	if err != nil {
-		jsonError(w, "project not found", 404)
-		return nil
-	}
-	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok && token.ProjectID != project.ID {
-		jsonError(w, "project token cannot target this project", 403)
-		return nil
-	}
-	return project
-}
-
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 	s.switchPublication(w, r, false)
 }
@@ -43,7 +21,7 @@ func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promote bool) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
@@ -122,7 +100,7 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 }
 
 func (s *Server) handlePublicationEvents(w http.ResponseWriter, r *http.Request) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
