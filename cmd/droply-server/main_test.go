@@ -70,7 +70,8 @@ func TestStandaloneRestartPreservesUsersAndSigningKey(t *testing.T) {
 		go func() {
 			done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test", "--open-registration"})
 		}()
-		client := &http.Client{Timeout: time.Second}
+		// Registration hashes a password; allow race instrumentation on CI.
+		client := &http.Client{Timeout: 10 * time.Second}
 		request := func(method, path string, body []byte) *http.Response {
 			t.Helper()
 			req, err := http.NewRequest(method, "http://"+addr+path, bytes.NewReader(body))
