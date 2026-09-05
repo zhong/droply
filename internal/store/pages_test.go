@@ -292,16 +292,9 @@ func TestProjectAndPreviewHostsSurviveRestartAndDeletion(t *testing.T) {
 
 func TestPagesMigrationBackfillsM1ProjectsIdempotently(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := &SQLiteStore{db: db}
-	if err := old.migrate(); err != nil {
-		t.Fatal(err)
-	}
-	// Model the exact M1 shape, before host labels and preview metadata existed.
-	if _, err := db.Exec(`ALTER TABLE projects DROP COLUMN host_label;
+	old := openHistoricalSchema(t, path, "m1")
+	db := old.db
+	if _, err := db.Exec(`
  INSERT INTO users(id,email,password,api_token) VALUES(1,'legacy@test','hash','legacy-token');
  INSERT INTO subdomains(id,user_id,name) VALUES(1,1,'legacy');
  INSERT INTO projects(id,subdomain_id,name) VALUES(1,1,'site');

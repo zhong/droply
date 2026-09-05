@@ -303,17 +303,13 @@ func TestDeferredCommitFailureRetainsProduction(t *testing.T) {
 
 func openLegacyDeploymentFixture(t *testing.T, path string) (*SQLiteStore, int64) {
 	t.Helper()
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
+	s := openHistoricalSchema(t, path, "m0")
+	if _, err := s.db.Exec(`INSERT INTO users(id,email,password,api_token) VALUES(1,'deploy@example.com','hash','token');
+ INSERT INTO subdomains(id,user_id,name) VALUES(1,1,'deploy');
+ INSERT INTO projects(id,subdomain_id,name) VALUES(1,1,'site');`); err != nil {
 		t.Fatal(err)
 	}
-	db.SetMaxOpenConns(1)
-	s := &SQLiteStore{db: db}
-	if err := s.migrate(); err != nil {
-		s.Close()
-		t.Fatal(err)
-	}
-	return s, deploymentProject(t, s)
+	return s, 1
 }
 
 func TestLegacyDeploymentMigrationAndRestart(t *testing.T) {
