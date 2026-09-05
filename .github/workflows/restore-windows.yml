@@ -1,0 +1,24 @@
+name: Restore staging Windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-staging:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Exercise restored file permissions and flush handles
+        run: go test -count=1 -v ./internal/backup -run '^TestPrepareRestoredTree'
