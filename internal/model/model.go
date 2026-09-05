@@ -37,11 +37,14 @@ type Deployment struct {
 }
 
 type CustomDomain struct {
-	ID        int64     `json:"id"`
-	ProjectID int64     `json:"project_id"`
-	Domain    string    `json:"domain"`
-	Verified  bool      `json:"verified"`
-	CreatedAt time.Time `json:"created_at"`
+	Status             string    `json:"status"`
+	VerificationToken  string    `json:"verification_token,omitempty"`
+	VerificationRecord string    `json:"verification_record,omitempty"`
+	ID                 int64     `json:"id"`
+	ProjectID          int64     `json:"project_id"`
+	Domain             string    `json:"domain"`
+	Verified           bool      `json:"verified"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type DomainWithPath struct {

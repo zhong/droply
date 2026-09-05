@@ -67,7 +67,9 @@ func newDomainAddCmd() *cobra.Command {
 			client := NewAPIClient(cfg)
 
 			var result struct {
-				CnameTarget string `json:"cname_target"`
+				CnameTarget        string `json:"cname_target"`
+				VerificationRecord string `json:"verification_record"`
+				VerificationToken  string `json:"verification_token"`
 			}
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains", sub, proj)
 			if err := client.doJSON("POST", apiPath, map[string]string{"domain": domain}, &result); err != nil {
@@ -76,6 +78,8 @@ func newDomainAddCmd() *cobra.Command {
 
 			fmt.Printf("Domain %q added.\n", domain)
 			fmt.Printf("CNAME target: %s\n", result.CnameTarget)
+			fmt.Printf("Verification TXT: %s = %s\n", result.VerificationRecord, result.VerificationToken)
+			fmt.Println("Status: pending. Publish the TXT record, then run domain verify.")
 			return nil
 		},
 	}
@@ -108,7 +112,7 @@ func newDomainListCmd() *cobra.Command {
 				return nil
 			}
 			for _, d := range domains {
-				status := "unverified"
+				status := "pending"
 				if d.Verified {
 					status = "verified"
 				}
@@ -146,7 +150,7 @@ func newDomainVerifyCmd() *cobra.Command {
 			if result.Verified {
 				fmt.Printf("Domain %q verified.\n", domain)
 			} else {
-				fmt.Printf("Domain %q not verified: %s\n", domain, result.Message)
+				return fmt.Errorf("domain %q not verified: %s", domain, result.Message)
 			}
 			return nil
 		},

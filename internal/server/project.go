@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
+	"github.com/zhong/droply/internal/model"
 )
 
 // handleListProjects verifies subdomain ownership and returns all projects under it.

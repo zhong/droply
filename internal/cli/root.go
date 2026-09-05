@@ -26,6 +26,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newDeployCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newDomainCmd())
+	root.AddCommand(newCertificateCmd())
 	root.AddCommand(newAccessCmd())
 	root.AddCommand(newProjectCmd())
 	root.AddCommand(newStatsCmd())

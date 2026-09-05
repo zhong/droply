@@ -189,11 +189,6 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		return
 	}
 
-	// Update custom domain Caddy routes to protected.
-	if s.caddy != nil {
-		s.updateCustomDomainRoutes(sub.ID, subName, true)
-	}
-
 	resp := setAccessResponse{
 		ID:                 rule.ID,
 		AllowedIPs:         rule.AllowedIPs,
@@ -282,38 +277,5 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		return
 	}
 
-	// Check if subdomain still has any access rules; if not, switch custom domains back to unprotected.
-	if s.caddy != nil {
-		hasRules, err := s.store.HasAccessRules(sub.ID)
-		if err == nil && !hasRules {
-			s.updateCustomDomainRoutes(sub.ID, subName, false)
-		}
-	}
-
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// updateCustomDomainRoutes iterates all verified custom domains under the subdomain
-// and switches their Caddy routes to protected or unprotected.
-func (s *Server) updateCustomDomainRoutes(subdomainID int64, subdomainName string, protect bool) {
-	projects, err := s.store.ListProjects(subdomainID)
-	if err != nil {
-		return
-	}
-	for _, proj := range projects {
-		domains, err := s.store.ListCustomDomains(proj.ID)
-		if err != nil {
-			continue
-		}
-		for _, d := range domains {
-			if !d.Verified {
-				continue
-			}
-			if protect {
-				_ = s.caddy.SetCustomDomainProtected(d.Domain, s.siteAddr)
-			} else {
-				_ = s.caddy.SetCustomDomainUnprotected(d.Domain, subdomainName, proj.Name)
-			}
-		}
-	}
 }

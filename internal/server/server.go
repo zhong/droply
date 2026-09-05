@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/zhong/droply/internal/certificates"
 	"net/http"
+	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,40 +21,33 @@ type contextKey string
 
 const userContextKey contextKey = "user"
 
-// CaddyClient is the interface for interacting with the Caddy admin API.
-// Subdomain routes are handled by Caddy's wildcard reverse_proxy to the site server,
-// so only custom domain route management is needed here.
-type CaddyClient interface {
-	AddCustomDomainRoute(domain, subdomainName, projectName string) error
-	RemoveCustomDomainRoute(domain string) error
-	SetCustomDomainProtected(domain string, proxyAddr string) error
-	SetCustomDomainUnprotected(domain, subdomainName, projectName string) error
-}
-
 // Server holds all dependencies for the HTTP server.
 type Server struct {
-	store       store.Store
-	sitesDir    string
-	baseDomain  string
-	caddy       CaddyClient
-	router      *chi.Mux
-	hmacKey     []byte
-	siteAddr    string
-	visitCh     chan visitRecord
-	done        chan struct{}
-	wework      *wework.Client
-	weworkState *wework.StateStore
+	certificates   *certificates.Manager
+	analyticsStart sync.Once
+	analyticsStop  sync.Once
+	visitsMu       sync.RWMutex
+	visitsClosed   bool
+	store          store.Store
+	dnsResolver    DNSResolver
+	trustedProxies []netip.Prefix
+	sitesDir       string
+	baseDomain     string
+	router         *chi.Mux
+	hmacKey        []byte
+	visitCh        chan visitRecord
+	done           chan struct{}
+	wework         *wework.Client
+	weworkState    *wework.StateStore
 }
 
 // New creates a new Server and registers all routes.
-func New(s store.Store, sitesDir, baseDomain string, caddy CaddyClient, hmacKey []byte, siteAddr string) *Server {
+func New(s store.Store, sitesDir, baseDomain string, hmacKey []byte) *Server {
 	srv := &Server{
 		store:      s,
 		sitesDir:   sitesDir,
 		baseDomain: baseDomain,
-		caddy:      caddy,
 		hmacKey:    hmacKey,
-		siteAddr:   siteAddr,
 		visitCh:    make(chan visitRecord, 1000),
 		done:       make(chan struct{}),
 	}
@@ -82,7 +78,7 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Post("/auth/register", s.handleRegister)
 	r.Post("/auth/login", s.handleLogin)
 
-	// Public TLS check endpoint for Caddy on-demand TLS
+	// Hostname authorization for optional external gateways
 	r.Get("/_droply/tls-check", s.handleTLSCheck)
 
 	// Authenticated routes
@@ -91,6 +87,7 @@ func (s *Server) buildRouter() *chi.Mux {
 
 		r.Post("/subdomains", s.handleCreateSubdomain)
 		r.Get("/subdomains", s.handleListSubdomains)
+		r.Get("/certificates/{domain}", s.handleCertificateStatus)
 		r.Delete("/subdomains/{sub}", s.handleDeleteSubdomain)
 
 		r.Get("/subdomains/{sub}/projects", s.handleListProjects)

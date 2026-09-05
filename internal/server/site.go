@@ -66,8 +66,9 @@ var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
 
 // rateLimiter tracks per-IP rate limiters.
 type rateLimiter struct {
-	mu       sync.Mutex
-	limiters map[string]*rateLimiterEntry
+	mu          sync.Mutex
+	limiters    map[string]*rateLimiterEntry
+	lastCleanup time.Time
 }
 
 type rateLimiterEntry struct {
@@ -79,13 +80,20 @@ func newRateLimiter() *rateLimiter {
 	rl := &rateLimiter{
 		limiters: make(map[string]*rateLimiterEntry),
 	}
-	go rl.cleanup()
 	return rl
 }
 
 func (rl *rateLimiter) getLimiter(ip string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+	if time.Since(rl.lastCleanup) > 5*time.Minute {
+		for ip, entry := range rl.limiters {
+			if time.Since(entry.lastSeen) > 10*time.Minute {
+				delete(rl.limiters, ip)
+			}
+		}
+		rl.lastCleanup = time.Now()
+	}
 
 	entry, ok := rl.limiters[ip]
 	if !ok {
@@ -98,24 +106,14 @@ func (rl *rateLimiter) getLimiter(ip string) *rate.Limiter {
 	return entry.limiter
 }
 
-func (rl *rateLimiter) cleanup() {
-	for {
-		time.Sleep(5 * time.Minute)
-		rl.mu.Lock()
-		for ip, entry := range rl.limiters {
-			if time.Since(entry.lastSeen) > 10*time.Minute {
-				delete(rl.limiters, ip)
-			}
-		}
-		rl.mu.Unlock()
-	}
-}
-
 // NewSiteHandler returns an http.Handler that serves site content with access control.
-// It runs on a separate port from the API router.
+// Handler selects this handler for site hosts on the unified listener.
 func (s *Server) NewSiteHandler() http.Handler {
 	rl := newRateLimiter()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return s.withTrustedProxy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/_droply/") {
+			w.Header().Set("Cache-Control", "private, no-store")
+		}
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/_droply/login":
 			s.siteLoginHandler(w, r, rl)
@@ -128,7 +126,7 @@ func (s *Server) NewSiteHandler() http.Handler {
 			return
 		}
 		s.siteHandler(w, r)
-	})
+	}))
 }
 
 // resolveHost resolves the Host header to a subdomain name and optional project name.
@@ -140,6 +138,8 @@ func (s *Server) resolveHost(host string) (subdomainName, projectName string, ok
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
+
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
 
 	// Check if it's a subdomain of baseDomain.
 	suffix := "." + s.baseDomain
@@ -184,6 +184,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	var projectName string
 	var servePath string
 	var isCustomDomain bool
+	var redirectSlash bool
 
 	if customProject != "" {
 		// Custom domain: project is determined by the domain mapping.
@@ -204,9 +205,13 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Request is /project without trailing slash — redirect to /project/
 			// so relative URLs (e.g. href="style.css") resolve correctly.
-			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
-			return
+			redirectSlash = true
 		}
+	}
+
+	if _, err := s.store.GetProject(sub.ID, projectName); err != nil {
+		http.NotFound(w, r)
+		return
 	}
 
 	// Check access rule.
@@ -216,6 +221,18 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if rule != nil {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Add("Vary", "Cookie")
+	}
+	if redirectSlash {
+		target := r.URL.Path + "/"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
 	if rule != nil {
 		// Check IP whitelist first.
 		if len(rule.AllowedIPs) > 0 {
@@ -315,6 +332,11 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ra
 		redirect = "/"
 	}
 
+	if !validRedirectPath(redirect) || !sameHost(host, r.Host) {
+		jsonError(w, "invalid login destination", http.StatusBadRequest)
+		return
+	}
+
 	// Resolve the host to find subdomain/project.
 	subdomainName, customProject, ok := s.resolveHost(host)
 	if !ok {
@@ -374,7 +396,7 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ra
 		Value:    cookieValue,
 		Path:     "/",
 		Expires:  expiry,
-		Secure:   true,
+		Secure:   requestSecure(r),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -499,16 +521,10 @@ func (s *Server) validateV2Cookie(value, subdomain, project string, rule *model.
 		return false
 	}
 
-	// Resolve hash material based on auth method and the rule scope the cookie was issued for.
-	scopeRule := rule
-	if cookieProj == "" && project != "" {
-		// Cookie is subdomain-scoped but we matched a project-level rule. Re-look the subdomain rule.
-		sr, err := s.store.FindAccessRuleForSite(cookieSub, "")
-		if err != nil || sr == nil {
-			return false
-		}
-		scopeRule = sr
+	if cookieProj == "" && rule.ProjectID != nil {
+		return false
 	}
+	scopeRule := rule
 
 	var hashMaterial string
 	switch authMethod {
@@ -563,14 +579,10 @@ func (s *Server) validateLegacyCookie(value, subdomain, project string, rule *mo
 		return false
 	}
 
-	hashForVerify := rule.PasswordHash
-	if cookieProj == "" && project != "" {
-		subRule, err := s.store.FindAccessRuleForSite(cookieSub, "")
-		if err != nil || subRule == nil {
-			return false
-		}
-		hashForVerify = subRule.PasswordHash
+	if !rule.HasPassword || (cookieProj == "" && rule.ProjectID != nil) {
+		return false
 	}
+	hashForVerify := rule.PasswordHash
 
 	payload := fmt.Sprintf("%s:%s:%s:%s", cookieSub, cookieProj, expiryStr, hashForVerify)
 	mac := hmac.New(sha256.New, s.hmacKey)

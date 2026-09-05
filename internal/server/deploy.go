@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
+	"github.com/zhong/droply/internal/model"
 )
 
 const maxUploadSize = 50 << 20 // 50MB

@@ -6,31 +6,15 @@ Multi-user, multi-subdomain static content publishing platform. Publish static w
 
 ## Architecture
 
-```
-CLI (droply)                         Browser
-     |                                  |
-     | upload tar.gz                    | HTTPS
-     v                                  v
-+-------------------------------------------------+
-|                Caddy (443/80)                    |
-|          Auto HTTPS + Wildcard TLS               |
-+-------------------+-----------------------------+
-| api.droplydoc.com |  *.droplydoc.com            |
-| reverse_proxy     |  file_server / reverse_proxy|
-|    :8080          |  :8081 (protected sites)     |
-+--------+----------+-----------------------------+
-         |
-         v
-+------------------+    +-----------------+
-|  droply-server   |--->|     SQLite      |
-|  API :8080       |    |   droply.db     |
-|  Site :8081      |    +-----------------+
-+------------------+
+```text
+CLI / Browser → Droply HTTP + HTTPS
+                    ├─ api.example.com → authentication / deployment API
+                    └─ site hosts      → access control / files / statistics
+                                         ↓
+                                    SQLite + disk
 ```
 
-- **Caddy** — TLS termination, auto HTTPS (wildcard + custom domains), API reverse proxy, static file serving, protected site reverse proxy
-- **droply-server** — User auth, upload handling, metadata management, access control, dynamic route updates via Caddy Admin API
-- **droply** — CLI client, packages directories and uploads
+One Droply process serves the API, static files and HTTPS. An external gateway is optional; all sites share the same access-control path.
 
 ## Quick Start
 
@@ -120,287 +104,84 @@ droply deploy
 
 ## Server Deployment
 
-### One-Line Setup
+New installations run only `droply-server`; Caddy is not required. Existing installations should follow the [M0 migration and rollback guide](docs/migration-m0.md) before changing their service.
 
-Set up a complete droply server on a fresh VPS (Ubuntu/Debian):
+### Linux installation
 
-```bash
-curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-```
-
-The script will prompt you to choose a **TLS mode**:
-
-| Mode | Best For | Requirements |
-|------|----------|--------------|
-| **on-demand** (default) | Most users, <50 new subdomains/week | Ports 80 + 443 open, A records pointing to server |
-| **cloudflare** | Large subdomain count, or port 80 unavailable | Cloudflare API token |
-| **manual** | Corporate PKI, custom CA, airgapped | Your own certificate files |
-
-**On-demand mode** (recommended) requires **zero DNS API configuration** — just point your A records to the server and droply handles the rest. Caddy obtains individual certificates per subdomain using HTTP-01 challenge on first access (2-5 second delay on first visit, instant thereafter).
-
-For non-interactive setup:
+Download the script, then pass environment variables to the process executing it:
 
 ```bash
-# On-demand mode (default)
-DOMAIN=example.com TLS_MODE=on-demand curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-
-# Cloudflare mode (wildcard certificate)
-DOMAIN=example.com TLS_MODE=cloudflare CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-
-# Manual mode (bring your own certs)
-DOMAIN=example.com TLS_MODE=manual CERT_PATH=/path/to/cert.pem KEY_PATH=/path/to/key.pem \
-  curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+curl -fsSL https://droplydoc.com/setup.sh -o setup.sh
+sudo env DOMAIN=example.com TLS_MODE=auto ACME_EMAIL=admin@example.com sh setup.sh
 ```
 
-### TLS Mode Comparison
+The installer verifies release checksums and creates a dedicated `droply` user and systemd service on ports 80/443. Point the base domain, `*.example.com` and `api.example.com` to the server first. It checks listening ports and refuses to overwrite an existing service, environment or data directory. It never stops or uninstalls an existing gateway.
 
-```
-┌──────────────────┬──────────────┬────────────────┬─────────────────┐
-│                  │ On-Demand    │ Cloudflare     │ Manual          │
-├──────────────────┼──────────────┼────────────────┼─────────────────┤
-│ DNS API needed   │ No           │ Yes            │ No              │
-│ Port 80 needed   │ Yes          │ No             │ No              │
-│ Cert type        │ Per-subdomain│ Wildcard       │ User-provided   │
-│ First-visit lag  │ 2-5 sec      │ None           │ None            │
-│ LE rate limit    │ 50/week/dom  │ Unaffected     │ N/A             │
-│ Subdomain scale  │ Hundreds     │ Unlimited      │ Per cert limit  │
-└──────────────────┴──────────────┴────────────────┴─────────────────┘
-```
-
-**When to use each mode:**
-
-- **On-demand**: Default choice for most deployments. Works with any DNS provider (no API integration needed). Just configure A records and you're done.
-- **Cloudflare**: When you have hundreds of subdomains or need to close port 80 (e.g., corporate firewall). Requires Cloudflare DNS and an API token.
-- **Manual**: Enterprise environments with internal PKI, custom certificate authorities, or airgapped networks.
-
-<details>
-<summary>Manual setup</summary>
-
-### Prerequisites
-
-- A VPS (Ubuntu/Debian recommended)
-- A domain (e.g. `droplydoc.com`) with DNS configured:
-  - `A` record: `droplydoc.com` → server IP
-  - `A` record: `*.droplydoc.com` → server IP
-  - `A` record: `api.droplydoc.com` → server IP
-- [Caddy](https://caddyserver.com/docs/install) installed
-
-### 1. Install Caddy
-
-**For on-demand or manual TLS modes** (most users):
+Other modes:
 
 ```bash
-curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
-sudo mv /tmp/caddy /usr/bin/caddy
-sudo chmod +x /usr/bin/caddy
+# Cloudflare DNS wildcard certificates; keep the token in a protected file
+sudo env DOMAIN=example.com TLS_MODE=cloudflare \
+  CF_TOKEN_FILE=/root/cloudflare-token ACME_EMAIL=admin@example.com sh setup.sh
+
+# Existing certificate; it must cover api.example.com and the served site names
+sudo env DOMAIN=example.com TLS_MODE=manual \
+  CERT_PATH=/root/cert.pem KEY_PATH=/root/key.pem sh setup.sh
+
+# Behind an existing gateway; trust only its actual source addresses
+sudo env DOMAIN=example.com TLS_MODE=http HTTP_ADDR=127.0.0.1:8080 \
+  TRUSTED_PROXIES=127.0.0.1/32 sh setup.sh
+
+# Install a locally built server binary without downloading a release
+sudo env DOMAIN=example.com TLS_MODE=auto \
+  LOCAL_BINARY="$PWD/bin/droply-server" sh setup.sh
 ```
 
-**For Cloudflare mode** (wildcard certificates via DNS-01):
+`UPGRADE=1` backs up and replaces only the existing binary, preserving the service, environment, data and certificates without restarting. Back up the database and content using the migration guide before switching. `VERSION=vX.Y.Z` pins a release; `DATA_DIR` selects a new data directory; `ACME_CA` can select an ACME staging endpoint.
+
+### Run directly
 
 ```bash
-# Install Go if needed
-curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
-export PATH="/usr/local/go/bin:$PATH"
+# Automatic per-host HTTPS; certificates persist in data-dir/certificates
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :80 --https-addr :443 --tls-mode auto --acme-email admin@example.com
 
-# Install xcaddy and build Caddy with Cloudflare DNS module
-go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-~/go/bin/xcaddy build --with github.com/caddy-dns/cloudflare
-sudo mv caddy /usr/bin/caddy
+# DNS wildcard HTTPS
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :80 --tls-mode cloudflare --cloudflare-token-file ./cloudflare-token
+
+# Manual PEM certificate and key
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :8080 --https-addr :8443 --tls-mode manual --tls-cert ./cert.pem --tls-key ./key.pem
+
+# HTTP behind an optional existing TLS gateway
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr 127.0.0.1:8080 --tls-mode http --trusted-proxies 127.0.0.1/32
 ```
 
-### 2. TLS Configuration
+Binding ports 80/443 requires permission; the installer grants `CAP_NET_BIND_SERVICE` through systemd. Automatic per-host mode requires public ACME challenge reachability. Cloudflare mode requires `Zone:DNS:Edit` and `Zone:Zone:Read` permissions for the zones of the names being issued. Administrators renew manual certificates and restart the server to load them.
 
-Choose your TLS mode below.
-
-#### Option A: On-Demand TLS (recommended)
-
-Caddy obtains certificates dynamically on first subdomain access. Requires port 80 + 443 open.
-
-Create `/etc/caddy/Caddyfile`:
-
-```caddyfile
-{
-    admin localhost:2019
-    on_demand_tls {
-        ask http://localhost:8080/_droply/tls-check
-    }
-}
-
-*.droplydoc.com, droplydoc.com {
-    tls {
-        on_demand
-    }
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    tls {
-        on_demand
-    }
-    reverse_proxy localhost:8080
-}
-```
-
-#### Option B: Cloudflare DNS (wildcard certificate)
-
-One wildcard certificate covers all subdomains. Requires Cloudflare API token.
-
-1. Obtain a Cloudflare API token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
-   - **Permissions**: Zone → DNS → Edit
-   - **Zone Resources**: Include → Specific zone → `droplydoc.com`
-
-2. Store the token:
-
-```bash
-sudo tee /etc/caddy/env > /dev/null << 'EOF'
-CLOUDFLARE_API_TOKEN=your-token-here
-EOF
-sudo chmod 600 /etc/caddy/env
-```
-
-3. Create `/etc/caddy/Caddyfile`:
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-*.droplydoc.com {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    reverse_proxy localhost:8080
-}
-```
-
-#### Option C: Manual (bring your own certs)
-
-Use your own certificate files (e.g., from corporate PKI).
-
-```bash
-# Copy your cert and key to /etc/caddy/
-sudo cp /path/to/cert.pem /etc/caddy/cert.pem
-sudo cp /path/to/key.pem /etc/caddy/key.pem
-sudo chmod 600 /etc/caddy/key.pem
-```
-
-Create `/etc/caddy/Caddyfile`:
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-*.droplydoc.com {
-    tls /etc/caddy/cert.pem /etc/caddy/key.pem
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    tls /etc/caddy/cert.pem /etc/caddy/key.pem
-    reverse_proxy localhost:8080
-}
-```
-
-### 3. Deploy droply-server
-
-```bash
-# Create data directory
-sudo mkdir -p /data/droply/sites
-
-# Download latest release
-VERSION=$(curl -fsSL https://api.github.com/repos/zhong/droply/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-curl -fsSL -o /tmp/droply-server "https://github.com/zhong/droply/releases/download/${VERSION}/droply-server-linux-amd64"
-sudo mv /tmp/droply-server /usr/local/bin/droply-server
-sudo chmod +x /usr/local/bin/droply-server
-
-# Create systemd service
-sudo tee /etc/systemd/system/droply.service > /dev/null << 'EOF'
-[Unit]
-Description=Droply Static Publishing Server
-After=network.target caddy.service
-
-[Service]
-ExecStart=/usr/local/bin/droply-server \
-  --addr :8080 \
-  --site-addr :8081 \
-  --data-dir /data/droply \
-  --domain droplydoc.com \
-  --caddy-admin http://localhost:2019
-Restart=always
-User=www-data
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now droply
-```
-
-#### Server Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--addr` | `:8080` | API listen address |
-| `--site-addr` | `:8081` | Site server address (protected sites) |
-| `--data-dir` | `/data/droply` | Data directory (database + site files) |
+| Flag | Default | Purpose |
+|---|---|---|
+| `--addr` | `:8080` | Unified API/site HTTP listener; normally `:80` for auto mode |
+| `--https-addr` | `:443` | HTTPS listener |
+| `--tls-mode` | `http` | `http` / `manual` / `auto` / `cloudflare` |
 | `--domain` | `droplydoc.com` | Base domain |
-| `--caddy-admin` | `http://localhost:2019` | Caddy Admin API address |
-| `--hmac-secret` | (auto-generated) | Cookie signing key (auto-generated and persisted to `hmac.key` if empty) |
-| `--wework-corp-id` | | WeWork corp ID for QR code login (optional) |
-| `--wework-agent-id` | | WeWork agent ID (optional) |
-| `--wework-secret` | | WeWork agent secret (optional) |
-| `--wework-redirect-uri` | | WeWork OAuth callback URL (optional) |
+| `--data-dir` | `/data/droply` | Database, content and persistent session signing key |
+| `--cert-dir` | `data-dir/certificates` | ACME accounts and certificate storage |
+| `--tls-cert`, `--tls-key` | empty | Manual PEM certificate chain and key |
+| `--acme-email`, `--acme-ca` | empty / Let's Encrypt production | ACME account email and directory |
+| `--cloudflare-token-file` | empty | DNS token file; alternatively `DROPLY_CLOUDFLARE_API_TOKEN` |
+| `--trusted-proxies` | empty | Trusted proxy CIDRs; forwarded IPs are ignored by default |
+| `--hmac-secret` | generated and persisted | Preserve an existing explicit session signing key |
+| `--log-retention-days` | `30` | Detailed visit log retention |
 
-### 4. Start Caddy
-
-```bash
-# Create Caddy systemd service
-sudo tee /etc/systemd/system/caddy.service > /dev/null << 'EOF'
-[Unit]
-Description=Caddy
-After=network.target network-online.target
-Requires=network-online.target
-
-[Service]
-Type=notify
-ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
-TimeoutStopSec=5s
-LimitNOFILE=1048576
-PrivateTmp=true
-ProtectSystem=full
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-EnvironmentFile=-/etc/caddy/env
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now caddy
-```
-
-### 5. Verify
+Run `droply-server --help` for all flags. Normal HTTP shutdown drains for up to 15 seconds; an in-flight DNS job can delay exit until its library timeout (up to five minutes), so the installed unit allows 360 seconds. `--site-addr` temporarily supports an additional unified HTTP listener; `--caddy-admin` is ignored. New installations should omit both. `on-demand` remains an alias for `auto`.
 
 ```bash
-# Check services
-sudo systemctl status droply caddy
-
-# Test API
-curl https://api.droplydoc.com
-
-# Logs
+sudo systemctl status droply
 sudo journalctl -u droply -f
-sudo journalctl -u caddy -f
 ```
-
-</details>
 
 ### Data Directory Structure
 
@@ -600,7 +381,7 @@ droply domain list --sub alice --project blog
 droply domain remove blog.example.com --sub alice --project blog
 ```
 
-After adding a custom domain, add a CNAME or A record at your DNS provider pointing to the output target, then run `droply domain verify` to confirm. Caddy will automatically provision HTTPS certificates for verified custom domains.
+After adding a custom domain, add a CNAME or A record at your DNS provider pointing to the output target, then run `droply domain verify` to confirm. Publish the dedicated `_droply-verification` TXT record printed by the CLI, then retry verification. Matching an A/CNAME target alone does not prove ownership. Droply only serves verified bindings and authorizes their automatic certificates.
 
 ### Access Control
 
@@ -650,7 +431,7 @@ After setting access control, a copy-friendly share line is printed with the acc
 - **Combined rules**: When multiple methods are configured, **any one passing grants access** (OR logic). IP is checked first; if not allowed, the visitor sees a login page showing whichever of password / WeCom buttons are enabled.
 - **Rule priority**: Project-level rules completely override subdomain-level rules
 
-Protected sites are reverse-proxied through Caddy to droply-server's site serving port (`:8081`), where the server handles verification.
+All site requests, including custom domains, pass through Droply access control. Protected responses use `Cache-Control: private, no-store`; project rules override subdomain sessions.
 
 ### WeCom (WeWork) QR Code Login
 
@@ -713,7 +494,7 @@ All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentic
 | Cookie Signing | HMAC-SHA256 |
 | Rate Limiting | golang.org/x/time/rate |
 | Configuration | TOML |
-| Reverse Proxy/HTTPS | Caddy |
+| HTTP/HTTPS | Go net/http + lego/ACME |
 
 ## License
 

@@ -52,12 +52,18 @@ func shouldTrack(path string) bool {
 
 // StartAnalytics initializes the async visit processing goroutine.
 func (s *Server) StartAnalytics() {
-	go s.processVisits()
+	s.analyticsStart.Do(func() { go s.processVisits() })
 }
 
 // ShutdownAnalytics drains the visit channel and waits for processing to complete.
 func (s *Server) ShutdownAnalytics() {
-	close(s.visitCh)
+	s.StartAnalytics()
+	s.analyticsStop.Do(func() {
+		s.visitsMu.Lock()
+		s.visitsClosed = true
+		close(s.visitCh)
+		s.visitsMu.Unlock()
+	})
 	<-s.done
 }
 
@@ -68,12 +74,17 @@ func (s *Server) processVisits() {
 			log.Printf("analytics: failed to record visit: %v", err)
 		}
 	}
-	s.done <- struct{}{}
+	close(s.done)
 }
 
 // recordVisit enqueues a visit record for async processing.
 // Uses non-blocking send — drops the record if the channel is full.
 func (s *Server) recordVisit(subdomainID int64, project, path, ip, referer, userAgent string) {
+	s.visitsMu.RLock()
+	defer s.visitsMu.RUnlock()
+	if s.visitsClosed {
+		return
+	}
 	select {
 	case s.visitCh <- visitRecord{
 		SubdomainID: subdomainID,
@@ -89,8 +100,8 @@ func (s *Server) recordVisit(subdomainID int64, project, path, ip, referer, user
 }
 
 type statsResponse struct {
-	TotalPV int               `json:"total_pv"`
-	TotalUV int               `json:"total_uv"`
+	TotalPV int                   `json:"total_pv"`
+	TotalUV int                   `json:"total_uv"`
 	Pages   []model.PageDailyStat `json:"pages"`
 }
 

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -280,5 +281,91 @@ func TestCustomDomainCRUD(t *testing.T) {
 	}
 	if len(list) != 0 {
 		t.Errorf("expected 0 custom domains after delete, got %d", len(list))
+	}
+}
+
+func TestDomainVerificationMigrationAndRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "droply.db")
+	s, err := NewSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := s.CreateUser("migration@example.com", "hash", "migration-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.CreateSubdomain(user.ID, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.CreateProject(sub.ID, "blog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCustomDomain(project.ID, "legacy.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.VerifyCustomDomain("legacy.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCustomDomain(project.ID, "pending.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	// Recreate the old schema shape before opening it with the new binary.
+	if _, err := s.db.Exec(`ALTER TABLE custom_domains DROP COLUMN verification_token`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = NewSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := s.GetCustomDomain("legacy.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := s.GetCustomDomain("pending.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verified.Verified || pending.Verified || pending.VerificationToken == "" {
+		t.Fatalf("migration lost state: %+v %+v", verified, pending)
+	}
+	token := pending.VerificationToken
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = NewSQLiteStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	pending, err = s.GetCustomDomain("pending.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.VerificationToken != token {
+		t.Fatal("challenge changed on restart")
+	}
+	if err := s.VerifyCustomDomainChallenge(pending.Domain, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteCustomDomain(project.ID, pending.Domain); err != nil {
+		t.Fatal(err)
+	}
+	rebound, err := s.CreateCustomDomain(project.ID, pending.Domain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.VerifyCustomDomainChallenge(rebound.Domain, token); err == nil {
+		t.Fatal("stale challenge verified a new binding")
+	}
+	if err := s.DeleteProject(sub.ID, project.Name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetCustomDomain(verified.Domain); err == nil {
+		t.Fatal("project deletion did not cascade")
 	}
 }

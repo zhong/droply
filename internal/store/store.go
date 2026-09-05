@@ -20,6 +20,7 @@ type Store interface {
 	CreateCustomDomain(projectID int64, domain string) (*model.CustomDomain, error)
 	GetCustomDomain(domain string) (*model.CustomDomain, error)
 	VerifyCustomDomain(domain string) error
+	VerifyCustomDomainChallenge(domain, token string) error
 	ListCustomDomains(projectID int64) ([]model.CustomDomain, error)
 	DeleteCustomDomain(projectID int64, domain string) error
 	ListAllSubdomains() ([]model.Subdomain, error)

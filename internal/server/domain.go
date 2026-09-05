@@ -1,14 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/zhong/droply/internal/store"
 	"net"
 	"net/http"
 	"strings"
 
-	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
+	"github.com/zhong/droply/internal/model"
 )
 
 type createDomainRequest struct {
@@ -49,19 +52,20 @@ func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cd, err := s.store.CreateCustomDomain(proj.ID, req.Domain)
-	if err != nil {
-		jsonError(w, "internal server error", http.StatusInternalServerError)
+	domain, err := normalizeDomain(req.Domain)
+	if err != nil || domain == strings.ToLower(s.baseDomain) || strings.HasSuffix(domain, "."+strings.ToLower(s.baseDomain)) {
+		jsonError(w, "invalid or reserved domain", http.StatusBadRequest)
 		return
 	}
-
-	if s.caddy != nil {
-		rule, _ := s.store.FindAccessRuleForSite(subName, projName)
-		if rule != nil {
-			_ = s.caddy.SetCustomDomainProtected(req.Domain, s.siteAddr)
-		} else {
-			_ = s.caddy.AddCustomDomainRoute(req.Domain, subName, projName)
+	req.Domain = domain
+	cd, err := s.store.CreateCustomDomain(proj.ID, req.Domain)
+	if err != nil {
+		if errors.Is(err, store.ErrDomainTaken) {
+			jsonError(w, "domain already bound", http.StatusConflict)
+			return
 		}
+		jsonError(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	cnameTarget := fmt.Sprintf("%s.%s", subName, s.baseDomain)
@@ -106,12 +110,16 @@ func (s *Server) handleListDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteDomain verifies subdomain ownership, deletes the custom domain from the store,
-// removes it from Caddy if configured, and returns 204.
+// and returns 204.
 func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
-	domainName := chi.URLParam(r, "domain")
+	domainName, err := normalizeDomain(chi.URLParam(r, "domain"))
+	if err != nil {
+		jsonError(w, "invalid domain", http.StatusBadRequest)
+		return
+	}
 
 	sub, err := s.store.GetSubdomainByName(subName)
 	if err != nil {
@@ -134,20 +142,20 @@ func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.caddy != nil {
-		_ = s.caddy.RemoveCustomDomainRoute(domainName)
-	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleVerifyDomain checks DNS records for the custom domain and marks it as verified
-// if a CNAME or A record resolves to the expected target.
+// if its dedicated TXT challenge proves ownership.
 func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
-	domainName := chi.URLParam(r, "domain")
+	domainName, err := normalizeDomain(chi.URLParam(r, "domain"))
+	if err != nil {
+		jsonError(w, "invalid domain", http.StatusBadRequest)
+		return
+	}
 
 	sub, err := s.store.GetSubdomainByName(subName)
 	if err != nil {
@@ -176,39 +184,51 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expectedTarget := fmt.Sprintf("%s.%s", subName, s.baseDomain)
-
-	// Check CNAME records.
-	if cname, err := net.LookupCNAME(domainName); err == nil {
-		cname = strings.TrimSuffix(cname, ".")
-		if strings.EqualFold(cname, expectedTarget) {
-			s.store.VerifyCustomDomain(domainName)
-			jsonResponse(w, map[string]any{"verified": true}, http.StatusOK)
+	resolver := s.dnsResolver
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	records, err := resolver.LookupTXT(r.Context(), cd.VerificationRecord)
+	if err != nil {
+		jsonError(w, "DNS verification lookup failed; retry after publishing the TXT record", http.StatusBadGateway)
+		return
+	}
+	for _, record := range records {
+		if record != cd.VerificationToken || cd.VerificationToken == "" {
+			continue
+		}
+		if err := s.store.VerifyCustomDomainChallenge(domainName, cd.VerificationToken); err != nil {
+			jsonError(w, "failed to persist verification", http.StatusInternalServerError)
 			return
 		}
+		jsonResponse(w, map[string]any{"verified": true, "status": "verified"}, http.StatusOK)
+		return
 	}
+	jsonResponse(w, map[string]any{"verified": false, "status": "pending", "message": "publish the exact verification TXT record", "verification_record": cd.VerificationRecord, "verification_token": cd.VerificationToken}, http.StatusOK)
+}
 
-	// Check A records — if the domain resolves to the same IPs as the expected target.
-	domainIPs, err := net.LookupHost(domainName)
-	if err == nil && len(domainIPs) > 0 {
-		targetIPs, err := net.LookupHost(expectedTarget)
-		if err == nil {
-			ipSet := map[string]bool{}
-			for _, ip := range targetIPs {
-				ipSet[ip] = true
-			}
-			for _, ip := range domainIPs {
-				if ipSet[ip] {
-					s.store.VerifyCustomDomain(domainName)
-					jsonResponse(w, map[string]any{"verified": true}, http.StatusOK)
-					return
-				}
+// DNSResolver is the external DNS boundary for ownership verification.
+type DNSResolver interface {
+	LookupTXT(context.Context, string) ([]string, error)
+}
+
+// SetDNSResolver configures DNS lookup before serving requests. Nil uses the system resolver.
+func (s *Server) SetDNSResolver(resolver DNSResolver) { s.dnsResolver = resolver }
+
+func normalizeDomain(domain string) (string, error) {
+	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
+	if len(domain) > 253 || !strings.Contains(domain, ".") || net.ParseIP(domain) != nil {
+		return "", fmt.Errorf("invalid hostname")
+	}
+	for _, label := range strings.Split(domain, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", fmt.Errorf("invalid hostname")
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return "", fmt.Errorf("invalid hostname")
 			}
 		}
 	}
-
-	jsonResponse(w, map[string]any{
-		"verified": false,
-		"message":  fmt.Sprintf("DNS not pointing to %s (CNAME or A record required)", expectedTarget),
-	}, http.StatusOK)
+	return domain, nil
 }

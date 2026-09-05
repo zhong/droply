@@ -58,6 +58,11 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	}
 
+	if !validRedirectPath(redirect) {
+		http.Error(w, "invalid redirect", http.StatusBadRequest)
+		return
+	}
+
 	// Resolve host to find subdomain/project.
 	subdomainName, customProject, ok := s.resolveHost(host)
 	if !ok {
@@ -204,12 +209,12 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// Clear any lingering "recently failed" marker so the next protected page
 	// view resumes auto-redirect behavior.
 	http.SetCookie(w, &http.Cookie{
-		Name:    weworkAttemptCookieName,
-		Value:   "",
-		Path:    "/",
-		Domain:  cookieDomain,
-		MaxAge:  -1,
-		Secure:  true,
+		Name:     weworkAttemptCookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   cookieDomain,
+		MaxAge:   -1,
+		Secure:   true,
 		HttpOnly: true,
 	})
 

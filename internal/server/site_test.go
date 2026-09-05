@@ -21,7 +21,7 @@ func newTestSiteServer(t *testing.T) (*server.Server, string) {
 	}
 	t.Cleanup(func() { st.Close() })
 	sitesDir := t.TempDir()
-	srv := server.New(st, sitesDir, "droplydoc.com", nil, []byte("test-hmac-secret-key-1234567890"), "localhost:8081")
+	srv := server.New(st, sitesDir, "droplydoc.com", []byte("test-hmac-secret-key-1234567890"))
 	return srv, sitesDir
 }
 
@@ -651,14 +651,14 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 	}
 
 	// Use subdomain-scoped cookie to access the project "app" (which has its own project-level rule).
-	// Subdomain-scoped cookie should still grant access.
+	// A project rule overrides the subdomain session.
 	req = httptest.NewRequest(http.MethodGet, "/app/page.html", nil)
 	req.Host = "bob.droplydoc.com"
 	req.AddCookie(subCookie)
 	rr = httptest.NewRecorder()
 	siteHandler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "Hello App") {
-		t.Fatalf("subdomain cookie should access project with project-level rule, got %d: %s", rr.Code, rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "_droply/login") {
+		t.Fatalf("subdomain cookie must not bypass project rule, got %d: %s", rr.Code, rr.Body.String())
 	}
 
 	// Now change the SUBDOMAIN password — subdomain-scoped cookie should be invalidated.
