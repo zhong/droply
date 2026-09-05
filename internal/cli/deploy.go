@@ -3,8 +3,10 @@ package cli
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,12 +199,14 @@ func createTarGz(w io.Writer, srcDir, projectRoot string, pc *ProjectConfig) (in
 }
 
 func newDeployCmd() *cobra.Command {
-	var sub, project string
+	var sub, project, branch, commit string
+	var preview, asJSON bool
 
 	cmd := &cobra.Command{
-		Use:   "deploy [dir]",
-		Short: "Deploy a directory to droply",
-		Args:  cobra.MaximumNArgs(1),
+		Use:          "deploy [dir]",
+		SilenceUsage: true,
+		Short:        "Deploy a directory to droply",
+		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srcDir := "."
 			pc, err := loadOptionalProjectConfig()
@@ -237,7 +241,7 @@ func newDeployCmd() *cobra.Command {
 			defer os.Remove(tmpFile.Name())
 			defer tmpFile.Close()
 
-			fmt.Printf("Packaging %s...\n", srcDir)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Packaging %s...\n", srcDir)
 			projectRoot, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("get working directory: %w", err)
@@ -255,27 +259,45 @@ func newDeployCmd() *cobra.Command {
 			cfg := LoadConfig()
 			client := NewAPIClient(cfg)
 
-			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/deploy", sub, project)
-			fmt.Printf("Uploading to %s/%s...\n", sub, project)
-			result, err := client.uploadFile(apiPath, tmpFile.Name())
+			environment := "production"
+			if preview {
+				environment = "preview"
+			}
+			query := url.Values{"environment": {environment}}
+			if branch != "" {
+				query.Set("branch", branch)
+			}
+			if commit != "" {
+				query.Set("commit", commit)
+			}
+			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/deploy?%s", url.PathEscape(sub), url.PathEscape(project), query.Encode())
+			fmt.Fprintf(cmd.ErrOrStderr(), "Uploading to %s/%s...\n", sub, project)
+			result, err := client.uploadFileContext(cmd.Context(), apiPath, tmpFile.Name())
 			if err != nil {
 				return err
 			}
 
+			if asJSON {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
+			}
 			version, _ := result["version"].(float64)
 			fileCount, _ := result["file_count"].(float64)
 			totalSize, _ := result["total_size"].(float64)
 			url, _ := result["url"].(string)
-			fmt.Printf("Deployed successfully!\n")
-			fmt.Printf("  Version:    %d\n", int(version))
-			fmt.Printf("  Files:      %d\n", int(fileCount))
-			fmt.Printf("  Total size: %s\n", formatSize(int64(totalSize)))
-			fmt.Printf("  URL:        %s\n", url)
+			fmt.Fprintf(cmd.OutOrStdout(), "Committed %s deployment.\n", environment)
+			fmt.Fprintf(cmd.OutOrStdout(), "  Version:    %d\n", int(version))
+			fmt.Fprintf(cmd.OutOrStdout(), "  Files:      %d\n", int(fileCount))
+			fmt.Fprintf(cmd.OutOrStdout(), "  Total size: %s\n", formatSize(int64(totalSize)))
+			fmt.Fprintf(cmd.OutOrStdout(), "  URL:        %s\n", url)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&sub, "sub", "", "Subdomain name")
 	cmd.Flags().StringVar(&project, "project", "", "Project name")
+	cmd.Flags().BoolVar(&preview, "preview", false, "Create a preview without changing production")
+	cmd.Flags().StringVar(&branch, "branch", "", "Source branch; preview deployments update its stable alias")
+	cmd.Flags().StringVar(&commit, "commit", "", "Source commit identifier")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the deployment result as JSON; progress goes to stderr")
 	return cmd
 }

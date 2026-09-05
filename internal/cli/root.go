@@ -12,7 +12,7 @@ func NewRootCmd(version string) *cobra.Command {
 	// Global --context flag overrides the active context for the current invocation.
 	root.PersistentFlags().String("context", "", "Override the active context for this command")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if ctxName, err := cmd.Flags().GetString("context"); err == nil && ctxName != "" {
+		if ctxName, err := cmd.Flags().GetString("context"); err == nil {
 			SetActiveContext(ctxName)
 		}
 	}
@@ -25,6 +25,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newSubdomainCmd())
 	root.AddCommand(newDeployCmd())
 	root.AddCommand(newDeploymentCmd())
+	root.AddCommand(newProjectTokenCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newDomainCmd())
 	root.AddCommand(newCertificateCmd())

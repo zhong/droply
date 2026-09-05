@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -19,6 +20,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/zhong/droply/internal/model"
+	"github.com/zhong/droply/internal/staticweb"
 )
 
 // loginPageTemplate is the HTML template for the access login page (password and/or WeWork QR).
@@ -110,6 +112,16 @@ func (rl *rateLimiter) getLimiter(ip string) *rate.Limiter {
 func (s *Server) NewSiteHandler() http.Handler {
 	rl := newRateLimiter()
 	return s.withTrustedProxy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := s.PrepareDeployments(r.Context()); err != nil {
+			http.Error(w, "deployment storage unavailable", 503)
+			return
+		}
+		s.deploymentMu.RLock()
+		defer s.deploymentMu.RUnlock()
+		if target := s.requestSiteTarget(r); target != nil && target.Kind != "production" {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/_droply/") {
 			w.Header().Set("Cache-Control", "private, no-store")
 		}
@@ -145,6 +157,9 @@ func (s *Server) resolveHost(host string) (subdomainName, projectName string, ok
 	if strings.HasSuffix(host, suffix) {
 		sub := strings.TrimSuffix(host, suffix)
 		if sub != "" && !strings.Contains(sub, ".") {
+			if target, err := s.store.GetSiteTarget(context.Background(), sub); err == nil {
+				return target.SubdomainName, target.ProjectName, true
+			}
 			return sub, "", true
 		}
 	}
@@ -282,18 +297,18 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 
 // serveFile serves a static file from the sites directory.
 func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID int64, subdomain, project, servePath string) {
-	if err := s.PrepareDeployments(r.Context()); err != nil {
-		http.Error(w, "deployment storage unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	s.deploymentMu.RLock()
-	defer s.deploymentMu.RUnlock()
 	proj, err := s.store.GetProject(subdomainID, project)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	deployment, err := s.store.GetActiveDeployment(r.Context(), proj.ID)
+	var deployment *model.Deployment
+	target := s.requestSiteTarget(r)
+	if target != nil && target.DeploymentID != 0 {
+		deployment, err = s.store.GetDeploymentByID(r.Context(), target.DeploymentID)
+	} else {
+		deployment, err = s.store.GetActiveDeployment(r.Context(), proj.ID)
+	}
 	if err != nil || !deployment.Available {
 		http.NotFound(w, r)
 		return
@@ -303,22 +318,16 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID i
 		http.Error(w, "artifact unavailable", 503)
 		return
 	}
-	// Timestamp validators have only second precision and can otherwise keep an
-	// older deployment cached after a rapid publish or rollback. Bind validators
-	// to both the immutable artifact and the requested representation instead.
-	etag := sha256.Sum256([]byte(deployment.Checksum + "\x00" + servePath))
-	w.Header().Set("ETag", `"`+hex.EncodeToString(etag[:])+`"`)
-	r = r.Clone(r.Context())
-	r.Header.Del("If-Modified-Since")
-	if value := r.Header.Get("If-Range"); value != "" && !strings.HasPrefix(value, `"`) {
-		r.Header.Del("Range")
-		r.Header.Del("If-Range")
+	site, err := staticweb.Load(root)
+	if err != nil {
+		http.Error(w, "invalid static site configuration", 503)
+		return
 	}
-	// Use http.Dir + http.FileServer for proper file serving.
-	fs := http.FileServer(http.Dir(root))
-	// Rewrite the request path to servePath.
-	r.URL.Path = servePath
-	fs.ServeHTTP(w, r)
+	prefix := ""
+	if _, custom, _ := s.resolveHost(r.Host); custom == "" {
+		prefix = "/" + project
+	}
+	site.ServeHTTP(w, r, staticweb.Options{Path: servePath, Prefix: prefix, Private: strings.Contains(w.Header().Get("Cache-Control"), "no-store"), Preview: target != nil && target.Kind != "production", ETagSeed: deployment.Checksum})
 
 	// Record visit asynchronously after serving the file.
 	if shouldTrack(servePath) {
@@ -639,4 +648,19 @@ func isWeWorkUserAllowed(userID string, allowedUsers []string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) requestSiteTarget(r *http.Request) *model.SiteTarget {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	suffix := "." + s.baseDomain
+	if !strings.HasSuffix(host, suffix) {
+		return nil
+	}
+	label := strings.TrimSuffix(host, suffix)
+	target, _ := s.store.GetSiteTarget(r.Context(), label)
+	return target
 }

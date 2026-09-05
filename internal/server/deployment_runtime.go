@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zhong/droply/internal/artifacts"
+	"github.com/zhong/droply/internal/staticweb"
 )
 
 // DeploymentOptions must be configured before PrepareDeployments or serving.
@@ -117,6 +118,10 @@ func (s *Server) prepareDeployments(ctx context.Context) error {
 			manifest, err := s.artifacts.Import(ctx, id, legacy, s.artifactLimits())
 			if err != nil {
 				return fmt.Errorf("migrate %s/%s: %w", sub.Name, project.Name, err)
+			}
+			if err := staticweb.Validate(s.artifacts.StagingPath(id)); err != nil {
+				_ = s.artifacts.RemoveStage(id)
+				return fmt.Errorf("migrate %s/%s site configuration: %w", sub.Name, project.Name, err)
 			}
 			if err := s.artifacts.Publish(id); err != nil {
 				return err

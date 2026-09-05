@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // APIClient wraps an HTTP client with auth and base URL for the droply API.
@@ -23,7 +25,7 @@ func NewAPIClient(ctx *Context) *APIClient {
 	return &APIClient{
 		BaseURL: ctx.APIURL,
 		Token:   ctx.Token,
-		HTTP:    &http.Client{},
+		HTTP:    &http.Client{Timeout: 5 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 
@@ -63,9 +65,13 @@ func (c *APIClient) doJSON(method, path string, body any, result any) error {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResp map[string]string
+		var errResp struct {
+			Error        string `json:"error"`
+			DeploymentID int64  `json:"deployment_id"`
+			Version      int    `json:"version"`
+		}
 		if jsonErr := json.Unmarshal(respBytes, &errResp); jsonErr == nil {
-			if msg, ok := errResp["error"]; ok {
+			if msg := errResp.Error; msg != "" {
 				return fmt.Errorf("API error: %s", msg)
 			}
 		}
@@ -82,6 +88,10 @@ func (c *APIClient) doJSON(method, path string, body any, result any) error {
 
 // uploadFile uploads filePath as a multipart form to the given API path.
 func (c *APIClient) uploadFile(path, filePath string) (map[string]any, error) {
+	return c.uploadFileContext(context.Background(), path, filePath)
+}
+
+func (c *APIClient) uploadFileContext(ctx context.Context, path, filePath string) (map[string]any, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
@@ -99,10 +109,12 @@ func (c *APIClient) uploadFile(path, filePath string) (map[string]any, error) {
 	}
 	mw.Close()
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+path, &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, &buf)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
+	// An upload has no idempotency key: never replay it after a redirect or ambiguous failure.
+	req.GetBody = nil
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
@@ -120,9 +132,13 @@ func (c *APIClient) uploadFile(path, filePath string) (map[string]any, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var errResp map[string]string
+		var errResp struct {
+			Error        string `json:"error"`
+			DeploymentID int64  `json:"deployment_id"`
+			Version      int    `json:"version"`
+		}
 		if jsonErr := json.Unmarshal(respBytes, &errResp); jsonErr == nil {
-			if msg, ok := errResp["error"]; ok {
+			if msg := errResp.Error; msg != "" {
 				return nil, fmt.Errorf("API error: %s", msg)
 			}
 		}

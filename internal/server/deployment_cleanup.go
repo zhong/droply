@@ -89,14 +89,14 @@ func (s *Server) cleanupProject(ctx context.Context, projectID int64, keep, days
 		if err != nil {
 			return report, err
 		}
-		if d.Available && (d.Status == "active" || d.Status == "archived") {
+		if d.Available && (d.Status == "active" || d.Status == "archived" || d.Status == "preview") {
 			rank++
 		}
 		if pinned {
 			continue
 		}
 		if d.ArtifactState != "deleting" {
-			if d.Available && (d.Status == "active" || d.Status == "archived") {
+			if d.Available && (d.Status == "active" || d.Status == "archived" || d.Status == "preview") {
 				// Count and age are independent protections; a version survives if
 				// either applies. Production and named references always survive.
 				if (keep > 0 && rank <= keep) || (days > 0 && now.Sub(d.CreatedAt) < time.Duration(days)*24*time.Hour) {

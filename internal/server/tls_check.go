@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
@@ -41,6 +42,9 @@ func (s *Server) AllowedTLSHost(host string) bool {
 		sub := strings.TrimSuffix(host, suffix)
 		if sub == "" || strings.Contains(sub, ".") {
 			return false
+		}
+		if _, err := s.store.GetSiteTarget(context.Background(), sub); err == nil {
+			return true
 		}
 		if _, err := s.store.GetSubdomainByName(sub); err == nil {
 			return true

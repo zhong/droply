@@ -104,6 +104,11 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Post("/subdomains/{sub}/projects/{project}/deploy", s.handleDeploy)
 		r.Get("/subdomains/{sub}/projects/{project}/deployments", s.handleListDeployments)
 		r.Post("/subdomains/{sub}/projects/{project}/rollback/{version}", s.handleRollback)
+		r.Post("/subdomains/{sub}/projects/{project}/promote/{version}", s.handlePromote)
+		r.Get("/subdomains/{sub}/projects/{project}/events", s.handlePublicationEvents)
+		r.Get("/subdomains/{sub}/projects/{project}/tokens", s.handleListProjectTokens)
+		r.Post("/subdomains/{sub}/projects/{project}/tokens", s.handleCreateProjectToken)
+		r.Delete("/subdomains/{sub}/projects/{project}/tokens/{id}", s.handleRevokeProjectToken)
 		r.Get("/subdomains/{sub}/projects/{project}/cleanup", s.handleDeploymentCleanup)
 		r.Post("/subdomains/{sub}/projects/{project}/cleanup", s.handleDeploymentCleanup)
 
@@ -131,20 +136,10 @@ func (s *Server) buildRouter() *chi.Mux {
 // looks up the user, and stores it in the request context.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		const prefix = "Bearer "
-		auth := r.Header.Get("Authorization")
-		if len(auth) <= len(prefix) || auth[:len(prefix)] != prefix {
-			jsonError(w, "unauthorized", http.StatusUnauthorized)
-			return
+		ctx, ok := s.authenticateBearer(w, r)
+		if ok {
+			next.ServeHTTP(w, r.WithContext(ctx))
 		}
-		token := auth[len(prefix):]
-		user, err := s.store.GetUserByToken(token)
-		if err != nil {
-			jsonError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		ctx := context.WithValue(r.Context(), userContextKey, user)
-		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

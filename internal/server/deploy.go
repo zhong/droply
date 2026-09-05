@@ -13,22 +13,46 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/zhong/droply/internal/artifacts"
 	"github.com/zhong/droply/internal/model"
+	"github.com/zhong/droply/internal/staticweb"
 )
 
 const maxUploadSize = 50 << 20
 
 type deployResponse struct {
+	Environment  string `json:"environment"`
+	Branch       string `json:"branch,omitempty"`
+	Commit       string `json:"commit,omitempty"`
 	DeploymentID int64  `json:"deployment_id"`
 	Version      int    `json:"version"`
 	FileCount    int    `json:"file_count"`
 	TotalSize    int64  `json:"total_size"`
 	URL          string `json:"url"`
+	ProjectURL   string `json:"project_url"`
+	PreviewURL   string `json:"preview_url,omitempty"`
+	BranchURL    string `json:"branch_url,omitempty"`
+	LegacyURL    string `json:"legacy_url"`
 }
 
 // Uploads are staged without holding the serving lock. Publication takes the
 // write lock and commits SQLite only after the complete artifact is durable.
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	subName, projName := chi.URLParam(r, "sub"), chi.URLParam(r, "project")
+	query := r.URL.Query()
+	for _, key := range []string{"environment", "branch", "commit"} {
+		if len(query[key]) > 1 {
+			jsonError(w, "duplicate deployment metadata", 400)
+			return
+		}
+	}
+	environment, branch, commit := query.Get("environment"), query.Get("branch"), query.Get("commit")
+	if environment == "" {
+		environment = "production"
+	}
+	if (environment != "production" && environment != "preview") || len(branch) > 1024 || len(commit) > 256 {
+		jsonError(w, "invalid deployment metadata", 400)
+		return
+	}
+
 	if !validName(projName) {
 		jsonError(w, "invalid project name", 400)
 		return
@@ -56,6 +80,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deploymentMu.Lock()
 	proj, err := s.store.GetProject(sub.ID, projName)
+	token, tokenRequest := r.Context().Value(projectTokenContextKey).(*model.ProjectToken)
+	if tokenRequest && (err != nil || proj.ID != token.ProjectID) {
+		s.deploymentMu.Unlock()
+		jsonError(w, "project token cannot target this project", 403)
+		return
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		proj, err = s.store.CreateProject(sub.ID, projName)
 	}
@@ -65,7 +95,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := rand.Text()
-	deployment, err := s.store.BeginDeployment(r.Context(), proj.ID, id)
+	deployment, err := s.store.BeginDeploymentTarget(r.Context(), proj.ID, id, environment, branch, commit)
 	s.deploymentMu.Unlock()
 	if err != nil {
 		jsonError(w, "cannot reserve deployment version", 500)
@@ -141,6 +171,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		fail(reason, code)
 		return
 	}
+	if err := staticweb.Validate(s.artifacts.StagingPath(id)); err != nil {
+		fail("invalid static site configuration: "+err.Error(), 400)
+		return
+	}
 	s.deploymentMu.Lock()
 	defer s.deploymentMu.Unlock()
 	if r.Context().Err() != nil {
@@ -165,7 +199,17 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	success = true
-	jsonResponse(w, deployResponse{DeploymentID: deployment.ID, Version: deployment.Version, FileCount: info.FileCount, TotalSize: info.TotalSize, URL: fmt.Sprintf("https://%s.%s/%s", subName, s.baseDomain, projName)}, 200)
+	result := deployResponse{Environment: environment, Branch: branch, Commit: commit, DeploymentID: deployment.ID, Version: deployment.Version, FileCount: info.FileCount, TotalSize: info.TotalSize,
+		ProjectURL: fmt.Sprintf("https://%s.%s", proj.HostLabel, s.baseDomain), LegacyURL: fmt.Sprintf("https://%s.%s/%s", subName, s.baseDomain, projName)}
+	result.URL = result.ProjectURL
+	if deployment.PreviewLabel != "" {
+		result.PreviewURL = fmt.Sprintf("https://%s.%s", deployment.PreviewLabel, s.baseDomain)
+		result.URL = result.PreviewURL
+	}
+	if deployment.BranchLabel != "" {
+		result.BranchURL = fmt.Sprintf("https://%s.%s", deployment.BranchLabel, s.baseDomain)
+	}
+	jsonResponse(w, result, 200)
 }
 
 // handleListDeployments verifies subdomain ownership and returns all deployments for the project.
@@ -188,6 +232,11 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	proj, err := s.store.GetProject(sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
+		return
+	}
+
+	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok && token.ProjectID != proj.ID {
+		jsonError(w, "project token cannot target this project", 403)
 		return
 	}
 

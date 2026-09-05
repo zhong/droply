@@ -55,6 +55,14 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate deployments: %w", err)
 	}
+	if err := s.migratePages(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate pages: %w", err)
+	}
+	if err := s.migrateProjectTokens(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate project tokens: %w", err)
+	}
 	return s, nil
 }
 
@@ -79,6 +87,7 @@ func (s *SQLiteStore) migrate() error {
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
 			subdomain_id INTEGER NOT NULL REFERENCES subdomains(id) ON DELETE CASCADE,
 			name         TEXT NOT NULL,
+ host_label TEXT NOT NULL DEFAULT '',
 			created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),
 			updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),
 			UNIQUE(subdomain_id, name)
@@ -339,7 +348,7 @@ func scanSubdomains(rows *sql.Rows) ([]model.Subdomain, error) {
 
 func (s *SQLiteStore) CreateProject(subdomainID int64, name string) (*model.Project, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO projects (subdomain_id, name) VALUES (?, ?)`, subdomainID, name,
+		`INSERT INTO projects (subdomain_id, name, host_label) VALUES (?, ?, ?)`, subdomainID, name, newHostLabel("p-"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
@@ -350,14 +359,14 @@ func (s *SQLiteStore) CreateProject(subdomainID int64, name string) (*model.Proj
 
 func (s *SQLiteStore) getProjectByID(id int64) (*model.Project, error) {
 	row := s.db.QueryRow(
-		`SELECT id, subdomain_id, name, created_at, updated_at FROM projects WHERE id = ?`, id,
+		`SELECT id, subdomain_id, name, created_at, updated_at, host_label FROM projects WHERE id = ?`, id,
 	)
 	return scanProject(row)
 }
 
 func (s *SQLiteStore) GetProject(subdomainID int64, name string) (*model.Project, error) {
 	row := s.db.QueryRow(
-		`SELECT id, subdomain_id, name, created_at, updated_at FROM projects WHERE subdomain_id = ? AND name = ?`,
+		`SELECT id, subdomain_id, name, created_at, updated_at, host_label FROM projects WHERE subdomain_id = ? AND name = ?`,
 		subdomainID, name,
 	)
 	return scanProject(row)
@@ -365,7 +374,7 @@ func (s *SQLiteStore) GetProject(subdomainID int64, name string) (*model.Project
 
 func (s *SQLiteStore) ListProjects(subdomainID int64) ([]model.Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, subdomain_id, name, created_at, updated_at FROM projects WHERE subdomain_id = ? ORDER BY created_at DESC`,
+		`SELECT id, subdomain_id, name, created_at, updated_at, host_label FROM projects WHERE subdomain_id = ? ORDER BY created_at DESC`,
 		subdomainID,
 	)
 	if err != nil {
@@ -394,7 +403,7 @@ func (s *SQLiteStore) DeleteProject(subdomainID int64, name string) error {
 func scanProject(row *sql.Row) (*model.Project, error) {
 	var p model.Project
 	var createdAt, updatedAt string
-	if err := row.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt, &p.HostLabel); err != nil {
 		return nil, fmt.Errorf("scan project: %w", err)
 	}
 	p.CreatedAt = parseTime(createdAt)
@@ -405,7 +414,7 @@ func scanProject(row *sql.Row) (*model.Project, error) {
 func scanProjectRow(rows *sql.Rows) (*model.Project, error) {
 	var p model.Project
 	var createdAt, updatedAt string
-	if err := rows.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt); err != nil {
+	if err := rows.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt, &p.HostLabel); err != nil {
 		return nil, fmt.Errorf("scan project row: %w", err)
 	}
 	p.CreatedAt = parseTime(createdAt)

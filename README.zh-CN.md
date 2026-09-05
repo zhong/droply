@@ -1,5 +1,17 @@
 # Droply
 
+Droply 现已支持项目独立根域名、不可变预览、分支别名、预览提升为生产、版本化静态规则及项目级 CI token。单个服务端进程提供 HTTP/HTTPS，无需 Caddy。
+
+```sh
+droply deploy dist --sub alice --project blog --preview --branch feature/docs --commit abc123 --json
+droply deployment promote 42 --sub alice --project blog --json
+```
+
+预览不会改变生产内容；提升复用已验证的产物，旧预览仍执行项目当前访问规则。环境变量 `DROPLY_API_URL`、`DROPLY_TOKEN` 覆盖所选 context 的对应字段，部署过程不写全局配置。CLI 不会自动重试上传；连接中断时应先检查部署历史，避免重复发布。
+
+详见 [M2 使用及升级说明](docs/pages-m2.md)、[静态规则](docs/static-rules-m2.md)、[项目 token](docs/project-tokens-m2.md) 和 [CI 示例](docs/ci-m2.md)。
+
+
 多用户、多子域名的静态内容发布平台。通过 CLI 快速发布静态网站，自动分配子域名并提供 HTTPS 访问。
 
 [English](README.md)
