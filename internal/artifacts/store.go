@@ -109,6 +109,15 @@ func (s *Store) Path(id string) string {
 	}
 	return filepath.Join(p, "files")
 }
+
+// StagingPath returns the staged files directory for validation before publication.
+func (s *Store) StagingPath(id string) string {
+	p, err := s.location(id, true)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(p, "files")
+}
 func effective(l Limits) Limits {
 	if l.MaxBytes <= 0 {
 		l.MaxBytes = defaultMaxBytes

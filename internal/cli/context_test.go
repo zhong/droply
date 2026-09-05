@@ -63,14 +63,14 @@ func TestLoadConfigMigratesLegacy(t *testing.T) {
 		t.Errorf("CurrentContext: got %q want %q", full.CurrentContext, defaultContextName)
 	}
 
-	// Read raw bytes to verify legacy fields are gone.
+	// Reading configuration must not rewrite it, including in CI.
 	data, err := os.ReadFile(filepath.Join(cfgDir, "config.toml"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
 	content := string(data)
-	if containsTopLevel(content, "api_url =") {
-		t.Errorf("expected top-level api_url to be removed after migration, got:\n%s", content)
+	if content != legacy {
+		t.Errorf("reading config modified it: %s", content)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestSaveAndLoadMultipleContexts(t *testing.T) {
 		CurrentContext: "staging",
 		Contexts: map[string]Context{
 			defaultContextName: {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
-			"staging":         {APIURL: "https://api.example.com", Token: "dp_para"},
+			"staging":          {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
 	if err := SaveFullConfig(full); err != nil {
@@ -112,7 +112,7 @@ func TestActiveContextOverride(t *testing.T) {
 	full := &Config{
 		CurrentContext: "default",
 		Contexts: map[string]Context{
-			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
+			"default": {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
 			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
@@ -166,7 +166,7 @@ func TestProjectConfigContextOverride(t *testing.T) {
 	full := &Config{
 		CurrentContext: "default",
 		Contexts: map[string]Context{
-			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
+			"default": {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
 			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
 		},
 	}
@@ -203,9 +203,9 @@ func TestExplicitOverrideBeatsProjectConfig(t *testing.T) {
 	full := &Config{
 		CurrentContext: "default",
 		Contexts: map[string]Context{
-			"default":  {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
+			"default": {APIURL: "https://api.droplydoc.com", Token: "dp_default"},
 			"staging": {APIURL: "https://api.example.com", Token: "dp_para"},
-			"corp":     {APIURL: "https://api.corp.local", Token: "dp_corp"},
+			"corp":    {APIURL: "https://api.corp.local", Token: "dp_corp"},
 		},
 	}
 	if err := SaveFullConfig(full); err != nil {

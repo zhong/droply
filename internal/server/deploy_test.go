@@ -118,13 +118,13 @@ func TestDeploy(t *testing.T) {
 		t.Fatalf("expected version=1, got %v", resp["version"])
 	}
 
-	// Verify url contains subdomain/project.
+	// The primary URL is rooted at the project host; the old URL stays explicit.
 	url, _ := resp["url"].(string)
 	if url == "" {
 		t.Fatal("expected non-empty url")
 	}
-	if !contains(url, "alice") || !contains(url, "mysite") {
-		t.Fatalf("url should contain subdomain and project, got: %s", url)
+	if url != resp["project_url"] || resp["legacy_url"] != "https://alice.droplydoc.com/mysite" {
+		t.Fatalf("unexpected project/legacy URLs: %v", resp)
 	}
 
 	// Verify files exist on disk.

@@ -26,10 +26,22 @@ func (s *Server) ownedProject(w http.ResponseWriter, r *http.Request) *model.Pro
 		jsonError(w, "project not found", 404)
 		return nil
 	}
+	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok && token.ProjectID != project.ID {
+		jsonError(w, "project token cannot target this project", 403)
+		return nil
+	}
 	return project
 }
 
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
+	s.switchPublication(w, r, false)
+}
+
+func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
+	s.switchPublication(w, r, true)
+}
+
+func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promote bool) {
 	project := s.ownedProject(w, r)
 	if project == nil {
 		return
@@ -54,7 +66,11 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot read deployment", 500)
 		return
 	}
-	if !d.Available || (d.Status != "active" && d.Status != "archived") {
+	eligible := d.Status == "active" || d.Status == "archived"
+	if promote {
+		eligible = d.Environment == "preview" && (eligible || d.Status == "preview")
+	}
+	if !d.Available || !eligible {
 		jsonError(w, "version has no retained production artifact", 409)
 		return
 	}
@@ -69,7 +85,12 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "artifact unavailable or damaged; production was not switched", 409)
 		return
 	}
-	d, changed, err := s.store.SwitchDeployment(r.Context(), project.ID, version)
+	var changed bool
+	if promote {
+		d, changed, err = s.store.PromoteDeployment(r.Context(), project.ID, version, userFromContext(r.Context()).ID)
+	} else {
+		d, changed, err = s.store.SwitchDeployment(r.Context(), project.ID, version)
+	}
 	if errors.Is(err, store.ErrDeploymentState) {
 		jsonError(w, "version cannot be activated", 409)
 		return
@@ -82,4 +103,20 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 		Deployment *model.Deployment `json:"deployment"`
 		Changed    bool              `json:"changed"`
 	}{d, changed}, 200)
+}
+
+func (s *Server) handlePublicationEvents(w http.ResponseWriter, r *http.Request) {
+	project := s.ownedProject(w, r)
+	if project == nil {
+		return
+	}
+	events, err := s.store.ListPublicationEvents(r.Context(), project.ID)
+	if err != nil {
+		jsonError(w, "cannot read publication events", 500)
+		return
+	}
+	if events == nil {
+		events = []model.PublicationEvent{}
+	}
+	jsonResponse(w, events, 200)
 }

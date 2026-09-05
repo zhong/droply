@@ -73,12 +73,12 @@ func configPath() string {
 func LoadConfig() *Context {
 	full := loadFullConfig()
 	name := resolveActiveContextName(full)
-	ctx, ok := full.Contexts[name]
-	if !ok {
-		// Active context doesn't exist (e.g., user passed --context typo).
-		// Fall back to default API URL with no token, leaving the user to
-		// see a clear "unauthorized" or "context not found" downstream.
-		return &Context{APIURL: defaultAPIURL}
+	ctx := full.Contexts[name]
+	if value, ok := os.LookupEnv("DROPLY_API_URL"); ok {
+		ctx.APIURL = value
+	}
+	if value, ok := os.LookupEnv("DROPLY_TOKEN"); ok {
+		ctx.Token = value
 	}
 	if ctx.APIURL == "" {
 		ctx.APIURL = defaultAPIURL
@@ -129,7 +129,6 @@ func loadFullConfig() *Config {
 		if cfg.CurrentContext == "" {
 			cfg.CurrentContext = defaultContextName
 		}
-		_ = SaveFullConfig(cfg) // best-effort migration; failure is non-fatal
 	}
 	if cfg.CurrentContext == "" {
 		cfg.CurrentContext = defaultContextName

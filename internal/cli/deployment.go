@@ -18,7 +18,7 @@ func newDeploymentCmd() *cobra.Command {
 	cmd.PersistentFlags().String("sub", "", "Subdomain name (or .droply.toml)")
 	cmd.PersistentFlags().String("project", "", "Project name (or .droply.toml)")
 	cmd.PersistentFlags().Bool("json", false, "Print machine-readable JSON")
-	cmd.AddCommand(newDeploymentListCmd(), newDeploymentRollbackCmd(), newDeploymentCleanupCmd())
+	cmd.AddCommand(newDeploymentListCmd(), newDeploymentRollbackCmd(), newDeploymentCleanupCmd(), newDeploymentSwitchCmd("promote"), newDeploymentEventsCmd())
 	return cmd
 }
 
@@ -60,10 +60,12 @@ func newDeploymentListCmd() *cobra.Command {
 	}
 }
 
-func newDeploymentRollbackCmd() *cobra.Command {
+func newDeploymentRollbackCmd() *cobra.Command { return newDeploymentSwitchCmd("rollback") }
+
+func newDeploymentSwitchCmd(action string) *cobra.Command {
 	return &cobra.Command{
 		SilenceUsage: true,
-		Use:          "rollback <version>", Short: "Restore an available version without uploading files",
+		Use:          action + " <version>", Short: "Commit a production switch to an available version without uploading files",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 				return err
@@ -84,7 +86,7 @@ func newDeploymentRollbackCmd() *cobra.Command {
 				Deployment model.Deployment `json:"deployment"`
 				Changed    bool             `json:"changed"`
 			}
-			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodPost, path+"/rollback/"+strconv.Itoa(version), nil, &result); err != nil {
+			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodPost, path+"/"+action+"/"+strconv.Itoa(version), nil, &result); err != nil {
 				return err
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -92,9 +94,9 @@ func newDeploymentRollbackCmd() *cobra.Command {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
 			if result.Changed {
-				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Production now serves version %d.\n", result.Deployment.Version)
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Committed production switch to version %d.\n", result.Deployment.Version)
 			} else {
-				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Version %d is already in production.\n", result.Deployment.Version)
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "Version %d was already in production at commit time.\n", result.Deployment.Version)
 			}
 			return err
 		},
@@ -153,4 +155,22 @@ func newDeploymentCleanupCmd() *cobra.Command {
 	cmd.Flags().Int("days", 0, "Override the server's minimum retention age in days")
 	cmd.Flags().Bool("apply", false, "Delete eligible artifacts; omitted means preview only")
 	return cmd
+}
+
+func newDeploymentEventsCmd() *cobra.Command {
+	return &cobra.Command{Use: "events", Short: "List promotion events as JSON", Args: cobra.NoArgs, SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := deploymentAPIPath(cmd)
+			if err != nil {
+				return err
+			}
+			var events []model.PublicationEvent
+			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, path+"/events", nil, &events); err != nil {
+				return err
+			}
+			if events == nil {
+				events = []model.PublicationEvent{}
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(events)
+		}}
 }

@@ -14,14 +14,14 @@ import (
 // deployment state or a live reference. The caller must not mutate its artifact.
 var ErrDeploymentState = errors.New("deployment state or reference prevents operation")
 
-const deploymentColumns = `id, project_id, version, file_count, total_size, status, created_at, artifact_id, artifact_state, failure_reason, checksum`
+const deploymentColumns = `id, project_id, version, file_count, total_size, status, created_at, artifact_id, artifact_state, failure_reason, checksum, environment, branch, commit_ref, preview_label, branch_label`
 
 type deploymentScanner interface{ Scan(...any) error }
 
 func scanDeployment(row deploymentScanner) (*model.Deployment, error) {
 	var d model.Deployment
 	var created string
-	if err := row.Scan(&d.ID, &d.ProjectID, &d.Version, &d.FileCount, &d.TotalSize, &d.Status, &created, &d.ArtifactID, &d.ArtifactState, &d.FailureReason, &d.Checksum); err != nil {
+	if err := row.Scan(&d.ID, &d.ProjectID, &d.Version, &d.FileCount, &d.TotalSize, &d.Status, &created, &d.ArtifactID, &d.ArtifactState, &d.FailureReason, &d.Checksum, &d.Environment, &d.Branch, &d.Commit, &d.PreviewLabel, &d.BranchLabel); err != nil {
 		return nil, err
 	}
 	d.CreatedAt = parseTimeFlexible(created)
@@ -88,19 +88,16 @@ func (s *SQLiteStore) migrateDeployments() error {
 }
 
 func (s *SQLiteStore) BeginDeployment(ctx context.Context, projectID int64, artifactID string) (*model.Deployment, error) {
-	if strings.TrimSpace(artifactID) == "" {
-		return nil, fmt.Errorf("artifact ID is required: %w", ErrDeploymentState)
-	}
-	return s.createDeployment(ctx, projectID, artifactID, "pending", 0, 0)
+	return s.BeginDeploymentTarget(ctx, projectID, artifactID, "production", "", "")
 }
 
 // CreateDeployment remains available for legacy fixtures/importers. It reserves
 // a unique version but deliberately does not advertise an immutable artifact.
 func (s *SQLiteStore) CreateDeployment(projectID int64, fileCount int, totalSize int64) (*model.Deployment, error) {
-	return s.createDeployment(context.Background(), projectID, "", "legacy", fileCount, totalSize)
+	return s.createDeployment(context.Background(), projectID, "", "legacy", fileCount, totalSize, "production", "", "")
 }
 
-func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, artifactID, state string, count int, size int64) (*model.Deployment, error) {
+func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, artifactID, state string, count int, size int64, environment, branch, commit string) (*model.Deployment, error) {
 	if count < 0 || size < 0 {
 		return nil, ErrDeploymentState
 	}
@@ -109,8 +106,15 @@ func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, art
 		return nil, err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `INSERT INTO deployments(project_id,version,file_count,total_size,status,artifact_id,artifact_state)
- SELECT ?,COALESCE(MAX(version),0)+1,?,?,'uploading',?,? FROM deployments WHERE project_id=?`, projectID, count, size, artifactID, state, projectID)
+	previewLabel, branchLabel := "", ""
+	if environment == "preview" {
+		previewLabel = newHostLabel("d-")
+		if branch != "" {
+			branchLabel = branchHostLabel(projectID, branch)
+		}
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO deployments(project_id,version,file_count,total_size,status,artifact_id,artifact_state,environment,branch,commit_ref,preview_label,branch_label)
+ SELECT ?,COALESCE(MAX(version),0)+1,?,?,'uploading',?,?,?,?,?,?,? FROM deployments WHERE project_id=?`, projectID, count, size, artifactID, state, environment, branch, commit, previewLabel, branchLabel, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("reserve deployment version: %w", err)
 	}
@@ -146,12 +150,23 @@ func (s *SQLiteStore) CommitDeployment(ctx context.Context, id int64, count int,
 	if d.Status != "uploading" || d.ArtifactState != "pending" || d.ArtifactID == "" {
 		return ErrDeploymentState
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='archived' WHERE project_id=? AND status='active'`, d.ProjectID); err != nil {
+	status := "active"
+	if d.Environment == "preview" {
+		status = "preview"
+	} else {
+		if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='archived' WHERE project_id=? AND status='active'`, d.ProjectID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status=?,artifact_state='available',file_count=?,total_size=?,checksum=?,failure_reason='' WHERE id=?`, status, count, size, checksum, id); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='active',artifact_state='available',file_count=?,total_size=?,checksum=?,failure_reason='' WHERE id=?`, count, size, checksum, id); err != nil {
-		return err
+	if d.Environment == "preview" && d.BranchLabel != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO deployment_references(project_id,name,deployment_id) VALUES(?,?,?) ON CONFLICT(project_id,name) DO UPDATE SET deployment_id=excluded.deployment_id`, d.ProjectID, d.BranchLabel, id); err != nil {
+			return err
+		}
 	}
+
 	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?`, d.ProjectID); err != nil {
 		return err
 	}
@@ -170,7 +185,10 @@ func (s *SQLiteStore) GetDeployment(ctx context.Context, projectID int64, versio
 	return scanDeployment(s.db.QueryRowContext(ctx, `SELECT `+deploymentColumns+` FROM deployments WHERE project_id=? AND version=?`, projectID, version))
 }
 func (s *SQLiteStore) getDeploymentByID(id int64) (*model.Deployment, error) {
-	return scanDeployment(s.db.QueryRowContext(context.Background(), `SELECT `+deploymentColumns+` FROM deployments WHERE id=?`, id))
+	return s.GetDeploymentByID(context.Background(), id)
+}
+func (s *SQLiteStore) GetDeploymentByID(ctx context.Context, id int64) (*model.Deployment, error) {
+	return scanDeployment(s.db.QueryRowContext(ctx, `SELECT `+deploymentColumns+` FROM deployments WHERE id=?`, id))
 }
 func (s *SQLiteStore) ListDeployments(projectID int64) ([]model.Deployment, error) {
 	return s.listDeployments(context.Background(), ` WHERE project_id=? ORDER BY version DESC`, projectID)
@@ -286,7 +304,7 @@ func (s *SQLiteStore) PutDeploymentReference(ctx context.Context, projectID int6
 		return ErrDeploymentState
 	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO deployment_references(project_id,name,deployment_id)
- SELECT ?,?,id FROM deployments WHERE project_id=? AND id=? AND artifact_state='available' AND artifact_id!='' AND status IN ('active','archived')
+ SELECT ?,?,id FROM deployments WHERE project_id=? AND id=? AND artifact_state='available' AND artifact_id!='' AND status IN ('preview','active','archived')
  ON CONFLICT(project_id,name) DO UPDATE SET deployment_id=excluded.deployment_id`, projectID, name, projectID, deploymentID)
 	return deploymentTransition(res, err)
 }

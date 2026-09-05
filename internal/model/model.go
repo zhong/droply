@@ -19,6 +19,7 @@ type Subdomain struct {
 }
 
 type Project struct {
+	HostLabel   string    `json:"host_label"`
 	ID          int64     `json:"id"`
 	SubdomainID int64     `json:"subdomain_id"`
 	Name        string    `json:"name"`
@@ -27,6 +28,11 @@ type Project struct {
 }
 
 type Deployment struct {
+	Environment   string    `json:"environment"`
+	Branch        string    `json:"branch,omitempty"`
+	Commit        string    `json:"commit,omitempty"`
+	PreviewLabel  string    `json:"preview_label,omitempty"`
+	BranchLabel   string    `json:"branch_label,omitempty"`
 	ArtifactID    string    `json:"artifact_id,omitempty"`
 	ArtifactState string    `json:"artifact_state"`
 	Available     bool      `json:"available"`
@@ -85,4 +91,24 @@ type PageDailyStat struct {
 	Path string `json:"path"`
 	PV   int    `json:"pv"`
 	UV   int    `json:"uv"`
+}
+
+// SiteTarget maps a generated hostname to a project or immutable deployment.
+// Production resolves its current deployment at request time (DeploymentID zero).
+type SiteTarget struct {
+	SubdomainName string `json:"subdomain_name"`
+	ProjectName   string `json:"project_name"`
+	ProjectID     int64  `json:"project_id"`
+	DeploymentID  int64  `json:"deployment_id"`
+	Kind          string `json:"kind"`
+}
+
+type PublicationEvent struct {
+	ID            int64     `json:"id"`
+	ProjectID     int64     `json:"project_id"`
+	DeploymentID  int64     `json:"deployment_id"`
+	ActorID       int64     `json:"actor_id"`
+	SourceVersion int       `json:"source_version"`
+	Action        string    `json:"action"`
+	CreatedAt     time.Time `json:"created_at"`
 }

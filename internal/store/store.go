@@ -6,6 +6,11 @@ import (
 )
 
 type Store interface {
+	ProjectTokenStore
+	GetSiteTarget(context.Context, string) (*model.SiteTarget, error)
+	BeginDeploymentTarget(context.Context, int64, string, string, string, string) (*model.Deployment, error)
+	PromoteDeployment(context.Context, int64, int, int64) (*model.Deployment, bool, error)
+	ListPublicationEvents(context.Context, int64) ([]model.PublicationEvent, error)
 	CreateUser(email, hashedPassword, apiToken string) (*model.User, error)
 	GetUserByEmail(email string) (*model.User, error)
 	GetUserByToken(token string) (*model.User, error)
@@ -22,6 +27,7 @@ type Store interface {
 	FailDeployment(context.Context, int64, string) error
 	GetActiveDeployment(context.Context, int64) (*model.Deployment, error)
 	GetDeployment(context.Context, int64, int) (*model.Deployment, error)
+	GetDeploymentByID(context.Context, int64) (*model.Deployment, error)
 	ListAllDeployments(context.Context) ([]model.Deployment, error)
 	AttachLegacyArtifact(context.Context, int64, string, int, int64, string) error
 	SwitchDeployment(context.Context, int64, int) (*model.Deployment, bool, error)

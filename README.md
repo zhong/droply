@@ -1,6 +1,6 @@
 # Droply
 
-Multi-user, multi-subdomain static content publishing platform. Publish static websites via CLI with automatic subdomain allocation and HTTPS.
+A lightweight private static deployment platform: one server binary, immutable versions, project root hosts, branch previews, scoped CI tokens and automatic HTTPS.
 
 [中文文档](README.zh-CN.md)
 
@@ -224,7 +224,7 @@ api_url = "https://api.staging.example.com"
 token = "dp_yyyyyyyyyyyy"
 ```
 
-This file is automatically created and updated on login/register. Old single-server config (top-level `api_url` + `token`) is **silently migrated** to `contexts.default` on first use.
+This file is automatically created and updated on login/register. Old single-server config (top-level `api_url` + `token`) is read as `contexts.default` without modifying the file; migration is persisted on the next explicit configuration save.
 
 #### Working with Multiple Servers
 
@@ -263,7 +263,7 @@ project = "blog"
 
 When running `droply` commands inside that directory, the `staging` context is used automatically.
 
-**Resolution priority** (highest to lowest):
+`DROPLY_API_URL` and `DROPLY_TOKEN` override the selected connection fields without saving them. **Context selection priority** (highest to lowest):
 1. `--context X` flag on the command line
 2. `context = "X"` in `.droply.toml`
 3. `current_context` in `~/.config/droply/config.toml`
@@ -353,6 +353,20 @@ The following files and directories are automatically excluded during deployment
 #### Upload Limit
 
 Compressed uploads are limited to **50 MiB** including multipart overhead; defaults allow 256 MiB extracted file bytes and 10,000 files/directories. A complete immutable artifact is published only after validation; failed uploads preserve production.
+
+### Project hosts and previews
+
+New deployments return a stable project root URL, so `/assets/app.js` works without a project path prefix. Existing `alice.example.com/blog/` URLs and verified custom domains remain supported. Each preview gets an immutable URL; specifying a branch also updates its stable alias only after a successful upload.
+
+```sh
+droply deploy dist --sub alice --project blog --preview --branch feature/docs --commit abc123 --json
+droply deployment promote 42 --sub alice --project blog --json
+droply deployment events --sub alice --project blog
+```
+
+Preview publication leaves production unchanged. Promotion switches production to the existing artifact and records an event; preview URLs still serve that artifact. Access rules are checked on every request, including old previews. Preview URLs are excluded from indexing but are public unless access rules protect the project.
+
+Put `_droply.toml`, `_headers` and `_redirects` in the uploaded directory to configure SPA fallback, response headers and redirects. These rules are validated before publication and travel with the version through preview, promotion and rollback. See [static rule syntax and supported subset](docs/static-rules-m2.md), [CI configuration and retry contract](docs/ci-m2.md), and [project credentials](docs/project-tokens-m2.md).
 
 ### Deployment history, rollback and cleanup
 
@@ -484,6 +498,10 @@ All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentic
 | POST | `/subdomains/:sub/projects/:name/deploy` | Deploy (multipart) |
 | GET | `/subdomains/:sub/projects/:name/deployments` | Deployment history |
 | POST | `/subdomains/:sub/projects/:name/rollback/:version` | Rollback to a retained version |
+| POST | `/subdomains/:sub/projects/:name/promote/:version` | Promote a retained preview |
+| GET | `/subdomains/:sub/projects/:name/events` | Promotion events |
+| GET / POST | `/subdomains/:sub/projects/:name/tokens` | List / create project credentials |
+| DELETE | `/subdomains/:sub/projects/:name/tokens/:id` | Revoke a project credential |
 | GET / POST | `/subdomains/:sub/projects/:name/cleanup` | Preview / apply retention cleanup |
 | POST | `/subdomains/:sub/projects/:name/domains` | Add custom domain |
 | GET | `/subdomains/:sub/projects/:name/domains` | List custom domains |
