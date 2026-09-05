@@ -31,16 +31,16 @@ func TestCIEnvironmentPrecedenceWithoutConfigWrites(t *testing.T) {
 	if err := os.WriteFile(".droply.toml", []byte("context = \"project\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if got := LoadConfig().Token; got != "project" {
+	if got := mustLoadConfig(t).Token; got != "project" {
 		t.Fatal(got)
 	}
 	SetActiveContext("flag")
-	if got := LoadConfig().Token; got != "flag" {
+	if got := mustLoadConfig(t).Token; got != "flag" {
 		t.Fatal(got)
 	}
 	t.Setenv("DROPLY_API_URL", "https://ci.test")
 	t.Setenv("DROPLY_TOKEN", "ci-secret")
-	got := LoadConfig()
+	got := mustLoadConfig(t)
 	if got.APIURL != "https://ci.test" || got.Token != "ci-secret" {
 		t.Fatalf("environment did not override context")
 	}

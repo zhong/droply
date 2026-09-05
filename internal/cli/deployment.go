@@ -40,7 +40,11 @@ func newDeploymentListCmd() *cobra.Command {
 				return err
 			}
 			var deployments []model.Deployment
-			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, path+"/deployments", nil, &deployments); err != nil {
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
+			if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/deployments", nil, &deployments); err != nil {
 				return err
 			}
 			if deployments == nil {
@@ -86,7 +90,11 @@ func newDeploymentSwitchCmd(action string) *cobra.Command {
 				Deployment model.Deployment `json:"deployment"`
 				Changed    bool             `json:"changed"`
 			}
-			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodPost, path+"/"+action+"/"+strconv.Itoa(version), nil, &result); err != nil {
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
+			if err := NewAPIClient(cfg).doJSON(http.MethodPost, path+"/"+action+"/"+strconv.Itoa(version), nil, &result); err != nil {
 				return err
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -133,7 +141,11 @@ func newDeploymentCleanupCmd() *cobra.Command {
 				method = http.MethodPost
 			}
 			var result json.RawMessage
-			if err := NewAPIClient(LoadConfig()).doJSON(method, path, nil, &result); err != nil {
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
+			if err := NewAPIClient(cfg).doJSON(method, path, nil, &result); err != nil {
 				return err
 			}
 			if err := json.NewEncoder(cmd.OutOrStdout()).Encode(result); err != nil {
@@ -165,7 +177,11 @@ func newDeploymentEventsCmd() *cobra.Command {
 				return err
 			}
 			var events []model.PublicationEvent
-			if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, path+"/events", nil, &events); err != nil {
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
+			if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/events", nil, &events); err != nil {
 				return err
 			}
 			if events == nil {

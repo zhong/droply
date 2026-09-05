@@ -20,7 +20,7 @@ func withTempHome(t *testing.T) string {
 func TestLoadConfigBrandNew(t *testing.T) {
 	withTempHome(t)
 
-	ctx := LoadConfig()
+	ctx := mustLoadConfig(t)
 	if ctx.APIURL != defaultAPIURL {
 		t.Errorf("expected default API URL, got %q", ctx.APIURL)
 	}
@@ -43,7 +43,7 @@ func TestLoadConfigMigratesLegacy(t *testing.T) {
 	}
 
 	// LoadConfig should silently migrate into contexts.default.
-	ctx := LoadConfig()
+	ctx := mustLoadConfig(t)
 	if ctx.APIURL != "https://api.example.com" {
 		t.Errorf("APIURL: got %q want %q", ctx.APIURL, "https://api.example.com")
 	}
@@ -52,7 +52,7 @@ func TestLoadConfigMigratesLegacy(t *testing.T) {
 	}
 
 	// Re-read the config file directly and verify it no longer has legacy fields.
-	full := LoadFullConfig()
+	full := mustLoadFullConfig(t)
 	if _, ok := full.Contexts[defaultContextName]; !ok {
 		t.Error("expected default context after migration")
 	}
@@ -88,7 +88,7 @@ func TestSaveAndLoadMultipleContexts(t *testing.T) {
 		t.Fatalf("SaveFullConfig: %v", err)
 	}
 
-	got := LoadFullConfig()
+	got := mustLoadFullConfig(t)
 	if got.CurrentContext != "staging" {
 		t.Errorf("CurrentContext: got %q", got.CurrentContext)
 	}
@@ -100,7 +100,7 @@ func TestSaveAndLoadMultipleContexts(t *testing.T) {
 	}
 
 	// LoadConfig should return the active context (staging).
-	ctx := LoadConfig()
+	ctx := mustLoadConfig(t)
 	if ctx.APIURL != "https://api.example.com" || ctx.Token != "dp_para" {
 		t.Errorf("active context wrong: APIURL=%q Token=%q", ctx.APIURL, ctx.Token)
 	}
@@ -121,14 +121,14 @@ func TestActiveContextOverride(t *testing.T) {
 	}
 
 	// Without override: default wins.
-	if got := LoadConfig().Token; got != "dp_default" {
+	if got := mustLoadConfig(t).Token; got != "dp_default" {
 		t.Errorf("without override: got %q want dp_default", got)
 	}
 
 	// With override: staging wins.
 	SetActiveContext("staging")
 	defer SetActiveContext("")
-	if got := LoadConfig().Token; got != "dp_para" {
+	if got := mustLoadConfig(t).Token; got != "dp_para" {
 		t.Errorf("with override: got %q want dp_para", got)
 	}
 }
@@ -149,13 +149,8 @@ func TestActiveContextOverrideUnknown(t *testing.T) {
 	SetActiveContext("nonexistent")
 	defer SetActiveContext("")
 
-	ctx := LoadConfig()
-	// Falls back to default API URL with no token.
-	if ctx.APIURL != defaultAPIURL {
-		t.Errorf("expected fallback APIURL, got %q", ctx.APIURL)
-	}
-	if ctx.Token != "" {
-		t.Errorf("expected empty token for unknown context, got %q", ctx.Token)
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("unknown context must fail")
 	}
 }
 
@@ -191,7 +186,7 @@ project = "blog"
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// LoadConfig should resolve to staging even though current_context is default.
-	ctx := LoadConfig()
+	ctx := mustLoadConfig(t)
 	if ctx.Token != "dp_para" {
 		t.Errorf("expected staging token, got %q (APIURL=%q)", ctx.Token, ctx.APIURL)
 	}
@@ -228,7 +223,7 @@ func TestExplicitOverrideBeatsProjectConfig(t *testing.T) {
 	SetActiveContext("corp")
 	defer SetActiveContext("")
 
-	if got := LoadConfig().Token; got != "dp_corp" {
+	if got := mustLoadConfig(t).Token; got != "dp_corp" {
 		t.Errorf("expected corp token, got %q", got)
 	}
 }
@@ -288,4 +283,21 @@ func trimLeftSpace(s string) string {
 		i++
 	}
 	return s[i:]
+}
+
+func mustLoadConfig(t *testing.T) *Context {
+	t.Helper()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+func mustLoadFullConfig(t *testing.T) *Config {
+	t.Helper()
+	cfg, err := LoadFullConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }

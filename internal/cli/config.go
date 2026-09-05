@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,9 +71,15 @@ func configPath() string {
 //
 // If the config file does not exist, returns a Context pointing at the
 // default public API with no token.
-func LoadConfig() *Context {
-	full := loadFullConfig()
-	name := resolveActiveContextName(full)
+func LoadConfig() (*Context, error) {
+	full, err := LoadFullConfig()
+	if err != nil {
+		return nil, err
+	}
+	name, err := resolveActiveContextName(full)
+	if err != nil {
+		return nil, err
+	}
 	ctx := full.Contexts[name]
 	if value, ok := os.LookupEnv("DROPLY_API_URL"); ok {
 		ctx.APIURL = value
@@ -83,30 +90,22 @@ func LoadConfig() *Context {
 	if ctx.APIURL == "" {
 		ctx.APIURL = defaultAPIURL
 	}
-	return &ctx
+	return &ctx, nil
 }
 
 // LoadFullConfig returns the entire config (all contexts). Used by `droply context` commands.
-func LoadFullConfig() *Config {
-	return loadFullConfig()
-}
-
-func loadFullConfig() *Config {
+func LoadFullConfig() (*Config, error) {
 	cfg := &Config{
 		Contexts: make(map[string]Context),
 	}
 	p := configPath()
-	if _, err := os.Stat(p); os.IsNotExist(err) {
-		// Brand-new install: seed a default context.
-		cfg.CurrentContext = defaultContextName
-		cfg.Contexts[defaultContextName] = Context{APIURL: defaultAPIURL}
-		return cfg
-	}
 	if _, err := toml.DecodeFile(p, cfg); err != nil {
-		// Corrupt or unparseable config: fall back to empty default rather than crash.
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read config %s: %w", p, err)
+		}
 		cfg.CurrentContext = defaultContextName
 		cfg.Contexts[defaultContextName] = Context{APIURL: defaultAPIURL}
-		return cfg
+		return cfg, nil
 	}
 	if cfg.Contexts == nil {
 		cfg.Contexts = make(map[string]Context)
@@ -133,10 +132,7 @@ func loadFullConfig() *Config {
 	if cfg.CurrentContext == "" {
 		cfg.CurrentContext = defaultContextName
 	}
-	if _, ok := cfg.Contexts[cfg.CurrentContext]; !ok && len(cfg.Contexts) == 0 {
-		cfg.Contexts[defaultContextName] = Context{APIURL: defaultAPIURL}
-	}
-	return cfg
+	return cfg, nil
 }
 
 // resolveActiveContextName decides which context the next command should use.
@@ -144,23 +140,36 @@ func loadFullConfig() *Config {
 //  1. --context flag (SetActiveContext)
 //  2. .droply.toml context field in current working directory
 //  3. current_context from global config
-func resolveActiveContextName(cfg *Config) string {
-	if activeContextOverride != "" {
-		return activeContextOverride
+func resolveActiveContextName(cfg *Config) (string, error) {
+	name := activeContextOverride
+	if name == "" {
+		pc, err := loadOptionalProjectConfig()
+		if err != nil {
+			return "", err
+		}
+		if pc != nil {
+			name = pc.Context
+		}
 	}
-	if pc, _ := loadOptionalProjectConfig(); pc != nil && pc.Context != "" {
-		return pc.Context
+	if name == "" {
+		name = cfg.CurrentContext
 	}
-	if cfg.CurrentContext != "" {
-		return cfg.CurrentContext
+	if _, ok := cfg.Contexts[name]; !ok {
+		return "", fmt.Errorf("context %q not found; use 'droply context add' to create it", name)
 	}
-	return defaultContextName
+	return name, nil
 }
 
 // SaveActiveContext writes the given Context back to the active context slot.
 func SaveActiveContext(ctx *Context) error {
-	full := loadFullConfig()
-	name := resolveActiveContextName(full)
+	full, err := LoadFullConfig()
+	if err != nil {
+		return err
+	}
+	name, err := resolveActiveContextName(full)
+	if err != nil {
+		return err
+	}
 	full.Contexts[name] = *ctx
 	if _, ok := full.Contexts[full.CurrentContext]; !ok {
 		full.CurrentContext = name
@@ -170,25 +179,46 @@ func SaveActiveContext(ctx *Context) error {
 
 // SaveFullConfig writes the entire config to disk.
 func SaveFullConfig(cfg *Config) error {
+	// Encode before touching disk, without changing the caller's migration fields.
+	saved := *cfg
+	saved.LegacyAPIURL = ""
+	saved.LegacyToken = ""
+	var data bytes.Buffer
+	if err := toml.NewEncoder(&data).Encode(saved); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
 	dir := configDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
+		return fmt.Errorf("create config directory: %w", err)
 	}
-	// Clear legacy fields before writing so they don't reappear.
-	cfg.LegacyAPIURL = ""
-	cfg.LegacyToken = ""
-	f, err := os.OpenFile(configPath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	f, err := os.CreateTemp(dir, ".config-*.toml")
 	if err != nil {
-		return err
+		return fmt.Errorf("create temporary config: %w", err)
 	}
+	defer os.Remove(f.Name())
 	defer f.Close()
-	return toml.NewEncoder(f).Encode(cfg)
+	if _, err := f.Write(data.Bytes()); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync config: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close config: %w", err)
+	}
+	if err := os.Rename(f.Name(), configPath()); err != nil {
+		return fmt.Errorf("replace config: %w", err)
+	}
+	return nil
 }
 
-// ActiveContextName returns the name of the context that LoadConfig will use,
-// considering flag, project config, and saved current_context.
-func ActiveContextName() string {
-	return resolveActiveContextName(loadFullConfig())
+// ActiveContextName returns the selected context, or an error if it cannot be loaded.
+func ActiveContextName() (string, error) {
+	full, err := LoadFullConfig()
+	if err != nil {
+		return "", err
+	}
+	return resolveActiveContextName(full)
 }
 
 // LoadProjectConfig reads .droply.toml from the current working directory.

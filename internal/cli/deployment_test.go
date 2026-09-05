@@ -72,7 +72,7 @@ func deploymentCommandFixture(t *testing.T) (func(...string) (string, error), fu
 		}
 	}
 	selectUser("owner")
-	if err := NewAPIClient(LoadConfig()).doJSON("POST", "/subdomains", map[string]string{"name": "alice"}, nil); err != nil {
+	if err := NewAPIClient(mustLoadConfig(t)).doJSON("POST", "/subdomains", map[string]string{"name": "alice"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	projectDir := t.TempDir()

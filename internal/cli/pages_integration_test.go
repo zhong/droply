@@ -12,7 +12,7 @@ import (
 
 func TestCIProjectTokensPreviewAndPromote(t *testing.T) {
 	run, _, content := deploymentCommandFixture(t)
-	apiURL := LoadConfig().APIURL
+	apiURL := mustLoadConfig(t).APIURL
 	tokens := map[string]string{}
 	for _, scope := range []string{"preview", "production"} {
 		output, err := run("project-token", "create", "--scope", scope, "--name", "ci-"+scope)

@@ -35,28 +35,34 @@ func readPassword(prompt string) string {
 // resolveLoginTarget returns (contextName, context) for register/login commands.
 // If --api-url is set, it implies a new or named context; --context names it (default: derived from URL).
 // If neither flag is set, uses the currently active context.
-func resolveLoginTarget(cmd *cobra.Command) (string, *Context) {
+func resolveLoginTarget(cmd *cobra.Command) (string, *Context, error) {
 	apiURL, _ := cmd.Flags().GetString("api-url")
 	ctxName, _ := cmd.Flags().GetString("context")
 
-	full := LoadFullConfig()
+	full, err := LoadFullConfig()
+	if err != nil {
+		return "", nil, err
+	}
 
 	if apiURL == "" && ctxName == "" {
 		// Use whatever is currently active.
-		name := resolveActiveContextName(full)
+		name, err := resolveActiveContextName(full)
+		if err != nil {
+			return "", nil, err
+		}
 		ctx := full.Contexts[name]
 		if ctx.APIURL == "" {
 			ctx.APIURL = defaultAPIURL
 		}
-		return name, &ctx
+		return name, &ctx, nil
 	}
 
 	if ctxName == "" {
 		ctxName = deriveContextName(apiURL)
 	}
 	existing, ok := full.Contexts[ctxName]
-	if !ok {
-		existing = Context{}
+	if !ok && apiURL == "" {
+		return "", nil, fmt.Errorf("context %q not found", ctxName)
 	}
 	if apiURL != "" {
 		existing.APIURL = apiURL
@@ -64,7 +70,7 @@ func resolveLoginTarget(cmd *cobra.Command) (string, *Context) {
 	if existing.APIURL == "" {
 		existing.APIURL = defaultAPIURL
 	}
-	return ctxName, &existing
+	return ctxName, &existing, nil
 }
 
 // deriveContextName extracts a short, sensible context name from an API URL.
@@ -93,7 +99,10 @@ func deriveContextName(apiURL string) string {
 }
 
 func saveContext(name string, ctx *Context) error {
-	full := LoadFullConfig()
+	full, err := LoadFullConfig()
+	if err != nil {
+		return err
+	}
 	full.Contexts[name] = *ctx
 	if full.CurrentContext == "" {
 		full.CurrentContext = name
@@ -106,7 +115,10 @@ func newRegisterCmd() *cobra.Command {
 		Use:   "register",
 		Short: "Create a new droply account",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name, ctx := resolveLoginTarget(cmd)
+			name, ctx, err := resolveLoginTarget(cmd)
+			if err != nil {
+				return err
+			}
 			email := readInput("Email: ")
 			password := readPassword("Password: ")
 
@@ -142,7 +154,10 @@ func newLoginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "Log in to your droply account",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name, ctx := resolveLoginTarget(cmd)
+			name, ctx, err := resolveLoginTarget(cmd)
+			if err != nil {
+				return err
+			}
 			email := readInput("Email: ")
 			password := readPassword("Password: ")
 
@@ -176,8 +191,14 @@ func newLogoutCmd() *cobra.Command {
 		Use:   "logout",
 		Short: "Clear the auth token for the active context",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			full := LoadFullConfig()
-			name := resolveActiveContextName(full)
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
+			name, err := resolveActiveContextName(full)
+			if err != nil {
+				return err
+			}
 			ctx := full.Contexts[name]
 			ctx.Token = ""
 			full.Contexts[name] = ctx
@@ -194,9 +215,15 @@ func newWhoamiCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "whoami",
 		Short: "Show the active context and authentication status",
-		Run: func(cmd *cobra.Command, args []string) {
-			full := LoadFullConfig()
-			name := resolveActiveContextName(full)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
+			name, err := resolveActiveContextName(full)
+			if err != nil {
+				return err
+			}
 			ctx := full.Contexts[name]
 			fmt.Printf("Context: %s\n", name)
 			fmt.Printf("API URL: %s\n", ctx.APIURL)
@@ -209,6 +236,7 @@ func newWhoamiCmd() *cobra.Command {
 				}
 				fmt.Printf("Token:   %s\n", masked)
 			}
+			return nil
 		},
 	}
 }

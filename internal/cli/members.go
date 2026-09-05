@@ -19,7 +19,11 @@ func newMemberCmd() *cobra.Command {
 			return err
 		}
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, path+"/members", nil, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/members", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -34,7 +38,11 @@ func newMemberCmd() *cobra.Command {
 			return err
 		}
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodPut, path+"/members", map[string]string{"email": args[0], "role": role}, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodPut, path+"/members", map[string]string{"email": args[0], "role": role}, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -49,7 +57,11 @@ func newMemberCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodDelete, path+"/members/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodDelete, path+"/members/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"user_id": id, "removed": true})
@@ -61,7 +73,11 @@ func newMemberCmd() *cobra.Command {
 func newProjectsCmd() *cobra.Command {
 	return &cobra.Command{Use: "projects", Args: cobra.NoArgs, Short: "List all projects you can access as JSON", SilenceUsage: true, RunE: func(cmd *cobra.Command, args []string) error {
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, "/projects", nil, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodGet, "/projects", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)

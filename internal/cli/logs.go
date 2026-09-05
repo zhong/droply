@@ -37,7 +37,11 @@ func newLogsCmd() *cobra.Command {
 				return fmt.Errorf("subdomain and project name required: use --sub and argument, or set .droply.toml")
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/logs?limit=%d", sub, projectName, limit)

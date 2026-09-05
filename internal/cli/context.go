@@ -27,13 +27,19 @@ func newContextListCmd() *cobra.Command {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List all contexts",
-		Run: func(cmd *cobra.Command, args []string) {
-			full := LoadFullConfig()
-			active := resolveActiveContextName(full)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
+			active, err := resolveActiveContextName(full)
+			if err != nil {
+				return err
+			}
 
 			if len(full.Contexts) == 0 {
 				fmt.Println("No contexts configured.")
-				return
+				return nil
 			}
 
 			names := make([]string, 0, len(full.Contexts))
@@ -56,7 +62,7 @@ func newContextListCmd() *cobra.Command {
 				}
 				fmt.Fprintf(w, "%s %s\t%s\t%s\n", marker, name, ctx.APIURL, authed)
 			}
-			w.Flush()
+			return w.Flush()
 		},
 	}
 }
@@ -66,16 +72,23 @@ func newContextShowCmd() *cobra.Command {
 		Use:   "show [NAME]",
 		Short: "Show details of a context (default: active context)",
 		Args:  cobra.MaximumNArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			full := LoadFullConfig()
-			name := resolveActiveContextName(full)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
+			var name string
 			if len(args) > 0 {
 				name = args[0]
+			} else {
+				name, err = resolveActiveContextName(full)
+				if err != nil {
+					return err
+				}
 			}
 			ctx, ok := full.Contexts[name]
 			if !ok {
-				fmt.Printf("Context %q not found.\n", name)
-				os.Exit(1)
+				return fmt.Errorf("context %q not found", name)
 			}
 			fmt.Printf("Context: %s\n", name)
 			fmt.Printf("API URL: %s\n", ctx.APIURL)
@@ -91,6 +104,7 @@ func newContextShowCmd() *cobra.Command {
 			if name == full.CurrentContext {
 				fmt.Println("(current context)")
 			}
+			return nil
 		},
 	}
 }
@@ -102,7 +116,10 @@ func newContextUseCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			full := LoadFullConfig()
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
 			if _, ok := full.Contexts[name]; !ok {
 				return fmt.Errorf("context %q not found; use 'droply context add' to create it", name)
 			}
@@ -128,7 +145,10 @@ func newContextAddCmd() *cobra.Command {
 				return fmt.Errorf("--api-url is required")
 			}
 
-			full := LoadFullConfig()
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
 			ctx := full.Contexts[name]
 			ctx.APIURL = apiURL
 			full.Contexts[name] = ctx
@@ -159,7 +179,10 @@ func newContextRemoveCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			full := LoadFullConfig()
+			full, err := LoadFullConfig()
+			if err != nil {
+				return err
+			}
 			if _, ok := full.Contexts[name]; !ok {
 				return fmt.Errorf("context %q not found", name)
 			}

@@ -256,7 +256,11 @@ func newDeployCmd() *cobra.Command {
 				return fmt.Errorf("no files to deploy in %s", srcDir)
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			environment := "production"

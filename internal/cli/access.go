@@ -63,7 +63,11 @@ func newAccessSetCmd() *cobra.Command {
 				reqBody["session_ttl"] = int(ttl.Seconds())
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/access", sub)
@@ -150,7 +154,11 @@ func newAccessGetCmd() *cobra.Command {
 				return fmt.Errorf("--subdomain is required")
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/access", sub)
@@ -206,7 +214,11 @@ func newAccessRemoveCmd() *cobra.Command {
 				return fmt.Errorf("--subdomain is required")
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/access", sub)
