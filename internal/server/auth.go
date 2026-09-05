@@ -4,6 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"github.com/zhong/droply/internal/model"
+	"github.com/zhong/droply/internal/store"
 	"net/http"
 	"strings"
 
@@ -20,6 +23,7 @@ func generateToken() (string, error) {
 }
 
 type registerRequest struct {
+	Invite   string `json:"invite"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -30,9 +34,16 @@ type authResponse struct {
 
 // handleRegister creates a new user account and returns an API token.
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if !s.allowAuthentication(w, r) {
+		return
+	}
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if !s.openRegistration && req.Invite == "" {
+		jsonError(w, "registration requires an invitation", 403)
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
@@ -53,7 +64,16 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.store.CreateUser(req.Email, string(hashed), token)
+	var user *model.User
+	if req.Invite != "" {
+		user, err = s.store.RegisterInvited(r.Context(), req.Email, string(hashed), token, req.Invite)
+	} else {
+		user, err = s.store.CreateUser(req.Email, string(hashed), token)
+	}
+	if errors.Is(err, store.ErrInvitation) {
+		jsonError(w, "invitation unavailable or invalid", 403)
+		return
+	}
 	if err != nil {
 		// Treat any error from CreateUser with a duplicate email as a conflict.
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -74,22 +94,40 @@ type loginRequest struct {
 
 // handleLogin authenticates a user and returns their API token.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.allowAuthentication(w, r) {
+		return
+	}
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	user, err := s.store.GetUserByEmail(req.Email)
+	user, err := s.authenticateCredentials(req.Email, req.Password)
 	if err != nil {
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		jsonError(w, "invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
 	jsonResponse(w, authResponse{APIToken: user.APIToken}, http.StatusOK)
+}
+
+var dummyLoginHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("droply-invalid-account-dummy"), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}()
+
+func (s *Server) authenticateCredentials(email, password string) (*model.User, error) {
+	user, err := s.store.GetUserByEmail(strings.TrimSpace(email))
+	if err != nil {
+		_ = bcrypt.CompareHashAndPassword(dummyLoginHash, []byte(password))
+		return nil, errors.New("invalid credentials")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+	return user, nil
 }

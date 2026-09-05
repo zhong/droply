@@ -24,6 +24,8 @@ const userContextKey contextKey = "user"
 
 // Server holds all dependencies for the HTTP server.
 type Server struct {
+	openRegistration  bool
+	authThrottle      authThrottle
 	uploadMu          sync.Mutex
 	deploymentMu      sync.RWMutex
 	prepareOnce       sync.Once
@@ -81,10 +83,13 @@ func (s *Server) buildRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	s.registerConsoleRoutes(r)
 
 	// Public auth routes
-	r.Post("/auth/register", s.handleRegister)
-	r.Post("/auth/login", s.handleLogin)
+	r.Method("POST", "/auth/register", s.withTrustedProxy(http.HandlerFunc(s.handleRegister)))
+	r.Method("POST", "/auth/login", s.withTrustedProxy(http.HandlerFunc(s.handleLogin)))
+
+	r.Get("/healthz", s.handleHealth)
 
 	// Hostname authorization for optional external gateways
 	r.Get("/_droply/tls-check", s.handleTLSCheck)
@@ -92,6 +97,12 @@ func (s *Server) buildRouter() *chi.Mux {
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
+		s.registerAuditRoutes(r)
+		r.Get("/auth/me", s.handleMe)
+		r.Get("/projects", s.handleAccessibleProjects)
+		r.Get("/admin/invitations", s.handleListInvitations)
+		r.Post("/admin/invitations", s.handleCreateInvitation)
+		r.Delete("/admin/invitations/{id}", s.handleRevokeInvitation)
 
 		r.Post("/subdomains", s.handleCreateSubdomain)
 		r.Get("/subdomains", s.handleListSubdomains)
@@ -106,6 +117,9 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Post("/subdomains/{sub}/projects/{project}/rollback/{version}", s.handleRollback)
 		r.Post("/subdomains/{sub}/projects/{project}/promote/{version}", s.handlePromote)
 		r.Get("/subdomains/{sub}/projects/{project}/events", s.handlePublicationEvents)
+		r.Get("/subdomains/{sub}/projects/{project}/members", s.handleListMembers)
+		r.Put("/subdomains/{sub}/projects/{project}/members", s.handlePutMember)
+		r.Delete("/subdomains/{sub}/projects/{project}/members/{id}", s.handleRemoveMember)
 		r.Get("/subdomains/{sub}/projects/{project}/tokens", s.handleListProjectTokens)
 		r.Post("/subdomains/{sub}/projects/{project}/tokens", s.handleCreateProjectToken)
 		r.Delete("/subdomains/{sub}/projects/{project}/tokens/{id}", s.handleRevokeProjectToken)
@@ -136,9 +150,15 @@ func (s *Server) buildRouter() *chi.Mux {
 // looks up the user, and stores it in the request context.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := s.authenticateBearer(w, r)
+		var ctx context.Context
+		var ok bool
+		if r.Header.Get("Authorization") == "" {
+			ctx, ok = s.authenticateConsoleSession(w, r)
+		} else {
+			ctx, ok = s.authenticateBearer(w, r)
+		}
 		if ok {
-			next.ServeHTTP(w, r.WithContext(ctx))
+			s.auditMiddleware(next).ServeHTTP(w, r.WithContext(ctx))
 		}
 	})
 }

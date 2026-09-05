@@ -83,7 +83,6 @@ func (s *Server) handleDeleteProjectAccess(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject bool) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 
 	sub, err := s.store.GetSubdomainByName(subName)
@@ -91,7 +90,7 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -99,7 +98,7 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 	var projectID *int64
 	if isProject {
 		projName := chi.URLParam(r, "project")
-		proj, err := s.store.GetProject(sub.ID, projName)
+		proj, err := s.authorizedProject(r, sub.ID, projName)
 		if err != nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return
@@ -202,7 +201,6 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 }
 
 func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject bool) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 
 	sub, err := s.store.GetSubdomainByName(subName)
@@ -210,7 +208,7 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -218,7 +216,7 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 	var projectID *int64
 	if isProject {
 		projName := chi.URLParam(r, "project")
-		proj, err := s.store.GetProject(sub.ID, projName)
+		proj, err := s.authorizedProject(r, sub.ID, projName)
 		if err != nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return
@@ -248,7 +246,6 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 }
 
 func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject bool) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 
 	sub, err := s.store.GetSubdomainByName(subName)
@@ -256,7 +253,7 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -264,7 +261,7 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 	var projectID *int64
 	if isProject {
 		projName := chi.URLParam(r, "project")
-		proj, err := s.store.GetProject(sub.ID, projName)
+		proj, err := s.authorizedProject(r, sub.ID, projName)
 		if err != nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return

@@ -16,7 +16,7 @@ if [ "${BUSY_PORT:-}" != '' ]; then printf 'LISTEN 0 128 0.0.0.0:%s 0.0.0.0:*\n'
 SCRIPT
 cat > "$test_tmp/server" <<'SCRIPT'
 #!/bin/sh
-[ "$1" = --help ] && printf '  -tls-mode string\n'
+[ "$1" = --help ] && printf '  -tls-mode string\n  -audit-retention-days int\n'
 SCRIPT
 chmod +x "$test_tmp/bin/"* "$test_tmp/server"
 export PATH="$test_tmp/bin:$PATH"
@@ -34,6 +34,8 @@ for mode in auto http manual cloudflare; do
     test "$(ls -l "$root/usr/local/bin/droply-server" | cut -c1-10)" = -rwxr-xr-x
     grep -q -- "--tls-mode $mode" "$root/etc/systemd/system/droply.service"
     test -f "$root/etc/droply/env"
+    grep -q DROPLY_OPEN_REGISTRATION=false "$root/etc/droply/env"
+    grep -q init-admin "$test_tmp/$mode.log"
     if grep -i caddy "$root/etc/systemd/system/droply.service"; then exit 1; fi
     if grep fixture-secret-token "$test_tmp/$mode.log"; then exit 1; fi
 done

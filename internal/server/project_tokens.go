@@ -44,17 +44,21 @@ func (s *Server) authenticateBearer(w http.ResponseWriter, r *http.Request) (con
 		jsonError(w, "project token does not allow this operation", 403)
 		return nil, false
 	}
-	ctx := context.WithValue(r.Context(), userContextKey, &model.User{ID: token.OwnerID})
+	ctx := context.WithValue(r.Context(), userContextKey, &model.User{ID: token.IssuerID})
 	return context.WithValue(ctx, projectTokenContextKey, token), true
 }
 
 func (s *Server) projectTokenAllows(r *http.Request, token *model.ProjectToken) bool {
 	sub, err := s.store.GetSubdomainByName(chi.URLParam(r, "sub"))
-	if err != nil || sub.UserID != token.OwnerID {
+	if err != nil {
 		return false
 	}
 	project, err := s.store.GetProject(sub.ID, chi.URLParam(r, "project"))
 	if err != nil || project.ID != token.ProjectID {
+		return false
+	}
+	role, err := s.store.ProjectRole(r.Context(), project.ID, token.IssuerID)
+	if err != nil || !roleAllows(role, "deployer") {
 		return false
 	}
 	pattern := chi.RouteContext(r.Context()).RoutePattern()

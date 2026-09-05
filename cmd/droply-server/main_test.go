@@ -28,9 +28,11 @@ func TestSecondServerCannotRecoverLiveData(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test"}) }()
+	go func() {
+		done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test", "--open-registration"})
+	}()
 	waitForListener(t, addr, done)
-	err := run(t.Context(), []string{"--addr", availableAddress(t), "--data-dir", data, "--domain", "example.test"})
+	err := run(t.Context(), []string{"--addr", availableAddress(t), "--data-dir", data, "--domain", "example.test", "--open-registration"})
 	if err == nil || !strings.Contains(err.Error(), "data directory already in use") {
 		t.Fatalf("second process not excluded: %v", err)
 	}
@@ -41,7 +43,7 @@ func TestSecondServerCannotRecoverLiveData(t *testing.T) {
 	// A clean exit releases the lock; startup recovery can run again.
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	cancel2()
-	if err := run(ctx2, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test"}); err != nil && strings.Contains(err.Error(), "already in use") {
+	if err := run(ctx2, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test", "--open-registration"}); err != nil && strings.Contains(err.Error(), "already in use") {
 		t.Fatalf("lock remained after shutdown: %v", err)
 	}
 }
@@ -65,7 +67,9 @@ func TestStandaloneRestartPreservesUsersAndSigningKey(t *testing.T) {
 		addr := availableAddress(t)
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
-		go func() { done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test"}) }()
+		go func() {
+			done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test", "--open-registration"})
+		}()
 		client := &http.Client{Timeout: time.Second}
 		request := func(method, path string, body []byte) *http.Response {
 			t.Helper()

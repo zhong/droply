@@ -12,7 +12,6 @@ import (
 // handleListProjects verifies subdomain ownership and returns all projects under it.
 // Always returns an array (never null).
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 
 	sub, err := s.store.GetSubdomainByName(subName)
@@ -20,8 +19,30 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
-		jsonError(w, "forbidden", http.StatusForbidden)
+	if sub.UserID != userFromContext(r.Context()).ID {
+		allowed, err := s.store.ListAccessibleProjects(r.Context(), userFromContext(r.Context()).ID)
+		if err != nil {
+			jsonError(w, "cannot list projects", 500)
+			return
+		}
+		projects := []model.Project{}
+		for _, p := range allowed {
+			if p.SubdomainName == sub.Name {
+				project, err := s.store.GetProject(sub.ID, p.Project)
+				if err != nil {
+					jsonError(w, "cannot list projects", 500)
+					return
+				}
+				if project.ID == p.ProjectID {
+					projects = append(projects, *project)
+				}
+			}
+		}
+		if len(projects) == 0 {
+			jsonError(w, "forbidden", 403)
+			return
+		}
+		jsonResponse(w, projects, 200)
 		return
 	}
 
@@ -39,7 +60,6 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 // handleDeleteProject verifies subdomain ownership, deletes the project from the store,
 // removes the project directory from disk, and returns 204.
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -48,7 +68,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}

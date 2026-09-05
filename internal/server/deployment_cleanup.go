@@ -56,6 +56,9 @@ func (s *Server) handleDeploymentCleanup(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "cannot inspect artifact retention", 500)
 		return
 	}
+	if len(report.Errors) > 0 {
+		markAuditFailure(r)
+	}
 	jsonResponse(w, report, 200)
 }
 

@@ -37,6 +37,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	if handled, err := runBackupCommand(args); handled {
+		return err
+	}
+	if handled, err := runIdentityCommand(ctx, args, os.Stdout); handled {
+		return err
+	}
 	flags := flag.NewFlagSet("droply-server", flag.ContinueOnError)
 	addr := flags.String("addr", ":8080", "HTTP listen address (API and sites); use :80 for automatic HTTPS")
 	httpsAddr := flags.String("https-addr", ":443", "HTTPS listen address")
@@ -53,6 +59,8 @@ func run(ctx context.Context, args []string) error {
 	tokenFile := flags.String("cloudflare-token-file", "", "Cloudflare DNS API token file (or DROPLY_CLOUDFLARE_API_TOKEN)")
 	proxies := flags.String("trusted-proxies", "", "Comma-separated trusted proxy CIDRs (default: none)")
 	hmacSecret := flags.String("hmac-secret", "", "Existing cookie signing key; otherwise persist data-dir/hmac.key")
+	openRegistration := flags.Bool("open-registration", os.Getenv("DROPLY_OPEN_REGISTRATION") == "true", "Explicitly allow public account registration (default: invitations only)")
+	auditRetention := flags.Int("audit-retention-days", 90, "Audit event retention in days")
 	retention := flags.Int("log-retention-days", 30, "Detailed visit log retention")
 	deploymentCount := flags.Int("deployment-retain-count", 10, "Keep this many successful deployments per project (0: disable count protection)")
 	deploymentDays := flags.Int("deployment-retain-days", 30, "Keep successful deployments this many days (0: disable age protection)")
@@ -73,6 +81,9 @@ func run(ctx context.Context, args []string) error {
 	*domain = strings.ToLower(strings.TrimSuffix(*domain, "."))
 	if !validBaseDomain(*domain) {
 		return errors.New("invalid base domain: use a DNS hostname without scheme or port")
+	}
+	if *auditRetention < 1 {
+		return errors.New("audit retention must be positive")
 	}
 	if *retention < 1 {
 		return errors.New("log retention must be positive")
@@ -129,6 +140,7 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	srv := server.New(st, filepath.Join(*dataDir, "sites"), *domain, key)
+	srv.SetOpenRegistration(*openRegistration)
 	if err := srv.SetDeploymentOptions(server.DeploymentOptions{MaxExpandedBytes: *expandedLimit, MaxFiles: *fileLimit, MaxStorageBytes: *artifactQuota, RetainCount: *deploymentCount, RetainDays: *deploymentDays, OrphanGrace: *orphanGrace}); err != nil {
 		return err
 	}
@@ -219,6 +231,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	workers.Go(func() {
 		for {
+			if _, err := st.CleanupAuditEvents(bg, *auditRetention); err != nil {
+				log.Print("audit cleanup failed")
+			}
 			if _, err := st.CleanupVisitLogs(*retention); err != nil {
 				log.Printf("visit cleanup failed: %v", err)
 			}

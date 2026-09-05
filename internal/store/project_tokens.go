@@ -80,8 +80,8 @@ func (s *SQLiteStore) CreateProjectToken(ctx context.Context, projectID, ownerID
 		return nil, "", err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `INSERT INTO project_tokens(project_id,digest,name,scopes,expires_at,created_at)
- SELECT p.id,?,?,?,?,? FROM projects p JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=? AND s.user_id=?`, tokenDigest(raw), name, string(scopeJSON), expiresAt.UTC().Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), projectID, ownerID)
+	res, err := tx.ExecContext(ctx, `INSERT INTO project_tokens(project_id,digest,name,scopes,expires_at,created_at,issuer_id)
+ SELECT p.id,?,?,?,?,?,? FROM projects p JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=? AND (s.user_id=? OR EXISTS(SELECT 1 FROM project_members m WHERE m.project_id=p.id AND m.user_id=? AND m.role='deployer'))`, tokenDigest(raw), name, string(scopeJSON), expiresAt.UTC().Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), ownerID, projectID, ownerID, ownerID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,16 +99,20 @@ func (s *SQLiteStore) CreateProjectToken(ctx context.Context, projectID, ownerID
 	if err = tx.Commit(); err != nil {
 		return nil, "", err
 	}
-	return &model.ProjectToken{ID: id, ProjectID: projectID, OwnerID: ownerID, Name: name, Scopes: normalized, ExpiresAt: expiresAt.UTC(), CreatedAt: now}, raw, nil
+	var projectOwnerID int64
+	if err := s.db.QueryRowContext(ctx, `SELECT s.user_id FROM projects p JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=?`, projectID).Scan(&projectOwnerID); err != nil {
+		return nil, "", err
+	}
+	return &model.ProjectToken{ID: id, ProjectID: projectID, OwnerID: projectOwnerID, IssuerID: ownerID, Name: name, Scopes: normalized, ExpiresAt: expiresAt.UTC(), CreatedAt: now}, raw, nil
 }
 
-const projectTokenColumns = `t.id,t.project_id,s.user_id,t.name,t.scopes,t.expires_at,t.revoked_at,t.created_at`
+const projectTokenColumns = `t.id,t.project_id,s.user_id,t.issuer_id,t.name,t.scopes,t.expires_at,t.revoked_at,t.created_at`
 
 func scanProjectToken(row interface{ Scan(...any) error }) (*model.ProjectToken, error) {
 	var t model.ProjectToken
 	var scopes, expires, created string
 	var revoked sql.NullString
-	if err := row.Scan(&t.ID, &t.ProjectID, &t.OwnerID, &t.Name, &scopes, &expires, &revoked, &created); err != nil {
+	if err := row.Scan(&t.ID, &t.ProjectID, &t.OwnerID, &t.IssuerID, &t.Name, &scopes, &expires, &revoked, &created); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(scopes), &t.Scopes); err != nil {
@@ -133,7 +137,7 @@ func scanProjectToken(row interface{ Scan(...any) error }) (*model.ProjectToken,
 	return &t, nil
 }
 func (s *SQLiteStore) ListProjectTokens(ctx context.Context, projectID, ownerID int64) ([]model.ProjectToken, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+projectTokenColumns+` FROM project_tokens t JOIN projects p ON p.id=t.project_id JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=? AND s.user_id=? ORDER BY t.id`, projectID, ownerID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+projectTokenColumns+` FROM project_tokens t JOIN projects p ON p.id=t.project_id JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=? AND (s.user_id=? OR (t.issuer_id=? AND EXISTS(SELECT 1 FROM project_members m WHERE m.project_id=p.id AND m.user_id=? AND m.role='deployer'))) ORDER BY t.id`, projectID, ownerID, ownerID, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +153,7 @@ func (s *SQLiteStore) ListProjectTokens(ctx context.Context, projectID, ownerID 
 	return result, rows.Err()
 }
 func (s *SQLiteStore) RevokeProjectToken(ctx context.Context, projectID, ownerID, tokenID int64) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE project_tokens SET revoked_at=COALESCE(revoked_at,?) WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects p JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=project_tokens.project_id AND s.user_id=?)`, time.Now().UTC().Format(time.RFC3339Nano), tokenID, projectID, ownerID)
+	res, err := s.db.ExecContext(ctx, `UPDATE project_tokens SET revoked_at=COALESCE(revoked_at,?) WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects p JOIN subdomains s ON s.id=p.subdomain_id WHERE p.id=project_tokens.project_id AND (s.user_id=? OR (project_tokens.issuer_id=? AND EXISTS(SELECT 1 FROM project_members m WHERE m.project_id=p.id AND m.user_id=? AND m.role='deployer'))))`, time.Now().UTC().Format(time.RFC3339Nano), tokenID, projectID, ownerID, ownerID, ownerID)
 	if err != nil {
 		return err
 	}
@@ -171,6 +175,13 @@ func (s *SQLiteStore) AuthenticateProjectToken(ctx context.Context, raw string) 
 		return nil, err
 	}
 	if t.RevokedAt != nil || !time.Now().Before(t.ExpiresAt) {
+		return nil, sql.ErrNoRows
+	}
+	role, err := s.ProjectRole(ctx, t.ProjectID, t.IssuerID)
+	if err != nil {
+		return nil, err
+	}
+	if role != "owner" && role != "deployer" {
 		return nil, sql.ErrNoRows
 	}
 	return t, nil

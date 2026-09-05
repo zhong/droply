@@ -1,18 +1,8 @@
 # Droply
 
-Droply 现已支持项目独立根域名、不可变预览、分支别名、预览提升为生产、版本化静态规则及项目级 CI token。单个服务端进程提供 HTTP/HTTPS，无需 Caddy。
+Droply 面向单机或小团队，是 Cloudflare Pages 静态发布工作流的轻量私有部署替代：一个服务端二进制，SQLite 与本地磁盘，内置 HTTPS，无需 Caddy。支持不可变版本、项目根域名、分支预览、回滚、静态规则和协作权限。
 
-```sh
-droply deploy dist --sub alice --project blog --preview --branch feature/docs --commit abc123 --json
-droply deployment promote 42 --sub alice --project blog --json
-```
-
-预览不会改变生产内容；提升复用已验证的产物，旧预览仍执行项目当前访问规则。环境变量 `DROPLY_API_URL`、`DROPLY_TOKEN` 覆盖所选 context 的对应字段，部署过程不写全局配置。CLI 不会自动重试上传；连接中断时应先检查部署历史，避免重复发布。
-
-详见 [M2 使用及升级说明](docs/pages-m2.md)、[静态规则](docs/static-rules-m2.md)、[项目 token](docs/project-tokens-m2.md) 和 [CI 示例](docs/ci-m2.md)。
-
-
-多用户、多子域名的静态内容发布平台。通过 CLI 快速发布静态网站，自动分配子域名并提供 HTTPS 访问。
+目标是可自行运维的静态托管；不提供 Cloudflare 全球 CDN、Workers/Functions、托管构建集群或多节点高可用。上传构建好的目录即可发布。管理账户默认封闭注册；发布账户权限和访客访问规则独立，未配置访客保护的站点及预览仍公开。
 
 [English](README.md)
 
@@ -28,6 +18,28 @@ CLI / Browser → Droply HTTP + HTTPS
 
 Droply 单进程提供 API、静态文件服务和 HTTPS，外部网关可选。所有站点使用同一个访问控制入口。
 
+## 私有部署与 M3 运维
+
+首次使用需在服务器本地初始化管理员，再通过邀请添加账户。访问 `https://api.<base-domain>/console/` 登录内嵌控制台；CLI 与控制台共用 owner/deployer/viewer 权限。owner 管理成员和访问规则，deployer 发布、回滚并管理自己的项目 token，viewer 只读。权限变更不会绕过站点原有密码、IP 或企业微信规则。
+
+```sh
+# 在服务器上：先停止服务；密码文件须为 0600，内容为 8–72 字节密码
+sudo systemctl stop droply
+sudo /usr/local/bin/droply-server init-admin --data-dir /data/droply \
+  --email admin@example.com --password-file /secure/initial-password
+# 若使用安装器的 droply 服务用户，确认新数据库仍归该用户所有
+sudo chown -R droply:droply /data/droply
+sudo systemctl start droply
+
+# 在工作站上
+droply login --api-url https://api.example.com
+droply invitation create colleague@example.com
+droply member set colleague@example.com --role deployer --sub alice --project blog
+droply audit --sub alice --project blog --limit 50
+```
+
+先创建 `alice/blog` 项目并完成受邀注册，再授予成员权限。已有账号的旧安装用本地 `claim-admin --email ...` 明确选择管理员；它只适用于尚无管理员的数据库。不要为首次初始化打开公开注册。完整流程见[账户初始化](docs/identity-m3.md)、[控制台](docs/console-m3.md)、[审计](docs/audit-m3.md)、[备份恢复](docs/backup-m3.md)及[运维、升级和验收](docs/operations-m3.md)。
+
 ## 快速开始
 
 ### 安装 CLI
@@ -41,7 +53,8 @@ curl -fsSL https://droplydoc.com/install.sh | bash
 安装指定版本：
 
 ```bash
-VERSION=v0.1.0 curl -fsSL https://droplydoc.com/install.sh | bash
+curl -fsSL https://droplydoc.com/install.sh -o install.sh
+VERSION=vX.Y.Z bash install.sh
 ```
 
 <details>
@@ -93,16 +106,18 @@ make build-all
 
 ### 运行测试
 
-```bash
+```sh
 make test
+make test-integration
+go vet ./...
 ```
 
 ### 部署到服务器
 
-在服务器上拉取最新代码、重新编译并重启服务：
+先按[升级与降级指南](docs/operations-m3.md#升级与降级)停服完整备份并保留旧二进制，再构建并切换。`make deploy` 已停止提供未备份的自动升级，会指向该指南。
 
-```bash
-make deploy
+```sh
+make build
 ```
 
 ### 部署官网
@@ -116,7 +131,7 @@ droply deploy
 
 ## 服务端部署
 
-新安装仅运行 `droply-server`，无需 Caddy。已有安装先阅读 [M0 迁移与恢复指南](docs/migration-m0.md)，不要直接覆盖服务文件。
+新安装仅运行 `droply-server`，无需 Caddy。生产操作先阅读[M3 运维指南](docs/operations-m3.md)。已有安装先阅读 [M0 迁移与恢复指南](docs/migration-m0.md)，不要直接覆盖服务文件。
 
 ### Linux 安装
 
@@ -149,7 +164,7 @@ sudo env DOMAIN=example.com TLS_MODE=auto \
   LOCAL_BINARY="$PWD/bin/droply-server" sh setup.sh
 ```
 
-`UPGRADE=1` 只备份并替换已有二进制，保留服务、环境、数据与证书，不自动重启。切换前按照迁移指南备份数据库和内容。`VERSION=vX.Y.Z` 可指定发行版；`DATA_DIR` 可指定新数据目录；`ACME_CA` 可使用 ACME 测试环境。
+`UPGRADE=1` 只备份并替换已有二进制，保留服务、环境、数据与证书，不自动重启。切换前先停止服务，执行[完整备份](docs/backup-m3.md)，再按[升级和降级流程](docs/operations-m3.md)切换。`VERSION=vX.Y.Z` 可指定发行版；`DATA_DIR` 可指定新数据目录；`ACME_CA` 可使用 ACME 测试环境。
 
 ### 直接启动
 
@@ -187,6 +202,12 @@ sudo env DOMAIN=example.com TLS_MODE=auto \
 | `--trusted-proxies` | 空 | 可信代理 CIDR 列表；默认忽略转发 IP |
 | `--hmac-secret` | 自动持久化 | 保留旧的显式会话签名密钥 |
 | `--log-retention-days` | `30` | 访问明细保留天数 |
+| `--open-registration` | `false` | 显式开放账户注册；环境变量 `DROPLY_OPEN_REGISTRATION=true` 同效 |
+| `--audit-retention-days` | `90` | 审计保留天数，必须为正 |
+| `--deploy-max-expanded-bytes`, `--deploy-max-files` | `268435456`, `10000` | 单次解包字节/条目上限 |
+| `--artifact-max-bytes` | `0` | 管理产物及 staging 配额；0 表示仅受磁盘容量限制 |
+| `--deployment-retain-count`, `--deployment-retain-days` | `10`, `30` | 历史版本保留保护 |
+| `--artifact-orphan-grace` | `1h` | 孤儿产物回收宽限期 |
 
 完整参数见 `droply-server --help`。正常 HTTP 退出最多等待 15 秒；进行中的 DNS 操作可能延迟退出至库超时（最长约 5 分钟），安装的服务预留 360 秒。`--site-addr` 暂时作为额外统一 HTTP 监听兼容旧服务，`--caddy-admin` 被忽略；新安装不应使用它们。`on-demand` 是 `auto` 的兼容名称。
 
@@ -199,13 +220,16 @@ sudo journalctl -u droply -f
 
 ```
 /data/droply/
-├── droply.db              SQLite 数据库
+├── droply.db                  SQLite：账号、项目、版本、会话、审计
+├── hmac.key                   持久化访客/控制台签名密钥
+├── certificates/              默认 ACME 证书与账户
+├── server.lock                安装排他锁
+├── upgrade-backups/           迁移前仅数据库快照
 └── sites/
-    ├── alice/
-    │   ├── blog/          alice.droplydoc.com/blog
-    │   └── portfolio/     alice.droplydoc.com/portfolio
-    └── bob/
-        └── docs/          bob.droplydoc.com/docs
+    ├── .artifacts/<id>/files/  不可变部署内容
+    ├── .artifacts/<id>/manifest.json
+    ├── .artifacts/.staging/    尚未完成的上传
+    └── <sub>/<project>/       等待迁移的旧目录
 ```
 
 ## CLI 使用指南
@@ -283,8 +307,8 @@ project = "blog"
 ### 注册和登录
 
 ```bash
-# 注册新账号
-droply register
+# 使用管理员提供的邀请注册（先设置 DROPLY_INVITE 环境变量）
+droply register --api-url https://api.example.com
 # 交互式输入 Email 和 Password
 
 # 登录已有账号
@@ -322,11 +346,7 @@ droply deploy --sub alice --project blog
 # 部署指定目录
 droply deploy ./dist --sub alice --project blog
 
-# 部署结果示例：
-# Packaging ./dist...
-# Deploying to alice.droplydoc.com/blog...
-# Deployed! Version 1
-# URL: https://alice.droplydoc.com/blog
+# 响应会输出项目根域名 URL 和部署版本。
 ```
 
 #### 使用项目配置文件
@@ -486,8 +506,17 @@ droply access set --subdomain alice --project docs \
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/auth/register` | 注册 |
+| POST | `/auth/register` | 邀请注册（公开注册须显式开启） |
 | POST | `/auth/login` | 登录 |
+| GET | `/healthz` | 数据库连通性，无敏感信息 |
+| GET | `/auth/me` | 当前账户及管理员标记 |
+| GET | `/projects` | 当前账户获授权项目 |
+| GET / POST | `/admin/invitations` | 管理员查询/创建邀请 |
+| DELETE | `/admin/invitations/:id` | 管理员撤销邀请 |
+| GET / PUT | `/subdomains/:sub/projects/:name/members` | 查询/设置成员 |
+| DELETE | `/subdomains/:sub/projects/:name/members/:id` | 移除成员 |
+| GET | `/subdomains/:sub/projects/:name/audit` | 项目审计分页 |
+| GET | `/admin/audit` | 管理员全局审计 |
 | POST | `/subdomains` | 创建子域名 |
 | GET | `/subdomains` | 列出子域名 |
 | DELETE | `/subdomains/:name` | 删除子域名 |

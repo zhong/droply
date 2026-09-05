@@ -29,6 +29,11 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
+	if err := prepareSchemaUpgrade(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("set WAL mode: %w", err)
@@ -63,6 +68,26 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate project tokens: %w", err)
 	}
+	if err := s.migrateIdentity(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate identity: %w", err)
+	}
+	if err := s.migrateMembers(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate members: %w", err)
+	}
+	if err := s.migrateAudit(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate audit: %w", err)
+	}
+	if err := s.migrateConsoleSessions(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate console sessions: %w", err)
+	}
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version=%d", SchemaVersion)); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("record schema version: %w", err)
+	}
 	return s, nil
 }
 
@@ -71,6 +96,7 @@ func (s *SQLiteStore) migrate() error {
 		CREATE TABLE IF NOT EXISTS users (
 			id         INTEGER PRIMARY KEY AUTOINCREMENT,
 			email      TEXT NOT NULL UNIQUE,
+ is_admin INTEGER NOT NULL DEFAULT 0,
 			password   TEXT NOT NULL,
 			api_token  TEXT NOT NULL UNIQUE,
 			created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))
@@ -227,21 +253,21 @@ func (s *SQLiteStore) CreateUser(email, hashedPassword, apiToken string) (*model
 
 func (s *SQLiteStore) getUserByID(id int64) (*model.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, password, api_token, created_at FROM users WHERE id = ?`, id,
+		`SELECT id, email, password, api_token, created_at, is_admin FROM users WHERE id = ?`, id,
 	)
 	return scanUser(row)
 }
 
 func (s *SQLiteStore) GetUserByEmail(email string) (*model.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, password, api_token, created_at FROM users WHERE email = ?`, email,
+		`SELECT id, email, password, api_token, created_at, is_admin FROM users WHERE email = ?`, email,
 	)
 	return scanUser(row)
 }
 
 func (s *SQLiteStore) GetUserByToken(token string) (*model.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, password, api_token, created_at FROM users WHERE api_token = ?`, token,
+		`SELECT id, email, password, api_token, created_at, is_admin FROM users WHERE api_token = ?`, token,
 	)
 	return scanUser(row)
 }
@@ -249,7 +275,7 @@ func (s *SQLiteStore) GetUserByToken(token string) (*model.User, error) {
 func scanUser(row *sql.Row) (*model.User, error) {
 	var u model.User
 	var createdAt string
-	if err := row.Scan(&u.ID, &u.Email, &u.Password, &u.APIToken, &createdAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.Password, &u.APIToken, &createdAt, &u.IsAdmin); err != nil {
 		return nil, fmt.Errorf("scan user: %w", err)
 	}
 	u.CreatedAt = parseTime(createdAt)
