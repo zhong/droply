@@ -92,6 +92,8 @@ func (s *Server) handleCreateProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "cannot create project token", 500)
 		return
 	}
+	auditResourceTarget(r, auditResource, token.ID)
+	recordAudit(r, auditSuccess)
 	w.Header().Set("Cache-Control", "no-store")
 	jsonResponse(w, struct {
 		*model.ProjectToken
@@ -139,5 +141,6 @@ func (s *Server) handleRevokeProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "cannot revoke project token", 500)
 		return
 	}
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(204)
 }

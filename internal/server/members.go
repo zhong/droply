@@ -59,6 +59,8 @@ func (s *Server) handlePutMember(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot update membership", 500)
 		return
 	}
+	auditResourceTarget(r, auditUser, member.UserID)
+	recordAudit(r, auditSuccess)
 	jsonResponse(w, member, 200)
 }
 func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
@@ -86,5 +88,6 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot remove member", 500)
 		return
 	}
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(204)
 }

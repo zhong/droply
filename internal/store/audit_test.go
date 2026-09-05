@@ -19,6 +19,9 @@ func TestAuditPendingRetentionAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := st.FinishAuditEvent(t.Context(), id, 3, "version:1", 500, "pending"); err != nil {
+		t.Fatal(err)
+	}
 	st.Close()
 	st, err = NewSQLiteStore(path)
 	if err != nil {
@@ -26,7 +29,7 @@ func TestAuditPendingRetentionAndRestart(t *testing.T) {
 	}
 	defer st.Close()
 	list, err := st.ListAuditEvents(t.Context(), 3, 2, 0, 10)
-	if err != nil || len(list) != 1 || list[0].Result != "pending" {
+	if err != nil || len(list) != 1 || list[0].Result != "pending" || list[0].StatusCode != 500 {
 		t.Fatalf("restart=%+v %v", list, err)
 	}
 	if _, err := st.db.Exec(`CREATE TRIGGER fail_audit_finalize BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT,'storage fault'); END`); err != nil {

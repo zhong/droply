@@ -163,6 +163,7 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		generatedPassword = generatePassword()
 		hash, err := bcrypt.GenerateFromPassword([]byte(generatedPassword), bcrypt.DefaultCost)
 		if err != nil {
+			recordAudit(r, auditFailure)
 			jsonError(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -170,6 +171,7 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 	} else if req.Password != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
+			recordAudit(r, auditFailure)
 			jsonError(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -205,6 +207,8 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		SessionTTL:         rule.SessionTTL,
 		GeneratedPassword:  generatedPassword,
 	}
+	auditResourceTarget(r, auditResource, rule.ID)
+	recordAudit(r, auditSuccess)
 	jsonResponse(w, resp, http.StatusOK)
 }
 
@@ -278,5 +282,6 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		return
 	}
 
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(http.StatusNoContent)
 }

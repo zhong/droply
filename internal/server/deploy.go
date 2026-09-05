@@ -67,6 +67,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.PrepareDeployments(r.Context()); err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "deployment storage unavailable", 503)
 		return
 	}
@@ -104,6 +105,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), 403)
 		return
 	}
+	auditProject(r, proj.ID)
 	id := rand.Text()
 	deployment, err := s.store.BeginDeploymentTarget(r.Context(), proj.ID, id, environment, branch, commit)
 	s.deploymentMu.Unlock()
@@ -111,6 +113,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot reserve deployment version", 500)
 		return
 	}
+	auditResourceTarget(r, auditVersion, int64(deployment.Version))
 	success := false
 	defer func() {
 		if !success {
@@ -120,6 +123,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	fail := func(reason string, code int) {
+		recordAudit(r, auditFailure)
 		s.failDeployment(deployment.ID, reason)
 		jsonResponse(w, map[string]any{"error": reason, "deployment_id": deployment.ID, "version": deployment.Version}, code)
 	}
@@ -209,10 +213,14 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.CommitDeployment(r.Context(), deployment.ID, info.FileCount, info.TotalSize, info.Checksum); err != nil {
 		// Do not remove the published directory after an uncertain commit. SQLite
 		// decides whether it is referenced; recovery/GC reclaim genuine orphans.
-		fail("publication transaction failed; query deployment history", 500)
+		reason := "publication transaction failed; query deployment history"
+		s.failDeployment(deployment.ID, reason)
+		recordAudit(r, auditPending)
+		jsonResponse(w, map[string]any{"error": reason, "deployment_id": deployment.ID, "version": deployment.Version}, 500)
 		return
 	}
 	success = true
+	recordAudit(r, auditSuccess)
 	result := deployResponse{Environment: environment, Branch: branch, Commit: commit, DeploymentID: deployment.ID, Version: deployment.Version, FileCount: info.FileCount, TotalSize: info.TotalSize,
 		ProjectURL: fmt.Sprintf("https://%s.%s", proj.HostLabel, s.baseDomain), LegacyURL: fmt.Sprintf("https://%s.%s/%s", subName, s.baseDomain, projName)}
 	result.URL = result.ProjectURL
@@ -235,6 +243,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.PrepareDeployments(r.Context()); err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "deployment storage unavailable", 503)
 		return
 	}
