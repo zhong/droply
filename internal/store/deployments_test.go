@@ -29,35 +29,32 @@ func deploymentProject(t *testing.T, s *SQLiteStore) int64 {
 	return p.ID
 }
 
-func TestLegacyActivationFailureRetainsProduction(t *testing.T) {
+func TestLegacyDeploymentsRejectPublicationTransitions(t *testing.T) {
 	s := newTestStore(t)
 	project := deploymentProject(t, s)
-	first, err := s.CreateDeployment(project, 1, 10)
-	if err != nil {
+	// Historical records have no immutable artifact. Do not construct them through
+	// today's publication API, which would incorrectly claim artifact availability.
+	if _, err := s.db.Exec(`INSERT INTO deployments(project_id,version,file_count,total_size,status) VALUES(?,1,1,10,'active'),(?,2,1,20,'archived')`, project, project); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.ActivateDeployment(first.ID); err != nil {
-		t.Fatal(err)
-	}
-	next, err := s.CreateDeployment(project, 1, 20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Fail the final write, after archiving the previous production row.
-	if _, err = s.db.Exec(`CREATE TRIGGER reject_activation BEFORE UPDATE OF status ON deployments WHEN NEW.id != 1 AND NEW.status = 'active' BEGIN SELECT RAISE(ABORT, 'injected activation failure'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.ActivateDeployment(next.ID); err == nil {
-		t.Fatal("activation should fail")
-	}
-	versions, err := s.ListDeployments(project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range versions {
-		if d.ID == first.ID && d.Status != "active" {
-			t.Fatalf("failed activation changed production to %s", d.Status)
+	for _, version := range []int{1, 2} {
+		d, err := s.GetDeployment(t.Context(), project, version)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if err := s.CommitDeployment(t.Context(), d.ID, 1, 1, "checksum"); !errors.Is(err, ErrDeploymentState) {
+			t.Fatalf("legacy commit accepted: %v", err)
+		}
+		if _, _, err := s.SwitchDeployment(t.Context(), project, version); !errors.Is(err, ErrDeploymentState) {
+			t.Fatalf("legacy rollback accepted: %v", err)
+		}
+		if _, _, err := s.PromoteDeployment(t.Context(), project, version, 1); !errors.Is(err, ErrDeploymentState) {
+			t.Fatalf("legacy promotion accepted: %v", err)
+		}
+	}
+	active, err := s.GetActiveDeployment(t.Context(), project)
+	if err != nil || active.Version != 1 || active.Available {
+		t.Fatalf("legacy production changed: %+v %v", active, err)
 	}
 }
 

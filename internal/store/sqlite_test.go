@@ -163,9 +163,9 @@ func TestDeploymentLifecycle(t *testing.T) {
 	sd, _ := s.CreateSubdomain(user.ID, "evesub")
 	proj, _ := s.CreateProject(sd.ID, "app")
 
-	d1, err := s.CreateDeployment(proj.ID, 5, 1024)
+	d1, err := s.BeginDeployment(t.Context(), proj.ID, "first-artifact")
 	if err != nil {
-		t.Fatalf("CreateDeployment: %v", err)
+		t.Fatalf("BeginDeployment: %v", err)
 	}
 	if d1.Status != "uploading" {
 		t.Errorf("expected status uploading, got %s", d1.Status)
@@ -174,8 +174,8 @@ func TestDeploymentLifecycle(t *testing.T) {
 		t.Errorf("expected version 1, got %d", d1.Version)
 	}
 
-	if err := s.ActivateDeployment(d1.ID); err != nil {
-		t.Fatalf("ActivateDeployment: %v", err)
+	if err := s.CommitDeployment(t.Context(), d1.ID, 5, 1024, "first-checksum"); err != nil {
+		t.Fatalf("CommitDeployment: %v", err)
 	}
 
 	deployments, err := s.ListDeployments(proj.ID)
@@ -190,15 +190,15 @@ func TestDeploymentLifecycle(t *testing.T) {
 	}
 
 	// Second deployment should auto-increment version and archive previous active
-	d2, err := s.CreateDeployment(proj.ID, 6, 2048)
+	d2, err := s.BeginDeployment(t.Context(), proj.ID, "second-artifact")
 	if err != nil {
-		t.Fatalf("CreateDeployment v2: %v", err)
+		t.Fatalf("BeginDeployment v2: %v", err)
 	}
 	if d2.Version != 2 {
 		t.Errorf("expected version 2, got %d", d2.Version)
 	}
-	if err := s.ActivateDeployment(d2.ID); err != nil {
-		t.Fatalf("ActivateDeployment d2: %v", err)
+	if err := s.CommitDeployment(t.Context(), d2.ID, 6, 2048, "second-checksum"); err != nil {
+		t.Fatalf("CommitDeployment d2: %v", err)
 	}
 
 	deployments, err = s.ListDeployments(proj.ID)
