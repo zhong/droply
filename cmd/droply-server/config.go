@@ -6,9 +6,16 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
+	"path/filepath"
+	"strconv"
+
 	"os"
 	"strings"
 	"time"
+
+	"github.com/zhong/droply/internal/server"
 )
 
 // serverConfig contains the command-line and environment configuration.
@@ -84,8 +91,7 @@ func parseServerConfig(args []string) (serverConfig, error) {
 	return cfg, nil
 }
 
-// validate checks the startup options that historically precede data access.
-// Deployment, proxy, WeCom and automatic-certificate checks remain in assembly.
+// validate checks configuration and reads credential material before data access.
 func (cfg *serverConfig) validate() (*tls.Config, error) {
 	cfg.domain = strings.ToLower(strings.TrimSuffix(cfg.domain, "."))
 	if !validBaseDomain(cfg.domain) {
@@ -131,7 +137,80 @@ func (cfg *serverConfig) validate() (*tls.Config, error) {
 		}
 		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}}
 	}
+	if err := cfg.deploymentOptions().Validate(); err != nil {
+		return nil, err
+	}
+	if cfg.proxies != "" {
+		if _, err := server.ParseTrustedProxies(strings.Split(cfg.proxies, ",")); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.corp != "" || cfg.agent != "" || cfg.secret != "" || cfg.callback != "" {
+		if cfg.corp == "" || cfg.agent == "" || cfg.secret == "" || cfg.callback == "" {
+			return nil, errors.New("all four WeCom options must be configured")
+		}
+		if !validHTTPURL(cfg.callback) {
+			return nil, errors.New("invalid WeCom callback URL")
+		}
+	}
+	if (cfg.mode == "auto" || cfg.mode == "cloudflare") && cfg.ca != "" && !validHTTPURL(cfg.ca) {
+		return nil, errors.New("invalid ACME directory URL")
+	}
+	if cfg.mode == "auto" || cfg.mode == "cloudflare" {
+		certDir := cfg.certDir
+		if certDir == "" {
+			certDir = filepath.Join(cfg.dataDir, "certificates")
+		}
+		if err := validateDirectoryPath(certDir); err != nil {
+			return nil, fmt.Errorf("certificate directory: %w", err)
+		}
+	}
+	if cfg.mode == "cloudflare" {
+		if cfg.tokenFile != "" {
+			data, err := os.ReadFile(cfg.tokenFile)
+			if err != nil {
+				return nil, errors.New("cannot read Cloudflare token file")
+			}
+			cfg.cloudflareToken = strings.TrimSpace(string(data))
+		}
+		if cfg.cloudflareToken == "" {
+			return nil, errors.New("Cloudflare DNS mode requires a token file or DROPLY_CLOUDFLARE_API_TOKEN")
+		}
+	}
+	if cfg.addr == "" && cfg.mode == "http" {
+		return nil, errors.New("at least one listener is required")
+	}
+	addresses := []string{cfg.addr, cfg.legacySiteAddr}
+	if cfg.mode != "http" {
+		addresses = append(addresses, cfg.httpsAddr)
+	}
+	for _, address := range addresses {
+		if address == "" {
+			continue
+		}
+		if _, err := net.ResolveTCPAddr("tcp", address); err != nil {
+			return nil, fmt.Errorf("invalid listen address %q: %w", address, err)
+		}
+	}
 	return tlsConfig, nil
+}
+
+func (cfg serverConfig) deploymentOptions() server.DeploymentOptions {
+	return server.DeploymentOptions{MaxExpandedBytes: cfg.expandedLimit, MaxFiles: cfg.fileLimit, MaxStorageBytes: cfg.artifactQuota, RetainCount: cfg.deploymentCount, RetainDays: cfg.deploymentDays, OrphanGrace: cfg.orphanGrace}
+}
+
+func validHTTPURL(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
+		return false
+	}
+	if port := parsed.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 0 || number > 65535 {
+			return false
+		}
+	}
+	return true
 }
 
 func validBaseDomain(domain string) bool {
@@ -149,4 +228,27 @@ func validBaseDomain(domain string) bool {
 		}
 	}
 	return true
+}
+
+// Reject known non-directory components; access and races are checked again by
+// the filesystem when resources are opened under the data-directory lock.
+func validateDirectoryPath(path string) error {
+	path = filepath.Clean(path)
+	for {
+		info, err := os.Stat(path)
+		if err == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("%q is not a directory", path)
+			}
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return err
+		}
+		path = parent
+	}
 }

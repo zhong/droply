@@ -57,7 +57,7 @@ type configuredServer struct {
 func assembleServer(ctx context.Context, cfg serverConfig, st *store.SQLiteStore, key []byte, tlsConfig *tls.Config) (*configuredServer, error) {
 	srv := server.New(st, filepath.Join(cfg.dataDir, "sites"), cfg.domain, key)
 	srv.SetOpenRegistration(cfg.openRegistration)
-	if err := srv.SetDeploymentOptions(server.DeploymentOptions{MaxExpandedBytes: cfg.expandedLimit, MaxFiles: cfg.fileLimit, MaxStorageBytes: cfg.artifactQuota, RetainCount: cfg.deploymentCount, RetainDays: cfg.deploymentDays, OrphanGrace: cfg.orphanGrace}); err != nil {
+	if err := srv.SetDeploymentOptions(cfg.deploymentOptions()); err != nil {
 		return nil, err
 	}
 	if err := srv.PrepareDeployments(ctx); err != nil {
@@ -69,9 +69,6 @@ func assembleServer(ctx context.Context, cfg serverConfig, st *store.SQLiteStore
 		}
 	}
 	if cfg.corp != "" || cfg.agent != "" || cfg.secret != "" || cfg.callback != "" {
-		if cfg.corp == "" || cfg.agent == "" || cfg.secret == "" || cfg.callback == "" {
-			return nil, errors.New("all four WeCom options must be configured")
-		}
 		srv.SetWeWork(wework.NewClient(wework.Config{CorpID: cfg.corp, AgentID: cfg.agent, Secret: cfg.secret, RedirectURI: cfg.callback}))
 	}
 	handler := srv.Handler()
@@ -82,16 +79,6 @@ func assembleServer(ctx context.Context, cfg serverConfig, st *store.SQLiteStore
 		token := ""
 		if cfg.mode == "cloudflare" {
 			token = cfg.cloudflareToken
-			if cfg.tokenFile != "" {
-				data, err := os.ReadFile(cfg.tokenFile)
-				if err != nil {
-					return nil, errors.New("cannot read Cloudflare token file")
-				}
-				token = strings.TrimSpace(string(data))
-			}
-			if token == "" {
-				return nil, errors.New("Cloudflare DNS mode requires a token file or DROPLY_CLOUDFLARE_API_TOKEN")
-			}
 		}
 		if cfg.certDir == "" {
 			cfg.certDir = filepath.Join(cfg.dataDir, "certificates")

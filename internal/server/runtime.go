@@ -39,16 +39,25 @@ func (s *Server) Handler() http.Handler {
 // SetTrustedProxies must be called before serving requests. An empty list means
 // the peer address is authoritative, regardless of forwarded headers.
 func (s *Server) SetTrustedProxies(cidrs []string) error {
+	prefixes, err := ParseTrustedProxies(cidrs)
+	if err != nil {
+		return err
+	}
+	s.trustedProxies = prefixes
+	return nil
+}
+
+// ParseTrustedProxies validates proxy configuration without changing a server.
+func ParseTrustedProxies(cidrs []string) ([]netip.Prefix, error) {
 	prefixes := make([]netip.Prefix, 0, len(cidrs))
 	for _, cidr := range cidrs {
 		prefix, err := netip.ParsePrefix(strings.TrimSpace(cidr))
 		if err != nil {
-			return fmt.Errorf("invalid trusted proxy CIDR %q: %w", cidr, err)
+			return nil, fmt.Errorf("invalid trusted proxy CIDR %q: %w", cidr, err)
 		}
 		prefixes = append(prefixes, prefix)
 	}
-	s.trustedProxies = prefixes
-	return nil
+	return prefixes, nil
 }
 
 func (s *Server) trustedProxy(ip netip.Addr) bool {
