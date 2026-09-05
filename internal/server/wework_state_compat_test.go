@@ -29,7 +29,7 @@ func TestWeWorkLegacyStateCannotAuthorizeProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.CreateOrUpdateAccessRule(sub.ID, &project.ID, nil, "", 86400, true, []string{"alice"}); err != nil {
+	if _, err := st.PutAccessRule(t.Context(), store.AccessRuleInput{SubdomainID: sub.ID, ProjectID: &project.ID, AllowedIPs: nil, PasswordHash: "", SessionTTL: 86400, WeWorkEnabled: true, AllowedWeWorkUsers: []string{"alice"}}); err != nil {
 		t.Fatal(err)
 	}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

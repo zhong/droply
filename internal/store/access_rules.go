@@ -1,33 +1,44 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/zhong/droply/internal/model"
 )
 
-// ---- Access Rules ----
+// AccessRuleInput describes the complete persisted rule; a nil ProjectID targets the subdomain.
+type AccessRuleInput struct {
+	SubdomainID        int64
+	ProjectID          *int64
+	AllowedIPs         []string
+	PasswordHash       string
+	SessionTTL         int
+	WeWorkEnabled      bool
+	AllowedWeWorkUsers []string
+}
 
-func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int64, allowedIPs []string, passwordHash string, sessionTTL int, weWorkEnabled bool, allowedWeWorkUsers []string) (*model.AccessRule, error) {
-	var ipsJSON interface{}
-	if len(allowedIPs) > 0 {
-		b, err := json.Marshal(allowedIPs)
+func (s *SQLiteStore) PutAccessRule(ctx context.Context, input AccessRuleInput) (*model.AccessRule, error) {
+	var ipsJSON any
+	if len(input.AllowedIPs) > 0 {
+		b, err := json.Marshal(input.AllowedIPs)
 		if err != nil {
 			return nil, fmt.Errorf("marshal allowed_ips: %w", err)
 		}
 		ipsJSON = string(b)
 	}
 
-	var pwHash interface{}
-	if passwordHash != "" {
-		pwHash = passwordHash
+	var pwHash any
+	if input.PasswordHash != "" {
+		pwHash = input.PasswordHash
 	}
 
-	var weWorkUsersJSON interface{}
-	if len(allowedWeWorkUsers) > 0 {
-		b, err := json.Marshal(allowedWeWorkUsers)
+	var weWorkUsersJSON any
+	if len(input.AllowedWeWorkUsers) > 0 {
+		b, err := json.Marshal(input.AllowedWeWorkUsers)
 		if err != nil {
 			return nil, fmt.Errorf("marshal allowed_wework_users: %w", err)
 		}
@@ -35,58 +46,58 @@ func (s *SQLiteStore) CreateOrUpdateAccessRule(subdomainID int64, projectID *int
 	}
 
 	weWorkInt := 0
-	if weWorkEnabled {
+	if input.WeWorkEnabled {
 		weWorkInt = 1
 	}
 
 	// Check if rule already exists (needed because UNIQUE doesn't match NULL=NULL)
-	existing, err := s.GetAccessRule(subdomainID, projectID)
+	existing, err := s.GetAccessRule(ctx, input.SubdomainID, input.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("check existing access rule: %w", err)
 	}
 
 	if existing != nil {
 		// Update existing rule
-		_, err = s.db.Exec(
+		_, err = s.db.ExecContext(ctx,
 			`UPDATE access_rules SET allowed_ips = ?, password_hash = ?, session_ttl = ?,
 				wework_enabled = ?, allowed_wework_users = ?,
 				updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now')
 			 WHERE id = ?`,
-			ipsJSON, pwHash, sessionTTL, weWorkInt, weWorkUsersJSON, existing.ID,
+			ipsJSON, pwHash, input.SessionTTL, weWorkInt, weWorkUsersJSON, existing.ID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("update access rule: %w", err)
 		}
 	} else {
 		// Insert new rule
-		_, err = s.db.Exec(
+		_, err = s.db.ExecContext(ctx,
 			`INSERT INTO access_rules (subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			subdomainID, projectID, ipsJSON, pwHash, sessionTTL, weWorkInt, weWorkUsersJSON,
+			input.SubdomainID, input.ProjectID, ipsJSON, pwHash, input.SessionTTL, weWorkInt, weWorkUsersJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create access rule: %w", err)
 		}
 	}
 
-	return s.GetAccessRule(subdomainID, projectID)
+	return s.GetAccessRule(ctx, input.SubdomainID, input.ProjectID)
 }
 
-func (s *SQLiteStore) GetAccessRule(subdomainID int64, projectID *int64) (*model.AccessRule, error) {
+func (s *SQLiteStore) GetAccessRule(ctx context.Context, subdomainID int64, projectID *int64) (*model.AccessRule, error) {
 	var row *sql.Row
 	if projectID == nil {
-		row = s.db.QueryRow(
+		row = s.db.QueryRowContext(ctx,
 			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
 			 FROM access_rules WHERE subdomain_id = ? AND project_id IS NULL`, subdomainID,
 		)
 	} else {
-		row = s.db.QueryRow(
+		row = s.db.QueryRowContext(ctx,
 			`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
 			 FROM access_rules WHERE subdomain_id = ? AND project_id = ?`, subdomainID, *projectID,
 		)
 	}
 	rule, err := scanAccessRule(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -95,35 +106,23 @@ func (s *SQLiteStore) GetAccessRule(subdomainID int64, projectID *int64) (*model
 	return rule, nil
 }
 
-func (s *SQLiteStore) getAccessRuleByID(id int64) (*model.AccessRule, error) {
-	row := s.db.QueryRow(
-		`SELECT id, subdomain_id, project_id, allowed_ips, password_hash, session_ttl, wework_enabled, allowed_wework_users, created_at, updated_at
-		 FROM access_rules WHERE id = ?`, id,
-	)
-	rule, err := scanAccessRule(row)
-	if err != nil {
-		return nil, fmt.Errorf("get access rule by id: %w", err)
-	}
-	return rule, nil
-}
-
-func (s *SQLiteStore) DeleteAccessRule(subdomainID int64, projectID *int64) error {
+func (s *SQLiteStore) DeleteAccessRule(ctx context.Context, subdomainID int64, projectID *int64) error {
 	if projectID == nil {
-		_, err := s.db.Exec(
+		_, err := s.db.ExecContext(ctx,
 			`DELETE FROM access_rules WHERE subdomain_id = ? AND project_id IS NULL`, subdomainID,
 		)
 		return err
 	}
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM access_rules WHERE subdomain_id = ? AND project_id = ?`, subdomainID, *projectID,
 	)
 	return err
 }
 
-func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName string) (*model.AccessRule, error) {
+func (s *SQLiteStore) FindAccessRuleForSite(ctx context.Context, subdomainName string, projectName string) (*model.AccessRule, error) {
 	// Try project-level first
 	if projectName != "" {
-		row := s.db.QueryRow(
+		row := s.db.QueryRowContext(ctx,
 			`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.wework_enabled, ar.allowed_wework_users, ar.created_at, ar.updated_at
 			 FROM access_rules ar
 			 JOIN subdomains s ON ar.subdomain_id = s.id
@@ -135,13 +134,13 @@ func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName st
 		if err == nil {
 			return rule, nil
 		}
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("find project access rule: %w", err)
 		}
 	}
 
 	// Fall back to subdomain-level
-	row := s.db.QueryRow(
+	row := s.db.QueryRowContext(ctx,
 		`SELECT ar.id, ar.subdomain_id, ar.project_id, ar.allowed_ips, ar.password_hash, ar.session_ttl, ar.wework_enabled, ar.allowed_wework_users, ar.created_at, ar.updated_at
 		 FROM access_rules ar
 		 JOIN subdomains s ON ar.subdomain_id = s.id
@@ -149,7 +148,7 @@ func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName st
 		subdomainName,
 	)
 	rule, err := scanAccessRule(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -158,9 +157,9 @@ func (s *SQLiteStore) FindAccessRuleForSite(subdomainName string, projectName st
 	return rule, nil
 }
 
-func (s *SQLiteStore) HasAccessRules(subdomainID int64) (bool, error) {
+func (s *SQLiteStore) HasAccessRules(ctx context.Context, subdomainID int64) (bool, error) {
 	var count int
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM access_rules WHERE subdomain_id = ?`, subdomainID,
 	).Scan(&count)
 	if err != nil {

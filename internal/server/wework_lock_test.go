@@ -3,6 +3,7 @@
 package server_test
 
 import (
+	"github.com/zhong/droply/internal/store"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -28,7 +29,7 @@ func TestWeWorkWaitAllowsPublicationAndRechecksDestination(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := f.st.CreateOrUpdateAccessRule(sub.ID, &p.ID, nil, "", 86400, true, users); err != nil {
+				if _, err := f.st.PutAccessRule(t.Context(), store.AccessRuleInput{SubdomainID: sub.ID, ProjectID: &p.ID, AllowedIPs: nil, PasswordHash: "", SessionTTL: 86400, WeWorkEnabled: true, AllowedWeWorkUsers: users}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -109,7 +110,7 @@ func TestWeWorkWaitAllowsPublicationAndRechecksDestination(t *testing.T) {
 
 			switch change {
 			case "delete rule":
-				if err := f.st.DeleteAccessRule(sub.ID, &projectID); err != nil {
+				if err := f.st.DeleteAccessRule(t.Context(), sub.ID, &projectID); err != nil {
 					t.Fatal(err)
 				}
 			case "tighten rule":
@@ -182,7 +183,7 @@ func TestSiteResponseKeepsCleanupLockUntilComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	projectID := f.history(t)[0].ProjectID
-	if _, err := f.st.CreateOrUpdateAccessRule(sub.ID, &projectID, []string{"192.0.2.1"}, "", 86400, false, nil); err != nil {
+	if _, err := f.st.PutAccessRule(t.Context(), store.AccessRuleInput{SubdomainID: sub.ID, ProjectID: &projectID, AllowedIPs: []string{"192.0.2.1"}, PasswordHash: "", SessionTTL: 86400, WeWorkEnabled: false, AllowedWeWorkUsers: nil}); err != nil {
 		t.Fatal(err)
 	}
 

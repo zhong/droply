@@ -50,11 +50,11 @@ type Store interface {
 	DeleteCustomDomain(projectID int64, domain string) error
 	ListAllSubdomains() ([]model.Subdomain, error)
 	ListAllVerifiedDomainsWithPaths() ([]model.DomainWithPath, error)
-	CreateOrUpdateAccessRule(subdomainID int64, projectID *int64, allowedIPs []string, passwordHash string, sessionTTL int, weWorkEnabled bool, allowedWeWorkUsers []string) (*model.AccessRule, error)
-	GetAccessRule(subdomainID int64, projectID *int64) (*model.AccessRule, error)
-	DeleteAccessRule(subdomainID int64, projectID *int64) error
-	FindAccessRuleForSite(subdomainName string, projectName string) (*model.AccessRule, error)
-	HasAccessRules(subdomainID int64) (bool, error)
+	PutAccessRule(context.Context, AccessRuleInput) (*model.AccessRule, error)
+	GetAccessRule(ctx context.Context, subdomainID int64, projectID *int64) (*model.AccessRule, error)
+	DeleteAccessRule(ctx context.Context, subdomainID int64, projectID *int64) error
+	FindAccessRuleForSite(ctx context.Context, subdomainName string, projectName string) (*model.AccessRule, error)
+	HasAccessRules(ctx context.Context, subdomainID int64) (bool, error)
 	RecordVisit(subdomainID int64, project, path, ip, referer, userAgent string) error
 	GetPageStats(subdomainID int64, project, period string) ([]model.PageDailyStat, error)
 	GetVisitLogs(subdomainID int64, project string, limit, offset int, pathFilter string) ([]model.VisitLog, int, error)

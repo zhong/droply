@@ -1,7 +1,6 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/zhong/droply/internal/model"
@@ -47,7 +46,7 @@ func (s *SQLiteStore) ListProjects(subdomainID int64) ([]model.Project, error) {
 
 	var result []model.Project
 	for rows.Next() {
-		p, err := scanProjectRow(rows)
+		p, err := scanProject(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -63,22 +62,13 @@ func (s *SQLiteStore) DeleteProject(subdomainID int64, name string) error {
 	return err
 }
 
-func scanProject(row *sql.Row) (*model.Project, error) {
+type projectScanner interface{ Scan(...any) error }
+
+func scanProject(row projectScanner) (*model.Project, error) {
 	var p model.Project
 	var createdAt, updatedAt string
 	if err := row.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt, &p.HostLabel); err != nil {
 		return nil, fmt.Errorf("scan project: %w", err)
-	}
-	p.CreatedAt = parseTime(createdAt)
-	p.UpdatedAt = parseTime(updatedAt)
-	return &p, nil
-}
-
-func scanProjectRow(rows *sql.Rows) (*model.Project, error) {
-	var p model.Project
-	var createdAt, updatedAt string
-	if err := rows.Scan(&p.ID, &p.SubdomainID, &p.Name, &createdAt, &updatedAt, &p.HostLabel); err != nil {
-		return nil, fmt.Errorf("scan project row: %w", err)
 	}
 	p.CreatedAt = parseTime(createdAt)
 	p.UpdatedAt = parseTime(updatedAt)

@@ -93,7 +93,7 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify a rule with WeWork enabled exists.
-	rule, err := s.store.FindAccessRuleForSite(subdomainName, projectName)
+	rule, err := s.store.FindAccessRuleForSite(r.Context(), subdomainName, projectName)
 	if err != nil || rule == nil || !rule.WeWorkEnabled {
 		http.NotFound(w, r)
 		return
@@ -189,7 +189,7 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-resolve rule (state could be stale if rule was deleted).
-	rule, err := s.store.FindAccessRuleForSite(stateData.Subdomain, stateData.Project)
+	rule, err := s.store.FindAccessRuleForSite(r.Context(), stateData.Subdomain, stateData.Project)
 	if err != nil || rule == nil || !rule.WeWorkEnabled {
 		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.NotFound(w, r)

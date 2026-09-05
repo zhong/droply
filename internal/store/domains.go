@@ -63,20 +63,11 @@ func (s *SQLiteStore) ListCustomDomains(projectID int64) ([]model.CustomDomain, 
 
 	var result []model.CustomDomain
 	for rows.Next() {
-		var cd model.CustomDomain
-		var createdAt string
-		var verified int
-		if err := rows.Scan(&cd.ID, &cd.ProjectID, &cd.Domain, &verified, &createdAt, &cd.VerificationToken); err != nil {
-			return nil, fmt.Errorf("scan custom domain: %w", err)
+		cd, err := scanCustomDomain(rows)
+		if err != nil {
+			return nil, err
 		}
-		cd.Verified = verified == 1
-		cd.Status = "pending"
-		if cd.Verified {
-			cd.Status = "verified"
-		}
-		cd.VerificationRecord = "_droply-verification." + cd.Domain
-		cd.CreatedAt = parseTime(createdAt)
-		result = append(result, cd)
+		result = append(result, *cd)
 	}
 	return result, rows.Err()
 }
@@ -120,7 +111,9 @@ func (s *SQLiteStore) getCustomDomainByID(id int64) (*model.CustomDomain, error)
 	return scanCustomDomain(row)
 }
 
-func scanCustomDomain(row *sql.Row) (*model.CustomDomain, error) {
+type customDomainScanner interface{ Scan(...any) error }
+
+func scanCustomDomain(row customDomainScanner) (*model.CustomDomain, error) {
 	var cd model.CustomDomain
 	var createdAt string
 	var verified int
