@@ -24,6 +24,7 @@ import (
 
 	"github.com/zhong/droply/internal/artifacts"
 	"github.com/zhong/droply/internal/hosting"
+	"github.com/zhong/droply/internal/safetree"
 	"github.com/zhong/droply/internal/store"
 	_ "modernc.org/sqlite"
 )
@@ -231,8 +232,17 @@ func Restore(ctx context.Context, cfg RestoreConfig) error {
 		return err
 	}
 	defer os.RemoveAll(work)
-	storage, err := artifacts.New(filepath.Join(work, "unpack"))
-	if err != nil {
+	unpack := filepath.Join(work, "unpack")
+	// Restore owns its scratch tree and preserves its original durable layout.
+	for _, dir := range []string{unpack, filepath.Join(unpack, ".staging")} {
+		if err = os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
+		if err = plainDirectory(dir); err != nil {
+			return err
+		}
+	}
+	if err = errors.Join(syncDir(unpack), syncDir(filepath.Dir(unpack))); err != nil {
 		return err
 	}
 	input, err := os.Open(cfg.Input)
@@ -246,13 +256,10 @@ func Restore(ctx context.Context, cfg RestoreConfig) error {
 	if cfg.MaxFiles <= 0 {
 		cfg.MaxFiles = 100000
 	}
-	if _, err = storage.Stage(ctx, "bundle", input, artifacts.Limits{MaxBytes: cfg.MaxBytes, MaxFiles: cfg.MaxFiles}); err != nil {
-		return fmt.Errorf("extract backup: %w", err)
-	}
-	if err = storage.Publish("bundle"); err != nil {
+	payload, err := unpackBackup(ctx, unpack, input, safetree.Limits{MaxBytes: cfg.MaxBytes, MaxFiles: cfg.MaxFiles})
+	if err != nil {
 		return err
 	}
-	payload := storage.Path("bundle")
 	m, err := validate(ctx, payload)
 	if err != nil {
 		return err

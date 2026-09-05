@@ -458,3 +458,22 @@ func TestRejectTruncatedTarWithValidGzip(t *testing.T) {
 		})
 	}
 }
+
+func TestStagePreservesManifestFormat(t *testing.T) {
+	root := t.TempDir()
+	store, err := artifacts.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Stage(t.Context(), "format", bytes.NewReader(archive(t, map[string]string{"index.html": "hello"})), artifacts.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".staging", "format", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const expected = `{"version":1,"entries":[{"path":"index.html","type":"file","size":5,"sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"}]}`
+	if string(data) != expected {
+		t.Fatalf("manifest format changed: %s", data)
+	}
+}

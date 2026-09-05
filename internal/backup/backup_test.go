@@ -121,7 +121,7 @@ func TestSnapshotIncludesCommittedWAL(t *testing.T) {
 	}
 }
 func TestRestoreRejectsIntegrityVersionLinksAndExisting(t *testing.T) {
-	for _, kind := range []string{"checksum", "version", "dbversion", "versionmismatch", "symlink", "traversal", "truncated", "existing"} {
+	for _, kind := range []string{"checksum", "version", "dbversion", "versionmismatch", "symlink", "hardlink", "traversal", "truncated", "gzip checksum", "tar footer", "existing"} {
 		t.Run(kind, func(t *testing.T) {
 			cfg := fixture(t)
 			must(t, Create(t.Context(), cfg))
@@ -129,6 +129,20 @@ func TestRestoreRejectsIntegrityVersionLinksAndExisting(t *testing.T) {
 			must(t, err)
 			if kind == "truncated" {
 				data = data[:len(data)-5]
+			} else if kind == "gzip checksum" {
+				data[len(data)-8] ^= 1
+			} else if kind == "tar footer" {
+				gz, err := gzip.NewReader(bytes.NewReader(data))
+				must(t, err)
+				raw, err := io.ReadAll(gz)
+				must(t, err)
+				must(t, gz.Close())
+				var broken bytes.Buffer
+				zw := gzip.NewWriter(&broken)
+				_, err = zw.Write(raw[:len(raw)-1024])
+				must(t, err)
+				must(t, zw.Close())
+				data = broken.Bytes()
 			} else if kind != "existing" {
 				data = rewrite(t, data, kind)
 			}
@@ -194,6 +208,9 @@ func rewrite(t *testing.T, data []byte, kind string) []byte {
 	}
 	if kind == "symlink" {
 		must(t, tw.WriteHeader(&tar.Header{Name: "data/link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"}))
+	}
+	if kind == "hardlink" {
+		must(t, tw.WriteHeader(&tar.Header{Name: "data/hard", Typeflag: tar.TypeLink, Linkname: "data/hmac.key"}))
 	}
 	if kind == "traversal" {
 		must(t, tw.WriteHeader(&tar.Header{Name: "../escape", Size: 0, Mode: 0600}))

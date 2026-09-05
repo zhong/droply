@@ -1,6 +1,6 @@
 //go:build !windows
 
-package artifacts
+package safetree
 
 import (
 	"os"

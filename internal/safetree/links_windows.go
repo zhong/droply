@@ -1,4 +1,4 @@
-package artifacts
+package safetree
 
 import (
 	"golang.org/x/sys/windows"
