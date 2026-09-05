@@ -125,9 +125,12 @@ make build
 The project website at `droplydoc.com` is hosted via droply itself. To update:
 
 ```bash
+make website
 cd website
 droply deploy
 ```
+
+The standalone downloads `website/install.sh` and `website/setup.sh` are generated copies. Edit only their sources in `scripts/`, then run `make website` before publishing. `make check-website` and the installer CI check both copies and fail on drift; publishing needs no frontend build service.
 
 ## Server Deployment
 

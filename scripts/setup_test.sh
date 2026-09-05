@@ -81,5 +81,5 @@ chmod +x "$test_tmp/old-server"
 if DROPLY_SETUP_ROOT="$test_tmp/old-release" LOCAL_BINARY="$test_tmp/old-server" sh "$project_dir/scripts/setup.sh" > "$test_tmp/old-release.log" 2>&1; then exit 1; fi
 grep -q 'predates standalone HTTPS' "$test_tmp/old-release.log"
 test ! -e "$test_tmp/old-release/usr/local/bin/droply-server"
-cmp "$project_dir/scripts/setup.sh" "$project_dir/website/setup.sh"
-printf 'Installer tests passed (four modes, preservation, upgrade backup, ports 80/443, mirrored script).\n'
+sh "$project_dir/scripts/website-scripts.sh" --check
+printf 'Installer tests passed (four modes, preservation, upgrade backup, ports 80/443, both generated downloads).\n'
