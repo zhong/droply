@@ -91,16 +91,7 @@ func (s *SQLiteStore) BeginDeployment(ctx context.Context, projectID int64, arti
 	return s.BeginDeploymentTarget(ctx, projectID, artifactID, "production", "", "")
 }
 
-// CreateDeployment remains available for legacy fixtures/importers. It reserves
-// a unique version but deliberately does not advertise an immutable artifact.
-func (s *SQLiteStore) CreateDeployment(projectID int64, fileCount int, totalSize int64) (*model.Deployment, error) {
-	return s.createDeployment(context.Background(), projectID, "", "legacy", fileCount, totalSize, "production", "", "")
-}
-
-func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, artifactID, state string, count int, size int64, environment, branch, commit string) (*model.Deployment, error) {
-	if count < 0 || size < 0 {
-		return nil, ErrDeploymentState
-	}
+func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, artifactID, environment, branch, commit string) (*model.Deployment, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -114,7 +105,7 @@ func (s *SQLiteStore) createDeployment(ctx context.Context, projectID int64, art
 		}
 	}
 	res, err := tx.ExecContext(ctx, `INSERT INTO deployments(project_id,version,file_count,total_size,status,artifact_id,artifact_state,environment,branch,commit_ref,preview_label,branch_label)
- SELECT ?,COALESCE(MAX(version),0)+1,?,?,'uploading',?,?,?,?,?,?,? FROM deployments WHERE project_id=?`, projectID, count, size, artifactID, state, environment, branch, commit, previewLabel, branchLabel, projectID)
+ SELECT ?,COALESCE(MAX(version),0)+1,0,0,'uploading',?,'pending',?,?,?,?,? FROM deployments WHERE project_id=?`, projectID, artifactID, environment, branch, commit, previewLabel, branchLabel, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("reserve deployment version: %w", err)
 	}
@@ -265,31 +256,6 @@ func switchProductionTx(ctx context.Context, tx *sql.Tx, projectID, deploymentID
 func touchPublishedProjectTx(ctx context.Context, tx *sql.Tx, projectID int64) error {
 	_, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?`, projectID)
 	return err
-}
-
-// ActivateDeployment supports old fixture creation without making metadata-only
-// deployments available for rollback. New serving code uses Commit/Switch instead.
-func (s *SQLiteStore) ActivateDeployment(id int64) error {
-	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	d, err := scanDeployment(tx.QueryRowContext(ctx, `SELECT `+deploymentColumns+` FROM deployments WHERE id=?`, id))
-	if err != nil {
-		return err
-	}
-	if d.ArtifactState != "legacy" || (d.Status != "uploading" && d.Status != "active" && d.Status != "archived") {
-		return ErrDeploymentState
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='archived' WHERE project_id=? AND status='active' AND id!=?`, d.ProjectID, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='active' WHERE id=?`, id); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func (s *SQLiteStore) MarkArtifactDeleting(ctx context.Context, id int64) error {

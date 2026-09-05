@@ -127,14 +127,14 @@ func TestDeploymentStartupImportsOnlyCurrentLegacyFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 2 {
-		d, err := f.st.CreateDeployment(p.ID, 1, 3)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = f.st.ActivateDeployment(d.ID); err != nil {
-			t.Fatal(err)
-		}
+	// Legacy history is metadata-only: only version 2 has files on disk.
+	db, err := sql.Open("sqlite", f.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO deployments(project_id,version,file_count,total_size,status) VALUES(?,1,1,3,'archived'),(?,2,1,3,'active')`, p.ID, p.ID); err != nil {
+		t.Fatal(err)
 	}
 	legacy := filepath.Join(f.sites, "recovery", "site")
 	if err = os.MkdirAll(legacy, 0700); err != nil {

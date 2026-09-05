@@ -39,8 +39,6 @@ type Store interface {
 	MarkArtifactDeleting(context.Context, int64) error
 	SetArtifactState(context.Context, int64, string) error
 	PutDeploymentReference(context.Context, int64, string, int64) error
-	CreateDeployment(projectID int64, fileCount int, totalSize int64) (*model.Deployment, error)
-	ActivateDeployment(deploymentID int64) error
 	ListDeployments(projectID int64) ([]model.Deployment, error)
 	CreateCustomDomain(projectID int64, domain string) (*model.CustomDomain, error)
 	GetCustomDomain(domain string) (*model.CustomDomain, error)
