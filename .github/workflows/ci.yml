@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: CGO_ENABLED=0 go build ./...
+      - name: Vet (including integration tests)
+        run: CGO_ENABLED=0 go vet -tags=integration ./...
+      - name: Integration (browser and ACME have separate jobs)
+        run: CGO_ENABLED=0 go test -tags=integration -count=1 -v ./...
+      - name: Installer contracts
+        run: sh scripts/setup_test.sh
+
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=1 go test -race -tags=integration -shuffle=on -count=1 ./...
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium acceptance dependencies
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser" --no-save --package-lock=false playwright@1.61.0
+          "$RUNNER_TEMP/browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Real Chromium acceptance (must execute)
+        env:
+          DROPLY_CONSOLE_BROWSER: '1'
+          DROPLY_PLAYWRIGHT_PATH: ${{ runner.temp }}/browser/node_modules/playwright/index.mjs
+        run: sh scripts/test-required.sh TestConsoleBrowser ./internal/server
