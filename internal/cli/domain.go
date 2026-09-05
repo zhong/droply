@@ -63,7 +63,11 @@ func newDomainAddCmd() *cobra.Command {
 				return err
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var result struct {
@@ -95,7 +99,11 @@ func newDomainListCmd() *cobra.Command {
 				return err
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var domains []struct {
@@ -135,7 +143,11 @@ func newDomainVerifyCmd() *cobra.Command {
 				return err
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var result struct {
@@ -169,7 +181,11 @@ func newDomainRemoveCmd() *cobra.Command {
 				return err
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains/%s", sub, proj, domain)

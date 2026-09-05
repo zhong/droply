@@ -26,7 +26,11 @@ func newListCmd() *cobra.Command {
 				return fmt.Errorf("subdomain is required: use --sub or set subdomain in .droply.toml")
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var projects []struct {

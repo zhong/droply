@@ -28,7 +28,11 @@ func newAuditCmd() *cobra.Command {
 		}
 		query := url.Values{"limit": {strconv.Itoa(limit)}, "before": {strconv.FormatInt(before, 10)}}
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, path+"?"+query.Encode(), nil, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"?"+query.Encode(), nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)

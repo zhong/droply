@@ -37,7 +37,11 @@ func newStatsCmd() *cobra.Command {
 				return fmt.Errorf("subdomain and project name required: use --sub and argument, or set .droply.toml")
 			}
 
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			path := fmt.Sprintf("/subdomains/%s/projects/%s/stats?period=%s", sub, projectName, period)

@@ -24,7 +24,10 @@ func newSubdomainCreateCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var result map[string]any
@@ -42,7 +45,10 @@ func newSubdomainListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List your subdomains",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			var subdomains []struct {
@@ -71,7 +77,10 @@ func newSubdomainDeleteCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			cfg := LoadConfig()
+			cfg, err := LoadConfig()
+			if err != nil {
+				return err
+			}
 			client := NewAPIClient(cfg)
 
 			if err := client.doJSON("DELETE", "/subdomains/"+name, nil, nil); err != nil {

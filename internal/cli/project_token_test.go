@@ -42,7 +42,7 @@ func TestProjectTokenCommandRealAPI(t *testing.T) {
 		t.Fatalf("metadata: %s %v", listed, err)
 	}
 	// Drive the real CLI upload using the issued credential, without changing the API.
-	owner := *LoadConfig()
+	owner := *mustLoadConfig(t)
 	if err = SaveFullConfig(&Config{CurrentContext: "integration", Contexts: map[string]Context{"integration": {APIURL: owner.APIURL, Token: issued.Token}}}); err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,11 @@ func newInvitationCmd() *cobra.Command {
 			return errors.New("--expires-in must be positive and no greater than 720h")
 		}
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodPost, "/admin/invitations", map[string]any{"email": args[0], "expires_at": time.Now().UTC().Add(lifetime)}, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodPost, "/admin/invitations", map[string]any{"email": args[0], "expires_at": time.Now().UTC().Add(lifetime)}, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -25,7 +29,11 @@ func newInvitationCmd() *cobra.Command {
 	create.Flags().Duration("expires-in", 24*time.Hour, "Invitation lifetime")
 	list := &cobra.Command{Use: "list", Short: "List invitation metadata", Args: cobra.NoArgs, SilenceUsage: true, RunE: func(cmd *cobra.Command, args []string) error {
 		var result json.RawMessage
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodGet, "/admin/invitations", nil, &result); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodGet, "/admin/invitations", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -35,7 +43,11 @@ func newInvitationCmd() *cobra.Command {
 		if err != nil || id < 1 {
 			return errors.New("invitation ID must be positive")
 		}
-		if err := NewAPIClient(LoadConfig()).doJSON(http.MethodDelete, "/admin/invitations/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return err
+		}
+		if err := NewAPIClient(cfg).doJSON(http.MethodDelete, "/admin/invitations/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"id": id, "revoked": true})
