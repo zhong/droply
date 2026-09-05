@@ -71,8 +71,7 @@ func assembleServer(ctx context.Context, cfg serverConfig, st *store.SQLiteStore
 	if cfg.corp != "" || cfg.agent != "" || cfg.secret != "" || cfg.callback != "" {
 		srv.SetWeWork(wework.NewClient(wework.Config{CorpID: cfg.corp, AgentID: cfg.agent, Secret: cfg.secret, RedirectURI: cfg.callback}))
 	}
-	handler := srv.Handler()
-	httpHandler := handler
+	var httpHandler http.Handler = srv
 	var manager *certificates.Manager
 	issuanceTimeout := certificates.DefaultIssuanceTimeout
 	if cfg.mode == "auto" || cfg.mode == "cloudflare" {
@@ -111,7 +110,7 @@ func assembleServer(ctx context.Context, cfg serverConfig, st *store.SQLiteStore
 			httpHandler = manager.HTTPHandler(httpHandler)
 		}
 	}
-	listenerConfig := hosting.Config{HTTPAddr: cfg.addr, Handler: handler, HTTPHandler: httpHandler, TLSConfig: tlsConfig, CertificateTimeout: issuanceTimeout}
+	listenerConfig := hosting.Config{HTTPAddr: cfg.addr, Handler: srv, HTTPHandler: httpHandler, TLSConfig: tlsConfig, CertificateTimeout: issuanceTimeout}
 	if tlsConfig != nil {
 		listenerConfig.HTTPSAddr = cfg.httpsAddr
 	}

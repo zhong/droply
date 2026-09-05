@@ -15,6 +15,7 @@ func TestTLSCheckBaseDomain(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=droplydoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -27,6 +28,7 @@ func TestTLSCheckAPIHost(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=api.droplydoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -42,6 +44,7 @@ func TestTLSCheckExistingSubdomain(t *testing.T) {
 	// Register subdomain "alice".
 	body, _ := json.Marshal(map[string]string{"name": "alice"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -52,6 +55,7 @@ func TestTLSCheckExistingSubdomain(t *testing.T) {
 
 	// alice.droplydoc.com should be allowed.
 	req = httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=alice.droplydoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -63,6 +67,7 @@ func TestTLSCheckUnknownSubdomain(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=ghost.droplydoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -77,6 +82,7 @@ func TestTLSCheckNestedNotAllowed(t *testing.T) {
 	// Two-label subdomain like foo.bar.droplydoc.com should be rejected
 	// (subdomains are single-label only).
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=foo.bar.droplydoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -89,6 +95,7 @@ func TestTLSCheckUnknownDomain(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=evil.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -101,6 +108,7 @@ func TestTLSCheckMissingDomain(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 
@@ -122,6 +130,7 @@ func TestTLSCheckVerifiedCustomDomain(t *testing.T) {
 	// Setup: create subdomain + project.
 	body, _ := json.Marshal(map[string]string{"name": "cdsite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -136,6 +145,7 @@ func TestTLSCheckVerifiedCustomDomain(t *testing.T) {
 	// Add custom domain.
 	body, _ = json.Marshal(map[string]string{"domain": "blog.example.com"})
 	req = httptest.NewRequest(http.MethodPost, "/subdomains/cdsite/projects/app/domains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -146,6 +156,7 @@ func TestTLSCheckVerifiedCustomDomain(t *testing.T) {
 
 	// Unverified → should be rejected.
 	req = httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=blog.example.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusForbidden {
@@ -159,6 +170,7 @@ func TestTLSCheckVerifiedCustomDomain(t *testing.T) {
 
 	// Now should be accepted.
 	req = httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=blog.example.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -172,6 +184,7 @@ func TestTLSCheckCaseInsensitive(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"name": "casesite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -181,6 +194,7 @@ func TestTLSCheckCaseInsensitive(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=CaseSite.DroplyDoc.com", nil)
+	req.Host = "api.droplydoc.com"
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -192,6 +206,7 @@ func TestTLSCheckStripsPort(t *testing.T) {
 	srv := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/_droply/tls-check?domain=api.droplydoc.com:443", nil)
+	req.Host = "api.droplydoc.com"
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

@@ -47,6 +47,7 @@ func setupProtectedSite(t *testing.T, srv *server.Server, sitesDir string) (toke
 	// Create subdomain via API.
 	body, _ := json.Marshal(map[string]string{"name": "alice"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -65,6 +66,7 @@ func setupProtectedSite(t *testing.T, srv *server.Server, sitesDir string) (toke
 		"auto_password": true,
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/alice/projects/docs/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -88,6 +90,7 @@ func TestSiteHandlerNoRule(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "bob"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -122,6 +125,7 @@ func TestSiteHandlerTrailingSlashRedirect(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"name": "carol"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -260,6 +264,7 @@ func TestSiteHandlerIPBlocked(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "ipsite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -278,6 +283,7 @@ func TestSiteHandlerIPBlocked(t *testing.T) {
 		"allowed_ips": []string{"10.0.0.1"},
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/ipsite/projects/proj/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -306,6 +312,7 @@ func TestSiteHandlerIPAllowed(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "ipallow"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -324,6 +331,7 @@ func TestSiteHandlerIPAllowed(t *testing.T) {
 		"allowed_ips": []string{"10.0.0.0/8"},
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/ipallow/projects/proj/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -395,6 +403,7 @@ func TestSiteHandlerDeletedSubdomainReturns404(t *testing.T) {
 	// Create subdomain and deploy a project.
 	body, _ := json.Marshal(map[string]string{"name": "delme"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -420,6 +429,7 @@ func TestSiteHandlerDeletedSubdomainReturns404(t *testing.T) {
 
 	// Delete the subdomain via API.
 	req = httptest.NewRequest(http.MethodDelete, "/subdomains/delme", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -444,6 +454,7 @@ func TestSiteHandlerDeletedProjectReturns404(t *testing.T) {
 	// Create subdomain and deploy two projects.
 	body, _ := json.Marshal(map[string]string{"name": "keeper"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -463,6 +474,7 @@ func TestSiteHandlerDeletedProjectReturns404(t *testing.T) {
 
 	// Delete project "doomed" via API.
 	req = httptest.NewRequest(http.MethodDelete, "/subdomains/keeper/projects/doomed", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -552,6 +564,7 @@ func TestSiteHandlerCookieInvalidAfterPasswordChange(t *testing.T) {
 		"password": "newpassword12345",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/alice/projects/docs/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -592,6 +605,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "bob"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -610,6 +624,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 		"password": "subdomainpass1",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -623,6 +638,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 		"password": "projectpass12",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/projects/app/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -679,6 +695,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 		"password": "newsubpass123",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()

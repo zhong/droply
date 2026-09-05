@@ -23,6 +23,7 @@ type issuedProjectToken struct {
 
 func projectCredentialRequest(f *recoveryFixture, method, path, credential string, body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	r.Host = "api.droplydoc.com"
 	r.Header.Set("Authorization", "Bearer "+credential)
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

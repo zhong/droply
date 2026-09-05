@@ -54,6 +54,7 @@ func setupWeWorkSite(t *testing.T, srv *server.Server, allowedUsers []string) st
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "wesite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -76,6 +77,7 @@ func setupWeWorkSite(t *testing.T, srv *server.Server, allowedUsers []string) st
 	}
 	accessBody, _ := json.Marshal(accessReq)
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/wesite/projects/app/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -123,6 +125,7 @@ func TestWeWorkAccessRuleSet(t *testing.T) {
 		"password": "password123",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(loginBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -134,6 +137,7 @@ func TestWeWorkAccessRuleSet(t *testing.T) {
 	weToken := loginResp["api_token"].(string)
 
 	req = httptest.NewRequest(http.MethodGet, "/subdomains/wesite/projects/app/access", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+weToken)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -188,7 +192,7 @@ func TestWeWorkCallbackSuccess(t *testing.T) {
 	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
 	setupWeWorkSite(t, srv, []string{"alice", "bob"})
 
-	siteHandler := srv.NewSiteHandler()
+	siteHandler := srv
 
 	// First, get a valid state token via /auth.
 	req := httptest.NewRequest(http.MethodGet, "/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
@@ -450,7 +454,7 @@ func TestWeWorkCallbackCrossSubdomainRedirect(t *testing.T) {
 	srv, _ := newSiteServerWithWeWork(t, mockAPI.URL)
 	setupWeWorkSite(t, srv, []string{"alice"})
 
-	siteHandler := srv.NewSiteHandler()
+	siteHandler := srv
 
 	// Step 1: User starts login on the original subdomain "wesite".
 	req := httptest.NewRequest(http.MethodGet,
@@ -463,10 +467,10 @@ func TestWeWorkCallbackCrossSubdomainRedirect(t *testing.T) {
 		t.Fatal("no state from auth handler")
 	}
 
-	// Step 2: WeCom redirects callback to a DIFFERENT host ("login").
+	// Step 2: WeCom redirects callback to a central API host.
 	req = httptest.NewRequest(http.MethodGet,
 		"/_droply/wework/callback?code=code-1&state="+state, nil)
-	req.Host = "login.droplydoc.com" // intentionally different from state host
+	req.Host = "api.droplydoc.com" // intentionally different from state host
 	rr = httptest.NewRecorder()
 	siteHandler.ServeHTTP(rr, req)
 
@@ -665,6 +669,7 @@ func TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled(t *testing.T) {
 	token := registerAndGetToken(t, srv, "both@example.com", "password123")
 	body, _ := json.Marshal(map[string]string{"name": "wesite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -678,6 +683,7 @@ func TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled(t *testing.T) {
 		"wework_enabled": true,
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/wesite/projects/app/access", bytes.NewReader(accessBody))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()

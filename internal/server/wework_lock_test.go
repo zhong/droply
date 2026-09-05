@@ -121,6 +121,7 @@ func TestWeWorkWaitAllowsPublicationAndRechecksDestination(t *testing.T) {
 				}
 			case "delete project", "replace project":
 				r := httptest.NewRequest(http.MethodDelete, "/subdomains/recovery/projects/site", nil)
+				r.Host = "api.droplydoc.com"
 				r.Header.Set("Authorization", "Bearer "+f.token)
 				w := httptest.NewRecorder()
 				f.srv.ServeHTTP(w, r)

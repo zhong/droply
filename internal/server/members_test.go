@@ -43,6 +43,7 @@ func TestProjectCollaborationPermissionMatrixAndRevocation(t *testing.T) {
 	request := func(method, path, token, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		r.Host = "api.droplydoc.com"
 		r.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, r)
@@ -198,6 +199,7 @@ func TestMembershipRevokedDuringUploadPreventsPublication(t *testing.T) {
 		t.Fatal("upload did not start")
 	}
 	revoke := httptest.NewRequest("DELETE", fmt.Sprintf("%s/members/%d", base, member.ID), nil)
+	revoke.Host = "api.droplydoc.com"
 	revoke.Header.Set("Authorization", "Bearer owner")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, revoke)

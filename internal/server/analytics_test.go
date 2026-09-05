@@ -31,6 +31,7 @@ func setupAnalyticsEnv(t *testing.T, srv http.Handler) (string, string) {
 
 	body, _ := json.Marshal(map[string]string{"name": "mysite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -52,6 +53,7 @@ func TestGetStats(t *testing.T) {
 	st.RecordVisit(1, "blog", "/about", "1.2.3.4", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/stats?period=7d", subName), nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -92,6 +94,7 @@ func TestGetStatsForbidden(t *testing.T) {
 	otherToken := registerAndGetToken(t, srv, "other@example.com", "password456")
 
 	req := httptest.NewRequest(http.MethodGet, "/subdomains/mysite/projects/blog/stats", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+otherToken)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -108,6 +111,7 @@ func TestGetLogs(t *testing.T) {
 	st.RecordVisit(1, "blog", "/hello", "1.2.3.4", "https://google.com", "Mozilla/5.0")
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/logs?limit=10", subName), nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -136,6 +140,7 @@ func TestGetStatsInvalidPeriod(t *testing.T) {
 	token, subName := setupAnalyticsEnv(t, srv)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/stats?period=invalid", subName), nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -153,6 +158,7 @@ func TestGetLogsWithPathFilter(t *testing.T) {
 	st.RecordVisit(1, "blog", "/world", "1.2.3.4", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/subdomains/%s/projects/blog/logs?path=/hello", subName), nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)

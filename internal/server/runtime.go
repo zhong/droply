@@ -8,32 +8,28 @@ import (
 	"strings"
 )
 
-// Handler routes the public listener by host. ServeHTTP remains the API handler
-// for in-process clients; it must not be exposed on a separate public listener.
-func (s *Server) Handler() http.Handler {
-	sites := s.NewSiteHandler()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := strings.ToLower(r.Host)
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		host = strings.TrimSuffix(host, ".")
-		if host == "api."+strings.ToLower(s.baseDomain) {
-			w.Header().Set("Cache-Control", "no-store")
-			// Preserve the configured central OAuth callback used by existing installs.
-			if r.URL.Path == "/_droply/wework/callback" {
-				sites.ServeHTTP(w, r)
-				return
-			}
-			s.ServeHTTP(w, r)
+// ServeHTTP routes API and site traffic by Host on the public listener.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	host := strings.ToLower(r.Host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(host, ".")
+	if host == "api."+strings.ToLower(s.baseDomain) {
+		w.Header().Set("Cache-Control", "no-store")
+		// Preserve the configured central OAuth callback used by existing installs.
+		if r.URL.Path == "/_droply/wework/callback" {
+			s.sitesHandler.ServeHTTP(w, r)
 			return
 		}
-		if !s.AllowedTLSHost(host) {
-			http.NotFound(w, r)
-			return
-		}
-		sites.ServeHTTP(w, r)
-	})
+		s.serveAPI(w, r)
+		return
+	}
+	if !s.AllowedTLSHost(host) {
+		http.NotFound(w, r)
+		return
+	}
+	s.sitesHandler.ServeHTTP(w, r)
 }
 
 // SetTrustedProxies must be called before serving requests. An empty list means

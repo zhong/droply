@@ -64,7 +64,7 @@ var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
 </html>`))
 
 // NewSiteHandler returns an http.Handler that serves site content with access control.
-// Handler selects this handler for site hosts on the unified listener.
+// Server selects this handler for site hosts on the unified listener.
 func (s *Server) NewSiteHandler() http.Handler {
 	rl := &ipLimiter{capacity: 4096, rejectWhenFull: true, idleTTL: 10 * time.Minute}
 	return s.withTrustedProxy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -35,6 +35,7 @@ func setupDomainTest(t *testing.T) (*server.Server, string) {
 	// Create subdomain "alice".
 	body, _ := json.Marshal(map[string]string{"name": "alice"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -63,6 +64,7 @@ func TestCustomDomainCRUD(t *testing.T) {
 	// Add custom domain "blog.alice.com".
 	body, _ := json.Marshal(map[string]string{"domain": "blog.alice.com"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains/alice/projects/blog/domains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -84,6 +86,7 @@ func TestCustomDomainCRUD(t *testing.T) {
 
 	// List custom domains — expect 1.
 	req = httptest.NewRequest(http.MethodGet, "/subdomains/alice/projects/blog/domains", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -101,6 +104,7 @@ func TestCustomDomainCRUD(t *testing.T) {
 
 	// Delete the custom domain.
 	req = httptest.NewRequest(http.MethodDelete, "/subdomains/alice/projects/blog/domains/blog.alice.com", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -114,6 +118,7 @@ func TestDomainValidation(t *testing.T) {
 	for _, domain := range []string{"api.droplydoc.com", "alice.droplydoc.com", "droplydoc.com", "*.example.com", "https://example.com", "localhost", "127.0.0.1", "bad..example.com", "example.com:443"} {
 		body, _ := json.Marshal(map[string]string{"domain": domain})
 		req := httptest.NewRequest(http.MethodPost, "/subdomains/alice/projects/blog/domains", bytes.NewReader(body))
+		req.Host = "api.droplydoc.com"
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
 		srv.ServeHTTP(rr, req)
@@ -141,6 +146,7 @@ func TestDomainOwnershipLifecycle(t *testing.T) {
 	api := func(method, path string, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Host = "api.droplydoc.com"
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
 		srv.ServeHTTP(rr, req)
@@ -218,6 +224,7 @@ func TestUnifiedSiteAccessAndStatistics(t *testing.T) {
 	api := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Host = "api.droplydoc.com"
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
 		srv.ServeHTTP(rr, req)

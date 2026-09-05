@@ -24,6 +24,7 @@ func TestRollbackRetainsVersionsAndReportsRepeatedRequest(t *testing.T) {
 	}
 	for round := range 2 {
 		r := httptest.NewRequest("POST", base+"/rollback/1", nil)
+		r.Host = "api.droplydoc.com"
 		r.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, r)
@@ -60,6 +61,7 @@ func TestRollbackCustomDomainKeepsCurrentAccessRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := httptest.NewRequest("PUT", "/subdomains/recovery/projects/site/access", bytes.NewBufferString(`{"allowed_ips":["203.0.113.0/24"]}`))
+	r.Host = "api.droplydoc.com"
 	r.Header.Set("Authorization", "Bearer "+f.token)
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, r)

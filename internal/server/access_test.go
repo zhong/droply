@@ -12,6 +12,7 @@ func createSubdomain(t *testing.T, srv http.Handler, token, name string) {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"name": name})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -30,6 +31,7 @@ func TestSetSubdomainAccess(t *testing.T) {
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/mysite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -64,6 +66,7 @@ func TestGetSubdomainAccess(t *testing.T) {
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/getsite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -74,6 +77,7 @@ func TestGetSubdomainAccess(t *testing.T) {
 
 	// GET access.
 	req = httptest.NewRequest(http.MethodGet, "/subdomains/getsite/access", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -107,6 +111,7 @@ func TestDeleteSubdomainAccess(t *testing.T) {
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/delsite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -117,6 +122,7 @@ func TestDeleteSubdomainAccess(t *testing.T) {
 
 	// Delete access.
 	req = httptest.NewRequest(http.MethodDelete, "/subdomains/delsite/access", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -127,6 +133,7 @@ func TestDeleteSubdomainAccess(t *testing.T) {
 
 	// GET should now return 404.
 	req = httptest.NewRequest(http.MethodGet, "/subdomains/delsite/access", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -146,6 +153,7 @@ func TestSetAccessForbiddenForNonOwner(t *testing.T) {
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/ownersite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+otherToken)
 	rr := httptest.NewRecorder()
@@ -164,6 +172,7 @@ func TestSetAccessValidation(t *testing.T) {
 	// Empty rule should fail.
 	body, _ := json.Marshal(map[string]interface{}{})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/validsite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -178,6 +187,7 @@ func TestSetAccessValidation(t *testing.T) {
 		"password": "short",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/validsite/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -198,6 +208,7 @@ func TestSetAccessLargeTTL(t *testing.T) {
 		"session_ttl":   315360000, // 10 years
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/largettl/access", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()

@@ -103,6 +103,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 			result := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
 				r := httptest.NewRequest("POST", "/subdomains/team/projects/site/"+tc.action, nil)
+				r.Host = "api.example.test"
 				r.Header.Set("Authorization", "Bearer "+raw)
 				w := httptest.NewRecorder()
 				srv.ServeHTTP(w, r)

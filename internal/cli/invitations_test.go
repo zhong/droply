@@ -4,7 +4,10 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
@@ -35,7 +38,17 @@ func TestInvitationCommandRealAPI(t *testing.T) {
 	defer app.ShutdownAnalytics()
 	api := httptest.NewServer(app)
 	defer api.Close()
-	t.Setenv("DROPLY_API_URL", api.URL)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	dialer := &net.Dialer{}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, api.Listener.Addr().String())
+	}
+	previous := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = previous; transport.CloseIdleConnections() })
+	const apiURL = "http://api.example.test"
+	t.Setenv("DROPLY_API_URL", apiURL)
 	t.Setenv("DROPLY_TOKEN", "admin-token")
 	run := func(args ...string) (string, error) {
 		cmd := NewRootCmd("test")
@@ -67,7 +80,7 @@ func TestInvitationCommandRealAPI(t *testing.T) {
 	var account struct {
 		Token string `json:"api_token"`
 	}
-	client := NewAPIClient(&Context{APIURL: api.URL})
+	client := NewAPIClient(&Context{APIURL: apiURL})
 	body := map[string]string{"email": "member@example.com", "password": "test-password", "invite": created.Token}
 	if err := client.doJSONContext(t.Context(), "POST", "/auth/register", body, &account); err != nil {
 		t.Fatal(err)

@@ -31,6 +31,7 @@ func TestPagesDeploymentLifecycle(t *testing.T) {
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(method, base+path, bytes.NewBufferString(body))
+		r.Host = "api.droplydoc.com"
 		r.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, r)
@@ -45,7 +46,7 @@ func TestPagesDeploymentLifecycle(t *testing.T) {
 		r := httptest.NewRequest("GET", path, nil)
 		r.Host = u.Host
 		w := httptest.NewRecorder()
-		srv.Handler().ServeHTTP(w, r)
+		srv.ServeHTTP(w, r)
 		if w.Code != code || (body != "" && w.Body.String() != body) {
 			t.Fatalf("site %s%s: %d %q", raw, path, w.Code, w.Body.String())
 		}
