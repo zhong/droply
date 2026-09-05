@@ -206,13 +206,15 @@
       <div class="qs-card qs-card-wide qs-card-highlight">
         <h3 data-i18n="qs.setup_server">Deploy Server</h3>
         <div class="code-block code-block-copy">
-          <pre><code>curl -fsSL https://droplydoc.com/setup.sh | sudo bash</code></pre>
-          <button class="copy-btn" data-copy="curl -fsSL https://droplydoc.com/setup.sh | sudo bash" aria-label="Copy to clipboard">
+          <pre><code>curl -fsSL https://droplydoc.com/setup.sh -o setup.sh
+sudo env DOMAIN=example.com TLS_MODE=auto ACME_EMAIL=admin@example.com sh setup.sh</code></pre>
+          <button class="copy-btn" data-copy="curl -fsSL https://droplydoc.com/setup.sh -o setup.sh
+sudo env DOMAIN=example.com TLS_MODE=auto ACME_EMAIL=admin@example.com sh setup.sh" aria-label="Copy to clipboard">
             <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
             <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
           </button>
         </div>
-        <p data-i18n="qs.setup_server_desc" data-i18n-html="true">Sets up a complete droply server on a fresh VPS. Installs droply-server, Caddy (with Cloudflare DNS), configures systemd, and starts everything. You'll be prompted for your domain and Cloudflare API token.</p>
+        <p data-i18n="qs.setup_server_desc" data-i18n-html="true">Installs the single droply-server binary on a fresh VPS and configures systemd with built-in HTTPS. Set DOMAIN and ACME_EMAIL before running the installer. Cloudflare mode uses DNS-01 for the platform wildcard; custom domains still require HTTP-01 on port 80.</p>
       </div>
       <div class="qs-card">
         <h3 data-i18n="qs.build">Build from source</h3>

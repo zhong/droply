@@ -173,7 +173,7 @@ sudo env DOMAIN=example.com TLS_MODE=auto \
 ./bin/droply-server --domain example.com --data-dir ./data \
   --addr :80 --https-addr :443 --tls-mode auto --acme-email admin@example.com
 
-# DNS wildcard HTTPS
+# Platform wildcard via DNS-01; other names still need HTTP-01 on port 80
 ./bin/droply-server --domain example.com --data-dir ./data \
   --addr :80 --tls-mode cloudflare --cloudflare-token-file ./cloudflare-token
 
@@ -186,7 +186,7 @@ sudo env DOMAIN=example.com TLS_MODE=auto \
   --addr 127.0.0.1:8080 --tls-mode http --trusted-proxies 127.0.0.1/32
 ```
 
-Binding ports 80/443 requires permission; the installer grants `CAP_NET_BIND_SERVICE` through systemd. Automatic per-host mode requires public ACME challenge reachability. Cloudflare mode requires `Zone:DNS:Edit` and `Zone:Zone:Read` permissions for the zones of the names being issued. Administrators renew manual certificates and restart the server to load them.
+Binding ports 80/443 requires permission; the installer grants `CAP_NET_BIND_SERVICE` through systemd. Automatic per-host mode requires public HTTP-01 challenge reachability on port 80. Cloudflare mode uses DNS-01 only for the platform wildcard, requiring `Zone:DNS:Edit` and `Zone:Zone:Read` permissions for its zone. Names outside that wildcard, including custom domains, still use HTTP-01: blocking public port 80 prevents their issuance and renewal even when wildcard renewal succeeds. Custom domains do not require additional DNS credentials. Administrators renew manual certificates and restart the server to load them.
 
 | Flag | Default | Purpose |
 |---|---|---|

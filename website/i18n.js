@@ -56,7 +56,7 @@ const translations = {
     "qs.install_cli": "安装 CLI",
     "qs.install_cli_desc": "一条命令安装。自动检测操作系统和架构。支持 <strong>macOS</strong>（ARM/x64）、<strong>Linux</strong>（x64）和 <strong>Windows</strong>（x64）。",
     "qs.setup_server": "部署服务端",
-    "qs.setup_server_desc": "在全新 VPS 上一键部署完整的 droply 服务端。安装 droply-server、Caddy（含 Cloudflare DNS 模块）、配置 systemd 并启动所有服务。过程中会提示输入域名和 Cloudflare API Token。",
+    "qs.setup_server_desc": "在全新 VPS 上安装单二进制 droply-server，配置 systemd 和内置 HTTPS。运行前设置 DOMAIN 和 ACME_EMAIL。Cloudflare 模式对平台通配符使用 DNS-01，自定义域名仍需通过端口 80 完成 HTTP-01。",
     "qs.build": "从源码编译",
     "qs.build_desc": "生成两个二进制文件：<code>bin/droply-server</code> 和 <code>bin/droply</code>",
     "qs.install": "或使用 Go 安装",
