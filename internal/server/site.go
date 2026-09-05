@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -570,12 +571,7 @@ func isWeWorkUserAllowed(userID string, allowedUsers []string) bool {
 	if len(allowedUsers) == 0 {
 		return true
 	}
-	for _, u := range allowedUsers {
-		if u == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowedUsers, userID)
 }
 
 func (s *Server) requestSiteTarget(r *http.Request) *model.SiteTarget {
