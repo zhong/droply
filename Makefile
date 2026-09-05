@@ -46,6 +46,16 @@ build-windows-amd64:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/droply-windows-amd64.exe ./cmd/droply
 
 .PHONY: website check-website
+.PHONY: console check-console
+
+# Rebuild the checked-in assets before building a server with console changes.
+console:
+	npm --prefix console ci
+	npm --prefix console run build
+
+check-console:
+	npm --prefix console run check
+
 # Prepare the standalone script downloads before publishing website/.
 website:
 	sh scripts/website-scripts.sh

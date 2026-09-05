@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
+import { checkConsoleUI } from "../console/tests/acceptance.mjs";
 import {pathToFileURL} from "node:url";
 const {chromium}=await import(pathToFileURL(process.env.DROPLY_PLAYWRIGHT_PATH||"/tmp/droply-console-browser-deps/node_modules/playwright/index.mjs"));
 const origin=process.argv[2];if(!origin)throw new Error("Pass local console HTTPS origin");
 const browser=await chromium.launch({headless:true,args:["--host-resolver-rules=MAP *.console.localhost 127.0.0.1","--no-proxy-server"]});
 try{
- const context=await browser.newContext({ignoreHTTPSErrors:true});const page=await context.newPage();const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ const context=await browser.newContext({ignoreHTTPSErrors:true,colorScheme:"light"});const page=await context.newPage();const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ await page.addInitScript(()=>{window.cspViolations=[];document.addEventListener("securitypolicyviolation",event=>window.cspViolations.push(event.violatedDirective));});
  await page.goto(origin+"/console/");await page.getByLabel("邮箱").fill("viewer@console.test");await page.getByLabel("密码").fill("console-password");await page.getByRole("button",{name:"登录",exact:true}).click();
  await page.getByRole("button",{name:"team / site"}).click();await page.getByRole("heading",{name:"部署版本",exact:true}).waitFor();
  assert.equal(await page.getByRole("button",{name:"team / secret"}).count(),0);
+ await page.getByRole("table",{name:"部署版本",exact:true}).waitFor();
  assert.ok((await page.locator("body").innerText()).includes("v2"));
  assert.equal(await page.evaluate(()=>document.cookie.includes("droply_console")),false);
  const stored=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));assert.ok(!stored.includes("secret"));
@@ -29,6 +32,8 @@ try{
  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"删除项目规则",exact:true}).click();await page.getByText("未设置项目规则；站点仍可能继承子域名规则。",{exact:true}).waitFor();
  const audit=await page.evaluate(()=>fetch("/subdomains/team/projects/site/audit").then(r=>r.json()));assert.ok(audit.events.some(e=>e.result==="success"&&e.target==="version:2"));assert.ok(audit.events.some(e=>e.result==="failure"&&e.status_code===400));
  if(process.env.DROPLY_CONSOLE_SCREENSHOT)await page.screenshot({path:process.env.DROPLY_CONSOLE_SCREENSHOT,fullPage:true});
+ await checkConsoleUI(page);
+ assert.deepEqual(await page.evaluate(()=>window.cspViolations),[]);
  await context.clearCookies();await page.getByRole("button",{name:"刷新",exact:true}).click();await page.getByText("会话已过期，请重新登录。",{exact:true}).waitFor();
  assert.deepEqual(errors,[]);await context.close();console.log("PASS real Chromium login, authorized details, viewer refusal, HttpOnly isolation, logout, empty state, promote, rollback, access mutations, audit, failure and expiry");
 }finally{await browser.close()}

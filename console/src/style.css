@@ -1,0 +1,138 @@
+@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
+@import "@cloudflare/kumo/styles";
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply m-0 bg-kumo-canvas text-kumo-default antialiased;
+    font-family:
+      Inter,
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "PingFang SC",
+      "Microsoft YaHei",
+      sans-serif;
+  }
+  button,
+  input,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-kumo-focus);
+    outline-offset: 3px;
+  }
+  h1 {
+    @apply text-2xl font-semibold tracking-tight;
+    overflow-wrap: anywhere;
+  }
+}
+@layer components {
+  .app-header {
+    @apply flex min-h-18 items-center justify-between gap-4 border-b border-kumo-hairline bg-kumo-base px-5 md:px-8;
+  }
+  .brand {
+    @apply flex items-center gap-3 text-xl font-semibold;
+  }
+  .workspace {
+    @apply grid min-h-[calc(100vh-4.5rem)] md:grid-cols-[260px_minmax(0,1fr)];
+  }
+  .sidebar {
+    @apply flex min-w-0 flex-col gap-6 border-b border-kumo-hairline bg-kumo-base p-5 md:border-r md:border-b-0;
+  }
+  .project-list {
+    @apply flex flex-col gap-2;
+  }
+  .project-button {
+    @apply h-auto min-h-15 w-full justify-start whitespace-normal py-3;
+  }
+  .account {
+    @apply mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-kumo-hairline pt-5;
+  }
+  .main-content {
+    @apply mx-auto w-full min-w-0 max-w-[1480px] space-y-7 p-5 md:p-8 lg:p-10;
+  }
+  .page-heading {
+    @apply flex flex-wrap items-center justify-between gap-4;
+  }
+  .eyebrow {
+    @apply mb-2 text-sm text-kumo-subtle;
+  }
+  .detail-stack {
+    @apply flex flex-col gap-6;
+  }
+  .panel {
+    @apply min-w-0 space-y-5 rounded-xl border border-kumo-hairline bg-kumo-base p-5 md:p-6;
+  }
+  .panel-heading {
+    @apply text-lg font-semibold;
+  }
+  .summary-grid {
+    @apply grid gap-6 xl:grid-cols-2;
+  }
+  .table-scroll {
+    @apply max-w-full overflow-x-auto rounded-lg;
+  }
+  .table-scroll table {
+    @apply min-w-full text-sm;
+  }
+  .table-scroll[data-wide="true"] table {
+    min-width: max(100%, 44rem);
+  }
+  .table-scroll th,
+  .table-scroll td {
+    @apply px-4 py-3;
+  }
+  .table-scroll td {
+    max-width: 26rem;
+    overflow-wrap: anywhere;
+  }
+  .table-scroll th {
+    @apply whitespace-nowrap;
+  }
+  .metrics {
+    @apply grid grid-cols-2 gap-4;
+  }
+  .metrics > div {
+    @apply rounded-lg bg-kumo-tint p-5 text-sm text-kumo-subtle;
+  }
+  .metrics strong {
+    @apply mt-2 block text-3xl font-semibold text-kumo-default;
+  }
+  .form-stack {
+    @apply flex flex-col gap-5;
+  }
+  .access-fields {
+    @apply grid min-w-0 gap-5 lg:grid-cols-2;
+  }
+  .access-fields > button {
+    @apply self-end justify-self-start;
+  }
+  .login-layout {
+    @apply mx-auto grid min-h-[calc(100vh-4.5rem)] max-w-6xl items-center gap-10 px-6 py-12 md:grid-cols-2 md:gap-20;
+  }
+  .login-intro h1 {
+    @apply mt-7 text-4xl leading-relaxed font-semibold;
+  }
+  .login-intro p {
+    @apply mt-5 leading-8 text-kumo-subtle;
+  }
+  .login-card {
+    @apply space-y-6 p-7 md:p-9;
+  }
+  .skip-link {
+    @apply sr-only;
+  }
+  .skip-link:focus {
+    @apply not-sr-only fixed top-2 left-2 z-50 rounded bg-kumo-base p-3 text-kumo-link;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

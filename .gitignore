@@ -8,3 +8,4 @@ dist/
 /droply-server
 .DS_Store
 hmac.key
+node_modules/

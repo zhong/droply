@@ -58,6 +58,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Check and rebuild console
+        run: |
+          npm --prefix console ci
+          npm --prefix console run build
+          git diff --exit-code -- internal/server/console_assets
       - name: Install Chromium acceptance dependencies
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --package-lock=false playwright@1.61.0

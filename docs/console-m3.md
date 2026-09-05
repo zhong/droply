@@ -1,6 +1,8 @@
 # 内嵌控制台（M3）
 
-访问 `https://api.<base-domain>/console/`，用团队账户邮箱与密码登录。控制台资源随 Go 二进制内嵌，无前端构建进程或外部 CDN。必须通过 HTTPS 访问；已有可信代理配置可用于代理终止 TLS。
+访问 `https://api.<base-domain>/console/`，用团队账户邮箱与密码登录。控制台使用 React 和 Kumo，源码独立于 `console/`。运行时资源随 Go 二进制内嵌，无需前端进程或外部 CDN。必须通过 HTTPS 访问；已有可信代理配置可用于代理终止 TLS。
+
+修改前端后在项目根目录运行 `make console` 再构建服务器；前端源码和生成的 `internal/server/console_assets/` 一起提交。依赖、构建和目录说明见 [console/README.md](../console/README.md)。页面支持深浅主题、中文窄屏布局和键盘操作。
 
 控制台显示当前账户获授权的项目、角色、部署、域名、访问统计和最近 50 条审计记录。viewer 只读；deployer 和 owner 可将可用预览版本发布为生产，或回滚到可用历史生产版本。操作前确认框明确项目和版本；成功后重新读取服务端状态。
 
