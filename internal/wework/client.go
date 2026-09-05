@@ -1,14 +1,18 @@
 package wework
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 const (
+	defaultRequestTimeout     = 10 * time.Second
 	defaultAuthorizeURL       = "https://login.work.weixin.qq.com/wwlogin/sso/login"
 	defaultMobileAuthorizeURL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 	defaultAPIBaseURL         = "https://qyapi.weixin.qq.com"
@@ -28,7 +32,9 @@ type Config struct {
 	HTTPClient         *http.Client
 }
 
-// Client wraps WeWork OAuth API calls.
+// Client wraps WeWork OAuth API calls. Each HTTP request, including its response
+// body, has a maximum duration of ten seconds (or a shorter caller deadline).
+// User lookups make two sequential requests.
 type Client struct {
 	corpID             string
 	agentID            string
@@ -62,8 +68,14 @@ func NewClient(config Config) *Client {
 		c.apiBaseURL = defaultAPIBaseURL
 	}
 	if c.httpClient == nil {
-		c.httpClient = http.DefaultClient
+		c.httpClient = &http.Client{}
 	}
+	// Copy injected clients so setting our bound does not mutate shared callers.
+	client := *c.httpClient
+	if client.Timeout <= 0 || client.Timeout > defaultRequestTimeout {
+		client.Timeout = defaultRequestTimeout
+	}
+	c.httpClient = &client
 	return c
 }
 
@@ -108,7 +120,7 @@ type UserInfo struct {
 }
 
 // GetAccessToken retrieves the access_token for the agent.
-func (c *Client) GetAccessToken() (string, error) {
+func (c *Client) GetAccessToken(ctx context.Context) (string, error) {
 	u := fmt.Sprintf("%s/cgi-bin/gettoken?corpid=%s&corpsecret=%s",
 		c.apiBaseURL,
 		url.QueryEscape(c.corpID),
@@ -117,22 +129,23 @@ func (c *Client) GetAccessToken() (string, error) {
 
 	var result struct {
 		ErrCode     int    `json:"errcode"`
-		ErrMsg      string `json:"errmsg"`
 		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
 	}
-	if err := c.doGet(u, &result); err != nil {
+	if err := c.doGet(ctx, u, &result); err != nil {
 		return "", err
 	}
 	if result.ErrCode != 0 {
-		return "", fmt.Errorf("wework api error: %d %s", result.ErrCode, result.ErrMsg)
+		return "", fmt.Errorf("wework api error: %d", result.ErrCode)
+	}
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("no access token in response")
 	}
 	return result.AccessToken, nil
 }
 
 // GetUserIDByCode exchanges OAuth code for user_id.
-func (c *Client) GetUserIDByCode(code string) (string, error) {
-	accessToken, err := c.GetAccessToken()
+func (c *Client) GetUserIDByCode(ctx context.Context, code string) (string, error) {
+	accessToken, err := c.GetAccessToken(ctx)
 	if err != nil {
 		return "", fmt.Errorf("get access token: %w", err)
 	}
@@ -145,14 +158,13 @@ func (c *Client) GetUserIDByCode(code string) (string, error) {
 
 	var result struct {
 		ErrCode int    `json:"errcode"`
-		ErrMsg  string `json:"errmsg"`
 		UserID  string `json:"userid"`
 	}
-	if err := c.doGet(u, &result); err != nil {
+	if err := c.doGet(ctx, u, &result); err != nil {
 		return "", err
 	}
 	if result.ErrCode != 0 {
-		return "", fmt.Errorf("wework api error: %d %s", result.ErrCode, result.ErrMsg)
+		return "", fmt.Errorf("wework api error: %d", result.ErrCode)
 	}
 	if result.UserID == "" {
 		return "", fmt.Errorf("no userid in response")
@@ -161,8 +173,8 @@ func (c *Client) GetUserIDByCode(code string) (string, error) {
 }
 
 // GetUserInfo retrieves detailed user information by user_id.
-func (c *Client) GetUserInfo(userID string) (*UserInfo, error) {
-	accessToken, err := c.GetAccessToken()
+func (c *Client) GetUserInfo(ctx context.Context, userID string) (*UserInfo, error) {
+	accessToken, err := c.GetAccessToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
@@ -175,17 +187,19 @@ func (c *Client) GetUserInfo(userID string) (*UserInfo, error) {
 
 	var result struct {
 		ErrCode int    `json:"errcode"`
-		ErrMsg  string `json:"errmsg"`
 		UserID  string `json:"userid"`
 		Name    string `json:"name"`
 		Mobile  string `json:"mobile"`
 		Email   string `json:"email"`
 	}
-	if err := c.doGet(u, &result); err != nil {
+	if err := c.doGet(ctx, u, &result); err != nil {
 		return nil, err
 	}
 	if result.ErrCode != 0 {
-		return nil, fmt.Errorf("wework api error: %d %s", result.ErrCode, result.ErrMsg)
+		return nil, fmt.Errorf("wework api error: %d", result.ErrCode)
+	}
+	if result.UserID == "" {
+		return nil, fmt.Errorf("no userid in response")
 	}
 	return &UserInfo{
 		UserID: result.UserID,
@@ -195,19 +209,39 @@ func (c *Client) GetUserInfo(userID string) (*UserInfo, error) {
 	}, nil
 }
 
-func (c *Client) doGet(url string, out interface{}) error {
-	resp, err := c.httpClient.Get(url)
+// doGet bounds each upstream round trip, including reading its response body.
+func (c *Client) doGet(ctx context.Context, endpoint string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return fmt.Errorf("http get: %w", err)
+		return errors.New("invalid wework request")
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		// net/http errors can contain the complete URL, including OAuth credentials.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+		return errors.New("wework request failed")
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("wework HTTP status: %d", resp.StatusCode)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read response: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+		return errors.New("read wework response failed")
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+		return errors.New("invalid wework JSON response")
 	}
 	return nil
 }

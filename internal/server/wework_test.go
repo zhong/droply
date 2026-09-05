@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"html"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zhong/droply/internal/server"
 	"github.com/zhong/droply/internal/store"
@@ -769,4 +771,92 @@ func extractQueryParam(rawURL, key string) string {
 		}
 	}
 	return ""
+}
+
+func TestWeWorkCallbackUpstreamFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`{"access_token":"private-token","userid":"alice"}`))
+	}))
+	defer upstream.Close()
+	srv, _ := newSiteServerWithWeWork(t, upstream.URL)
+	setupWeWorkSite(t, srv, []string{"alice"})
+	handler := srv.NewSiteHandler()
+	req := httptest.NewRequest(http.MethodGet, "/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	state := extractQueryParam(rr.Header().Get("Location"), "state")
+	req = httptest.NewRequest(http.MethodGet, "/_droply/wework/callback?code=private-code&state="+state, nil)
+	req.Host = "wesite.droplydoc.com"
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("callback status = %d: %s", rr.Code, rr.Body.String())
+	}
+	failed := false
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == "_droply_access" {
+			t.Fatal("upstream failure issued access cookie")
+		}
+		if cookie.Name == "_droply_wework_attempted" {
+			failed = true
+		}
+	}
+	if !failed {
+		t.Fatal("missing failure marker")
+	}
+	if strings.Contains(rr.Body.String(), "private-") {
+		t.Fatal("response leaked credential")
+	}
+}
+
+func TestWeWorkCallbackPropagatesCancellation(t *testing.T) {
+	started := make(chan struct{})
+	stopped := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+		close(stopped)
+	}))
+	defer upstream.Close()
+	srv, _ := newSiteServerWithWeWork(t, upstream.URL)
+	setupWeWorkSite(t, srv, []string{"alice"})
+	handler := srv.NewSiteHandler()
+	req := httptest.NewRequest(http.MethodGet, "/_droply/wework/auth?redirect=/app/&host=wesite.droplydoc.com", nil)
+	req.Host = "wesite.droplydoc.com"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	state := extractQueryParam(rr.Header().Get("Location"), "state")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req = httptest.NewRequestWithContext(ctx, http.MethodGet, "/_droply/wework/callback?code=private-code&state="+state, nil)
+	req.Host = "wesite.droplydoc.com"
+	rr = httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { handler.ServeHTTP(rr, req); close(done) }()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback did not reach upstream")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled callback did not return")
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("upstream not canceled")
+	}
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("canceled callback status = %d", rr.Code)
+	}
+	for _, cookie := range rr.Result().Cookies() {
+		if cookie.Name == "_droply_access" {
+			t.Fatal("canceled callback issued access cookie")
+		}
+	}
 }

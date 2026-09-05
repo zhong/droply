@@ -146,9 +146,9 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Exchange code for user_id.
-	userID, err := s.wework.GetUserIDByCode(code)
+	userID, err := s.wework.GetUserIDByCode(r.Context(), code)
 	if err != nil {
-		log.Printf("wework callback: failed to get user ID (code=%s, err=%v)", truncate(code, 8), err)
+		log.Printf("wework callback: failed to get user ID: %v", err)
 		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.Error(w, "WeWork login failed", http.StatusUnauthorized)
 		return
@@ -227,15 +227,6 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		target = "https://" + stateData.Host + stateData.Redirect
 	}
 	http.Redirect(w, r, target, http.StatusFound)
-}
-
-// truncate shortens s to at most n characters, appending "..." if truncated.
-// Safe for any length input (no panic on short strings).
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
 
 // sameHost compares two host strings case-insensitively, ignoring an optional port.

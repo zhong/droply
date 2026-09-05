@@ -1,6 +1,8 @@
 package wework
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -114,7 +116,7 @@ func TestGetAccessTokenSuccess(t *testing.T) {
 		Secret:     "sec",
 		APIBaseURL: srv.URL,
 	})
-	tok, err := c.GetAccessToken()
+	tok, err := c.GetAccessToken(t.Context())
 	if err != nil {
 		t.Fatalf("GetAccessToken: %v", err)
 	}
@@ -134,7 +136,7 @@ func TestGetAccessTokenError(t *testing.T) {
 		Secret:     "bad",
 		APIBaseURL: srv.URL,
 	})
-	if _, err := c.GetAccessToken(); err == nil {
+	if _, err := c.GetAccessToken(t.Context()); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -163,7 +165,7 @@ func TestGetUserIDByCode(t *testing.T) {
 		Secret:     "sec",
 		APIBaseURL: srv.URL,
 	})
-	uid, err := c.GetUserIDByCode("auth-code-123")
+	uid, err := c.GetUserIDByCode(t.Context(), "auth-code-123")
 	if err != nil {
 		t.Fatalf("GetUserIDByCode: %v", err)
 	}
@@ -189,7 +191,7 @@ func TestGetUserIDByCodeNoUserID(t *testing.T) {
 		Secret:     "sec",
 		APIBaseURL: srv.URL,
 	})
-	if _, err := c.GetUserIDByCode("code"); err == nil {
+	if _, err := c.GetUserIDByCode(t.Context(), "code"); err == nil {
 		t.Fatal("expected error for missing userid")
 	}
 }
@@ -242,5 +244,133 @@ func TestStateStoreUnknownToken(t *testing.T) {
 	s := NewStateStore(time.Minute)
 	if _, ok := s.Consume("nonexistent"); ok {
 		t.Error("expected unknown token to fail")
+	}
+}
+
+func TestClientCancellationAndTimeout(t *testing.T) {
+	for _, operation := range []string{"token", "code", "user"} {
+		for _, failure := range []string{"cancel", "timeout", "body timeout"} {
+			t.Run(operation+"/"+failure, func(t *testing.T) {
+				started := make(chan struct{})
+				stopped := make(chan struct{})
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if operation != "token" && r.URL.Path == "/cgi-bin/gettoken" {
+						w.Write([]byte(`{"access_token":"private-token"}`))
+						return
+					}
+					if failure == "body timeout" {
+						w.WriteHeader(http.StatusOK)
+						w.(http.Flusher).Flush()
+					}
+					close(started)
+					<-r.Context().Done()
+					close(stopped)
+				}))
+				defer upstream.Close()
+				injected := upstream.Client()
+				if failure != "cancel" {
+					injected.Timeout = 50 * time.Millisecond
+				}
+				client := NewClient(Config{APIBaseURL: upstream.URL, HTTPClient: injected})
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				done := make(chan error, 1)
+				go func() {
+					var err error
+					switch operation {
+					case "token":
+						_, err = client.GetAccessToken(ctx)
+					case "code":
+						_, err = client.GetUserIDByCode(ctx, "private-code")
+					case "user":
+						_, err = client.GetUserInfo(ctx, "alice")
+					}
+					done <- err
+				}()
+				select {
+				case <-started:
+				case <-time.After(2 * time.Second):
+					t.Fatal("upstream never started")
+				}
+				expected := context.DeadlineExceeded
+				if failure == "cancel" {
+					cancel()
+					expected = context.Canceled
+				}
+				select {
+				case err := <-done:
+					if !errors.Is(err, expected) {
+						t.Fatalf("error = %v, want %v", err, expected)
+					}
+				case <-time.After(2 * time.Second):
+					t.Fatal("operation did not terminate")
+				}
+				select {
+				case <-stopped:
+				case <-time.After(2 * time.Second):
+					t.Fatal("upstream request not canceled")
+				}
+			})
+		}
+	}
+}
+
+func TestClientRejectsInvalidResponsesWithoutSecrets(t *testing.T) {
+	for _, response := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"http error", 503, `{"access_token":"private-token"}`},
+		{"invalid JSON", 200, `private-secret private-code private-token`},
+		{"api error", 200, `{"errcode":40001,"errmsg":"private-secret private-code private-token"}`},
+		{"missing token", 200, `{}`},
+	} {
+		t.Run(response.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(response.status)
+				w.Write([]byte(response.body))
+			}))
+			defer upstream.Close()
+			client := NewClient(Config{APIBaseURL: upstream.URL, Secret: "private-secret"})
+			_, err := client.GetUserIDByCode(t.Context(), "private-code")
+			if err == nil {
+				t.Fatal("expected upstream failure")
+			}
+			for _, secret := range []string{"private-secret", "private-code", "private-token"} {
+				if strings.Contains(err.Error(), secret) {
+					t.Errorf("error leaks %s: %v", secret, err)
+				}
+			}
+		})
+	}
+}
+
+func TestClientTransportErrorDoesNotExposeURL(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	upstream.Close()
+	client := NewClient(Config{APIBaseURL: upstream.URL, Secret: "private-secret"})
+	_, err := client.GetAccessToken(t.Context())
+	if err == nil || strings.Contains(err.Error(), "private-secret") || strings.Contains(err.Error(), upstream.URL) {
+		t.Fatalf("expected sanitized transport error, got %v", err)
+	}
+}
+
+func TestClientDefaultTimeoutAndInjection(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -1, time.Hour, time.Second} {
+		injected := &http.Client{Timeout: timeout}
+		client := NewClient(Config{HTTPClient: injected})
+		if injected.Timeout != timeout {
+			t.Fatal("mutated injected client")
+		}
+		if client.httpClient.Timeout <= 0 || client.httpClient.Timeout > defaultRequestTimeout {
+			t.Fatal("timeout not bounded")
+		}
+		if timeout == time.Second && client.httpClient.Timeout != timeout {
+			t.Fatal("lost shorter injected timeout")
+		}
+	}
+	if NewClient(Config{}).httpClient.Timeout != defaultRequestTimeout {
+		t.Fatal("missing default timeout")
 	}
 }
