@@ -366,7 +366,7 @@ func TestSiteHandlerRateLimiting(t *testing.T) {
 	// under the race detector, legitimately allowing the eleventh request.
 	codes := make(chan int, 11)
 	start := make(chan struct{})
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		go func() {
 			<-start
 			form := url.Values{}
