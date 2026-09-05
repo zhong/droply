@@ -265,7 +265,7 @@ func Restore(ctx context.Context, cfg RestoreConfig) error {
 		return err
 	}
 	ready := filepath.Join(work, "ready")
-	if err = copyTree(ctx, filepath.Join(payload, "data"), ready, nil); err != nil {
+	if err = os.Rename(filepath.Join(payload, "data"), ready); err != nil {
 		return err
 	}
 	restoreID := rand.Text()
@@ -274,10 +274,13 @@ func Restore(ctx context.Context, cfg RestoreConfig) error {
 		return err
 	}
 	if _, err = os.Stat(filepath.Join(payload, "external")); err == nil {
-		if err = copyTree(ctx, filepath.Join(payload, "external"), filepath.Join(restored, "external"), nil); err != nil {
+		if err = os.Rename(filepath.Join(payload, "external"), filepath.Join(restored, "external")); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err = prepareRestoredTree(ctx, ready); err != nil {
 		return err
 	}
 	// Paths are relative to .restore and never cause writes to the original machine.
@@ -764,4 +767,48 @@ func checkArtifacts(ctx context.Context, data string) error {
 		}
 	}
 	return rows.Err()
+}
+
+// prepareRestoredTree makes the verified, private unpack tree writable without
+// copying its contents. Each file was synced during extraction; sync again after
+// changing its mode. Restore syncs the directories before the final rename.
+func prepareRestoredTree(ctx context.Context, root string) error {
+	return filepath.WalkDir(root, func(name string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return errors.New("restored tree contains a link or special file")
+		}
+		f, err := os.Open(name)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		opened, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(info, opened) {
+			return errors.New("restored tree changed while opening")
+		}
+		mode := fs.FileMode(0600)
+		if info.IsDir() {
+			mode = 0700
+		}
+		if err := f.Chmod(mode); err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return f.Sync()
+		}
+		return nil
+	})
 }

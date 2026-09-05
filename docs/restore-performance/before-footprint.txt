@@ -1,0 +1,10 @@
+=== RUN   TestRestoreFootprint
+=== RUN   TestRestoreFootprint/many-files
+    backup_bench_test.go:114: observed_peak_scratch_bytes=8928438 final_regular_file_bytes=4474446
+=== RUN   TestRestoreFootprint/large-file
+    backup_bench_test.go:114: observed_peak_scratch_bytes=67533953 final_regular_file_bytes=33766048
+--- PASS: TestRestoreFootprint (16.56s)
+    --- PASS: TestRestoreFootprint/many-files (15.78s)
+    --- PASS: TestRestoreFootprint/large-file (0.78s)
+PASS
+ok  	github.com/zhong/droply/internal/backup	17.121s

@@ -7,9 +7,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/zhong/droply/internal/artifacts"
@@ -17,7 +20,7 @@ import (
 	"github.com/zhong/droply/internal/store"
 )
 
-func fixture(t *testing.T) Config {
+func fixture(t testing.TB) Config {
 	t.Helper()
 	parent := t.TempDir()
 	root := filepath.Join(parent, "source")
@@ -47,13 +50,13 @@ func fixture(t *testing.T) Config {
 	must(t, os.WriteFile(config, []byte("DROPly flags and sensitive configuration"), 0600))
 	return Config{DataDir: root, Output: filepath.Join(parent, "backup.tar.gz"), Configs: []string{config}}
 }
-func must(t *testing.T, err error) {
+func must(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
 	}
 }
-func siteArchive(t *testing.T, body string) []byte {
+func siteArchive(t testing.TB, body string) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	gz := gzip.NewWriter(&b)
@@ -323,4 +326,92 @@ func TestUnversionedSourcePreserved(t *testing.T) {
 	if version != 0 {
 		t.Fatal("restore migrated database")
 	}
+}
+
+func TestRestorePrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permissions")
+	}
+	cfg := fixture(t)
+	must(t, Create(t.Context(), cfg))
+	target := filepath.Join(filepath.Dir(cfg.DataDir), "restored")
+	must(t, Restore(t.Context(), RestoreConfig{Input: cfg.Output, DataDir: target}))
+	must(t, filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		want := fs.FileMode(0600)
+		if info.IsDir() {
+			want = 0700
+		}
+		if info.Mode().Perm() != want {
+			t.Errorf("%s mode = %o, want %o", path, info.Mode().Perm(), want)
+		}
+		return nil
+	}))
+}
+
+func TestPrepareRestoredTreeRejectsLinkAndCancellation(t *testing.T) {
+	t.Run("link", func(t *testing.T) {
+		root := t.TempDir()
+		outside := filepath.Join(t.TempDir(), "outside")
+		must(t, os.WriteFile(outside, []byte("untouched"), 0444))
+		if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+			t.Skip(err)
+		}
+		if err := prepareRestoredTree(t.Context(), root); err == nil {
+			t.Fatal("accepted link")
+		}
+		info, err := os.Stat(outside)
+		must(t, err)
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0444 {
+			t.Fatal("changed link target permissions")
+		}
+	})
+	t.Run("canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if err := prepareRestoredTree(ctx, t.TempDir()); !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+// Cancel at the first context check after the validated tree has moved into
+// ready, exercising cleanup after the new staging transition.
+type cancelWhenReady struct {
+	context.Context
+	parent string
+}
+
+func (c cancelWhenReady) Err() error {
+	paths, _ := filepath.Glob(filepath.Join(c.parent, ".droply-restore-*", "ready"))
+	if len(paths) > 0 {
+		return context.Canceled
+	}
+	return c.Context.Err()
+}
+func TestRestoreCancellationAfterStagingMove(t *testing.T) {
+	cfg := fixture(t)
+	must(t, Create(t.Context(), cfg))
+	parent := filepath.Dir(cfg.DataDir)
+	target := filepath.Join(parent, "restored")
+	err := Restore(cancelWhenReady{t.Context(), parent}, RestoreConfig{Input: cfg.Output, DataDir: target})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("target published: %v", err)
+	}
+	work, err := filepath.Glob(filepath.Join(parent, ".droply-restore-*"))
+	must(t, err)
+	if len(work) != 0 {
+		t.Fatalf("scratch tree leaked: %v", work)
+	}
+	// A failed restore must leave the archive usable for a fresh attempt.
+	must(t, Restore(t.Context(), RestoreConfig{Input: cfg.Output, DataDir: target}))
 }

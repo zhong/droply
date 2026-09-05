@@ -1,0 +1,18 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/zhong/droply/internal/backup
+cpu: Apple M3 Pro
+BenchmarkRestore/many-files-12         	       1	10386813208 ns/op	115064248 B/op	   84859 allocs/op
+BenchmarkRestore/many-files-12         	       1	9447098750 ns/op	115021472 B/op	   84826 allocs/op
+BenchmarkRestore/many-files-12         	       1	10336156750 ns/op	115018440 B/op	   84839 allocs/op
+BenchmarkRestore/many-files-12         	       1	12032100000 ns/op	115022344 B/op	   84826 allocs/op
+BenchmarkRestore/many-files-12         	       1	10832354249 ns/op	115051736 B/op	   84845 allocs/op
+BenchmarkRestore/many-files-12         	       1	10613042875 ns/op	115056784 B/op	   84833 allocs/op
+BenchmarkRestore/large-file-12         	       1	 326748916 ns/op	 1357512 B/op	    2625 allocs/op
+BenchmarkRestore/large-file-12         	       1	 350120459 ns/op	 1365184 B/op	    2641 allocs/op
+BenchmarkRestore/large-file-12         	       1	 346545291 ns/op	 1365704 B/op	    2634 allocs/op
+BenchmarkRestore/large-file-12         	       1	 333430209 ns/op	 1368864 B/op	    2631 allocs/op
+BenchmarkRestore/large-file-12         	       1	 358488375 ns/op	 1374512 B/op	    2658 allocs/op
+BenchmarkRestore/large-file-12         	       1	 305973083 ns/op	 1387672 B/op	    2653 allocs/op
+PASS
+ok  	github.com/zhong/droply/internal/backup	101.540s
