@@ -219,6 +219,95 @@ function accessPanel(project, base, rule) {
       ),
     );
 }
+async function fetchProjectDetail(base) {
+  const [deployments, domains, stats, access, audit] = await Promise.allSettled(
+    [
+      api(base + "/deployments"),
+      api(base + "/domains"),
+      api(base + "/stats"),
+      api(base + "/access").catch((error) => {
+        if (error.status === 404) return null;
+        throw error;
+      }),
+      api(base + "/audit?limit=50"),
+    ],
+  );
+  return { deployments, domains, stats, access, audit };
+}
+function renderDetailResult(title, result, render) {
+  if (result.status === "fulfilled") {
+    render(result.value);
+  } else {
+    panel(title).append(element("p", result.reason.message, "error"));
+  }
+}
+function deploymentsPanel(project, base, deployments) {
+  table(
+    panel("部署版本"),
+    ["版本", "环境 / 状态", "时间", "访问", "错误", "操作"],
+    deployments.map((deployment) => [
+      `v${deployment.version}`,
+      `${deployment.environment} / ${deployment.status}${deployment.production ? " · 生产" : ""}`,
+      new Date(deployment.created_at).toLocaleString(),
+      siteLink(
+        deployment.preview_label || project.host_label,
+        deployment.preview_label ? "打开预览" : "打开站点",
+      ),
+      deployment.failure_reason || "—",
+      deploymentActions(project, base, deployment),
+    ]),
+  );
+}
+function domainsPanel(domains) {
+  table(
+    panel("自定义域名"),
+    ["域名", "状态"],
+    domains.map((domain) => [domain.domain, domain.status]),
+  );
+}
+function statsPanel(data) {
+  const p = panel("访问统计");
+  const stats = element("div", undefined, "stats");
+  for (const [label, value] of [
+    ["浏览量", data.total_pv],
+    ["访客数", data.total_uv],
+  ]) {
+    const metric = element("div", label);
+    metric.append(element("strong", value ?? 0));
+    stats.append(metric);
+  }
+  p.append(stats);
+  table(
+    p,
+    ["路径", "浏览量", "访客数"],
+    (data.pages || []).map((page) => [page.path, page.pv, page.uv]),
+  );
+}
+function auditPanel(data) {
+  const p = panel("操作审计");
+  p.append(element("p", "最近 50 条操作记录", "muted"));
+  table(
+    p,
+    ["时间", "操作者", "操作 / 目标", "结果"],
+    (data.events || []).map((event) => [
+      new Date(event.created_at).toLocaleString(),
+      `${event.actor_kind}:${event.actor_id}`,
+      `${event.action} / ${event.target}`,
+      `${event.result} (${event.status_code})`,
+    ]),
+  );
+}
+function renderProjectDetail(project, base, detail) {
+  renderDetailResult("部署版本", detail.deployments, (data) =>
+    deploymentsPanel(project, base, data),
+  );
+  renderDetailResult("自定义域名", detail.domains, domainsPanel);
+  renderDetailResult("访问统计", detail.stats, statsPanel);
+  renderDetailResult("项目访问规则", detail.access, (data) =>
+    accessPanel(project, base, data),
+  );
+  renderDetailResult("操作审计", detail.audit, auditPanel);
+}
 async function loadDetail(project) {
   selected = project;
   drawProjects();
@@ -228,88 +317,9 @@ async function loadDetail(project) {
   title.append(document.createTextNode(" · "));
   title.append(siteLink(project.host_label, "打开生产站点"));
   const base = projectPath();
-  const responses = await Promise.allSettled([
-    api(base + "/deployments"),
-    api(base + "/domains"),
-    api(base + "/stats"),
-    api(base + "/access").catch((error) => {
-      if (error.status === 404) return null;
-      throw error;
-    }),
-    api(base + "/audit?limit=50"),
-  ]);
+  const detail = await fetchProjectDetail(base);
   if (selected !== project || !session) return;
-  const names = [
-    "部署版本",
-    "自定义域名",
-    "访问统计",
-    "项目访问规则",
-    "操作审计",
-  ];
-  responses.forEach((result, i) => {
-    if (i === 3 && result.status === "fulfilled") {
-      accessPanel(project, base, result.value);
-      return;
-    }
-    const p = panel(names[i]);
-    if (result.status !== "fulfilled") {
-      p.append(element("p", result.reason.message, "error"));
-      return;
-    }
-    const data = result.value;
-    if (i === 0)
-      table(
-        p,
-        ["版本", "环境 / 状态", "时间", "访问", "错误", "操作"],
-        data.map((d) => [
-          `v${d.version}`,
-          `${d.environment} / ${d.status}${d.production ? " · 生产" : ""}`,
-          new Date(d.created_at).toLocaleString(),
-          siteLink(
-            d.preview_label || project.host_label,
-            d.preview_label ? "打开预览" : "打开站点",
-          ),
-          d.failure_reason || "—",
-          deploymentActions(project, base, d),
-        ]),
-      );
-    if (i === 1)
-      table(
-        p,
-        ["域名", "状态"],
-        data.map((d) => [d.domain, d.status]),
-      );
-    if (i === 2) {
-      const stats = element("div", undefined, "stats");
-      for (const [label, value] of [
-        ["浏览量", data.total_pv],
-        ["访客数", data.total_uv],
-      ]) {
-        const metric = element("div", label);
-        metric.append(element("strong", value ?? 0));
-        stats.append(metric);
-      }
-      p.append(stats);
-      table(
-        p,
-        ["路径", "浏览量", "访客数"],
-        (data.pages || []).map((x) => [x.path, x.pv, x.uv]),
-      );
-    }
-    if (i === 4) {
-      p.append(element("p", "最近 50 条操作记录", "muted"));
-      table(
-        p,
-        ["时间", "操作者", "操作 / 目标", "结果"],
-        (data.events || []).map((e) => [
-          new Date(e.created_at).toLocaleString(),
-          `${e.actor_kind}:${e.actor_id}`,
-          `${e.action} / ${e.target}`,
-          `${e.result} (${e.status_code})`,
-        ]),
-      );
-    }
-  });
+  renderProjectDetail(project, base, detail);
 }
 function drawProjects() {
   $("projects").replaceChildren();
