@@ -31,6 +31,7 @@ type Server struct {
 	prepareOnce       sync.Once
 	prepareError      error
 	artifacts         *artifacts.Store
+	staticSites       siteCache
 	deploymentOptions DeploymentOptions
 	certificates      *certificates.Manager
 	analyticsStart    sync.Once

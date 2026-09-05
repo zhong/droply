@@ -1,0 +1,24 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/zhong/droply/internal/server
+cpu: Apple M3 Pro
+BenchmarkCachedSite/no_rules-12   	    7730	     48542 ns/op	    2454 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7405	     48540 ns/op	    2461 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7292	     49359 ns/op	    2462 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7537	     50076 ns/op	    2460 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7161	     51208 ns/op	    2448 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    6916	     49634 ns/op	    2433 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7352	     49797 ns/op	    2436 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7323	     51156 ns/op	    2457 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7184	     50631 ns/op	    2432 B/op	      29 allocs/op
+BenchmarkCachedSite/no_rules-12   	    7438	     49535 ns/op	    2436 B/op	      29 allocs/op
+BenchmarkCachedSite/rules-12      	    7122	     48456 ns/op	    2501 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    8116	     48838 ns/op	    2488 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    7298	     49074 ns/op	    2484 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    7496	     50717 ns/op	    2493 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    8082	     49202 ns/op	    2479 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    7029	     50385 ns/op	    2512 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    7056	     50607 ns/op	    2465 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    6758	     51201 ns/op	    2472 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    7198	     50035 ns/op	    2495 B/op	      30 allocs/op
+BenchmarkCachedSite/rules-12      	    6693	     50347 ns/op	    2478 B/op	      30 allocs/op

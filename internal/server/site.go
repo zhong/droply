@@ -252,7 +252,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, resolved site
 		http.Error(w, "artifact unavailable", 503)
 		return
 	}
-	site, err := staticweb.Load(root)
+	site, err := s.staticSites.load(resolved.deployment.ArtifactID, root)
 	if err != nil {
 		http.Error(w, "invalid static site configuration", 503)
 		return
