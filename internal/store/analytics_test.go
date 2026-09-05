@@ -120,7 +120,7 @@ func TestGetVisitLogsPagination(t *testing.T) {
 	st := newTestStore(t)
 	subID := createTestSubdomain(t, st)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		st.RecordVisit(subID, "blog", "/page", "1.2.3.4", "", "")
 	}
 

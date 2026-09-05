@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -226,10 +227,8 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	return m.obtain(ctx, host, false)
 }
 func (m *Manager) remember(e *entry, host string) {
-	for _, h := range e.Hosts {
-		if h == host {
-			return
-		}
+	if slices.Contains(e.Hosts, host) {
+		return
 	}
 	e.Hosts = append(e.Hosts, host)
 }
@@ -251,7 +250,7 @@ func (m *Manager) obtain(ctx context.Context, host string, renew bool) (*tls.Cer
 	m.mu.Lock()
 	e := m.entries[key]
 	if e == nil {
-		e = &entry{storedCertificate: storedCertificate{Hosts: []string{host}}}
+		e = &entry{Hosts: []string{host}}
 		m.entries[key] = e
 	}
 	m.remember(e, host)

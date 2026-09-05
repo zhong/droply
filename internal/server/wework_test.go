@@ -33,7 +33,7 @@ func newWeWorkMockAPI(t *testing.T, userIDByCode map[string]string) *httptest.Se
 				w.Write([]byte(`{"errcode":40029,"errmsg":"invalid code"}`))
 				return
 			}
-			resp, _ := json.Marshal(map[string]interface{}{
+			resp, _ := json.Marshal(map[string]any{
 				"errcode": 0,
 				"userid":  uid,
 			})
@@ -69,7 +69,7 @@ func setupWeWorkSite(t *testing.T, srv *server.Server, allowedUsers []string) st
 	})
 
 	// Set WeWork access rule.
-	accessReq := map[string]interface{}{
+	accessReq := map[string]any{
 		"wework_enabled": true,
 	}
 	if allowedUsers != nil {
@@ -132,7 +132,7 @@ func TestWeWorkAccessRuleSet(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("login: %d", rr.Code)
 	}
-	var loginResp map[string]interface{}
+	var loginResp map[string]any
 	json.NewDecoder(rr.Body).Decode(&loginResp)
 	weToken := loginResp["api_token"].(string)
 
@@ -144,12 +144,12 @@ func TestWeWorkAccessRuleSet(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get access: %d %s", rr.Code, rr.Body.String())
 	}
-	var resp map[string]interface{}
+	var resp map[string]any
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if resp["wework_enabled"] != true {
 		t.Errorf("expected wework_enabled=true, got %v", resp["wework_enabled"])
 	}
-	users := resp["allowed_wework_users"].([]interface{})
+	users := resp["allowed_wework_users"].([]any)
 	if len(users) != 2 {
 		t.Errorf("expected 2 allowed users, got %d", len(users))
 	}
@@ -678,7 +678,7 @@ func TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled(t *testing.T) {
 		t.Fatalf("create subdomain: %d %s", rr.Code, rr.Body.String())
 	}
 	deployProject(t, srv, token, "wesite", "app", map[string]string{"index.html": "ok"})
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"auto_password":  true,
 		"wework_enabled": true,
 	})
@@ -761,16 +761,13 @@ func TestWeWorkAutoRedirectDisabledWhenServerNotConfigured(t *testing.T) {
 
 // extractQueryParam pulls a query parameter out of a URL string. Empty if not found.
 func extractQueryParam(rawURL, key string) string {
-	idx := strings.Index(rawURL, "?")
-	if idx < 0 {
+	_, query, found := strings.Cut(rawURL, "?")
+	if !found {
 		return ""
 	}
 	// Trim fragment if present.
-	q := rawURL[idx+1:]
-	if hash := strings.Index(q, "#"); hash >= 0 {
-		q = q[:hash]
-	}
-	for _, pair := range strings.Split(q, "&") {
+	q, _, _ := strings.Cut(query, "#")
+	for pair := range strings.SplitSeq(q, "&") {
 		kv := strings.SplitN(pair, "=", 2)
 		if len(kv) == 2 && kv[0] == key {
 			return kv[1]

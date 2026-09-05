@@ -141,9 +141,9 @@ func validPath(value string) bool {
 }
 func parsePattern(value string) (pattern, error) {
 	p := pattern{path: value}
-	if strings.HasSuffix(value, "*") {
+	if prefix, ok := strings.CutSuffix(value, "*"); ok {
 		p.wild = true
-		p.path = strings.TrimSuffix(value, "*")
+		p.path = prefix
 	}
 	if strings.Contains(p.path, "*") || strings.Contains(p.path, ":") || !validPath(p.path) {
 		return pattern{}, errors.New("patterns must be safe exact paths or have one terminal *")

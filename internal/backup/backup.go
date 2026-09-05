@@ -710,8 +710,8 @@ func syncTree(root string) error {
 	if err != nil {
 		return err
 	}
-	for i := len(dirs) - 1; i >= 0; i-- {
-		if err = syncDir(dirs[i]); err != nil {
+	for _, dir := range slices.Backward(dirs) {
+		if err = syncDir(dir); err != nil {
 			return err
 		}
 	}

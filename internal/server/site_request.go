@@ -33,8 +33,7 @@ func (s *Server) resolveHost(ctx context.Context, host string) (siteHost, bool) 
 
 	// Check if it's a subdomain of baseDomain.
 	suffix := "." + s.baseDomain
-	if strings.HasSuffix(host, suffix) {
-		sub := strings.TrimSuffix(host, suffix)
+	if sub, ok := strings.CutSuffix(host, suffix); ok {
 		if sub != "" && !strings.Contains(sub, ".") {
 			if target, err := s.store.GetSiteTarget(ctx, sub); err == nil {
 				return siteHost{subdomain: target.SubdomainName, project: target.ProjectName, target: target}, true

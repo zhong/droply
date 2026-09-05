@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -267,7 +268,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, resolved site
 // renderLoginPage renders the login page template, showing password and/or WeWork buttons based on rule.
 func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *model.AccessRule, errorMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Error":        errorMsg,
 		"Redirect":     r.URL.RequestURI(),
 		"Host":         r.Host,
@@ -570,12 +571,7 @@ func isWeWorkUserAllowed(userID string, allowedUsers []string) bool {
 	if len(allowedUsers) == 0 {
 		return true
 	}
-	for _, u := range allowedUsers {
-		if u == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowedUsers, userID)
 }
 
 func (s *Server) requestSiteTarget(r *http.Request) *model.SiteTarget {
@@ -585,10 +581,10 @@ func (s *Server) requestSiteTarget(r *http.Request) *model.SiteTarget {
 	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	suffix := "." + s.baseDomain
-	if !strings.HasSuffix(host, suffix) {
+	label, ok := strings.CutSuffix(host, suffix)
+	if !ok {
 		return nil
 	}
-	label := strings.TrimSuffix(host, suffix)
 	target, _ := s.store.GetSiteTarget(r.Context(), label)
 	return target
 }

@@ -250,8 +250,7 @@ func parseDuration(s string) (time.Duration, error) {
 	if strings.EqualFold(s, "never") {
 		return 87600 * time.Hour, nil // 10 years
 	}
-	if strings.HasSuffix(s, "d") {
-		days := strings.TrimSuffix(s, "d")
+	if days, ok := strings.CutSuffix(s, "d"); ok {
 		var d int
 		if _, err := fmt.Sscanf(days, "%d", &d); err != nil {
 			return 0, fmt.Errorf("invalid duration: %s", s)
