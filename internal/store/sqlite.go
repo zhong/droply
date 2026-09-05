@@ -42,45 +42,9 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	}
 
 	s := &SQLiteStore{db: db}
-	if err := s.migrate(); err != nil {
+	if err := s.runMigrations(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	if err := s.migrateWeWork(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate wework: %w", err)
-	}
-	if err := s.migrateDomainVerification(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate domain verification: %w", err)
-	}
-	if err := s.migrateDeployments(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate deployments: %w", err)
-	}
-	if err := s.migratePages(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate pages: %w", err)
-	}
-	if err := s.migrateProjectTokens(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate project tokens: %w", err)
-	}
-	if err := s.migrateIdentity(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate identity: %w", err)
-	}
-	if err := s.migrateMembers(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate members: %w", err)
-	}
-	if err := s.migrateAudit(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate audit: %w", err)
-	}
-	if err := s.migrateConsoleSessions(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate console sessions: %w", err)
+		return nil, err
 	}
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version=%d", SchemaVersion)); err != nil {
 		db.Close()
