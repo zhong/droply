@@ -97,7 +97,7 @@ func TestCertificateIssuanceMayOutlastHeaderTimeout(t *testing.T) {
 	leaf := fixture.Certificate()
 	roots := x509.NewCertPool()
 	roots.AddCert(leaf)
-	svc, err := hosting.Start(hosting.Config{HTTPSAddr: "127.0.0.1:0", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "issued") }), TLSConfig: &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	svc, err := hosting.Start(hosting.Config{CertificateTimeout: 30 * time.Second, HTTPSAddr: "127.0.0.1:0", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "issued") }), TLSConfig: &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		select {
 		case <-time.After(11 * time.Second):
 			return &pair, nil

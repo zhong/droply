@@ -37,6 +37,9 @@ import (
 // lego may log CA/DNS error bodies. Expose only controlled status codes instead.
 func init() { legolog.Logger = log.New(io.Discard, "", 0) }
 
+// DefaultIssuanceTimeout bounds one certificate issuance operation.
+const DefaultIssuanceTimeout = 5 * time.Minute
+
 // Config holds deployment configuration. Never serialize Config: it contains credentials.
 type Config struct {
 	Directory, Email, CAURL, BaseDomain, CloudflareAPIToken string
@@ -46,6 +49,7 @@ type Config struct {
 	DNSOptions                                              []dns01.ChallengeOption
 	Now                                                     func() time.Time
 	RenewBefore, RetryBackoff, CheckInterval                time.Duration
+	IssuanceTimeout                                         time.Duration
 }
 
 type Status struct {
@@ -108,6 +112,9 @@ func New(cfg Config) (*Manager, error) {
 	}
 	if cfg.CheckInterval <= 0 {
 		cfg.CheckInterval = time.Hour
+	}
+	if cfg.IssuanceTimeout <= 0 {
+		cfg.IssuanceTimeout = DefaultIssuanceTimeout
 	}
 	cfg.BaseDomain = normalize(cfg.BaseDomain)
 	if cfg.CloudflareAPIToken != "" && cfg.DNSProvider == nil {
@@ -357,7 +364,7 @@ func (t contextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req.Clone(t.ctx))
 }
 func (m *Manager) issue(ctx context.Context, key string) (*certificate.Resource, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, m.cfg.IssuanceTimeout)
 	defer cancel()
 	cfg := lego.NewConfig(&m.account)
 	cfg.CADirURL = m.cfg.CAURL
