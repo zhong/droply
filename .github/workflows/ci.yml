@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   integration:
     runs-on: ubuntu-latest
@@ -19,6 +22,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Report actual toolchain
+        run: go version
       - name: Build
         run: CGO_ENABLED=0 go build ./...
       - name: Vet (including integration tests)
@@ -36,6 +41,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Report actual toolchain
+        run: go version
       - run: CGO_ENABLED=1 go test -race -tags=integration -shuffle=on -count=1 ./...
 
   browser:
@@ -46,6 +53,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Report actual toolchain
+        run: go version
       - uses: actions/setup-node@v7
         with:
           node-version: '22'

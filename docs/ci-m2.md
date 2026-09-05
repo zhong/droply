@@ -50,15 +50,15 @@ jobs:
     if: github.ref_name != 'main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
       - run: npm ci && npm run build
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.1'
+          go-version: '1.27.1'
       - run: |
           test -n "$DROPLY_VERSION"
           go install "github.com/zhong/droply/cmd/droply@$DROPLY_VERSION"
@@ -75,15 +75,15 @@ jobs:
     environment: production
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
       - run: npm ci && npm run build
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.1'
+          go-version: '1.27.1'
       - run: |
           test -n "$DROPLY_VERSION"
           go install "github.com/zhong/droply/cmd/droply@$DROPLY_VERSION"

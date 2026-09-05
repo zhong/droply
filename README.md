@@ -76,7 +76,7 @@ chmod +x droply
 sudo mv droply /usr/local/bin/
 ```
 
-Or install with Go:
+Or install with Go 1.27.1 or newer (see the [toolchain policy](docs/toolchain.md)):
 
 ```bash
 go install github.com/zhong/droply/cmd/droply@latest
