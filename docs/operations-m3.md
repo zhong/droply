@@ -55,7 +55,7 @@ Cloudflare 模式只对平台通配符证书使用 DNS-01；未由该通配符�
   --tls-mode http --addr 127.0.0.1:8080 --trusted-proxies 127.0.0.1/32
 ```
 
-`--acme-email` 默认可来自 `DROPLY_ACME_EMAIL`；`--acme-ca` 指定 ACME directory，留空使用 Let's Encrypt 生产环境。测试 CA 的证书不会被普通浏览器信任。`--cert-dir` 默认是 `<data-dir>/certificates`；外部目录必须纳入备份。Cloudflare 令牌也可通过 `DROPLY_CLOUDFLARE_API_TOKEN` 提供，限制到所需 zone 的 `Zone:DNS:Edit`、`Zone:Zone:Read`。自定义域名的 DNS zone 也须能由凭证管理。DNS wildcard 不等于允许任意 Host：每个站点仍检查授权。
+`--acme-email` 默认可来自 `DROPLY_ACME_EMAIL`；`--acme-ca` 指定 ACME directory，留空使用 Let's Encrypt 生产环境。测试 CA 的证书不会被普通浏览器信任。`--cert-dir` 默认是 `<data-dir>/certificates`；外部目录必须纳入备份。Cloudflare 令牌也可通过 `DROPLY_CLOUDFLARE_API_TOKEN` 提供，限制到所需 zone 的 `Zone:DNS:Edit`、`Zone:Zone:Read`。DNS wildcard 不等于允许任意 Host：每个站点仍检查授权。
 
 手动证书启动时验证 API 名称、私钥和有效期；配置还须覆盖实际站点域名。HTTP-only 模式的内置控制台登录仍要求浏览器访问 HTTPS 管理域名，可由可信代理终止 TLS。代理保留原始 Host，并正确设置 `X-Forwarded-Proto`；没有 `--trusted-proxies` 时忽略非可信来源的转发头。不要把整个互联网列为可信代理。
 

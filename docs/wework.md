@@ -35,7 +35,7 @@ WeCom QR code login is one of three access control methods in droply (alongside 
                                                            │ 4. OAuth callback with code
                                                            ▼
    ┌──────────┐  1. Click "Login"   ┌──────────────────────────────────┐
-   │  Visitor │ ──────────────────▶ │ droply-server :8081 (site)        │
+   │  Visitor │ ──────────────────▶ │ droply-server HTTPS entry        │
    │ (Browser)│ ◀──────────────────│ /_droply/wework/auth → redirect    │
    └────┬─────┘  2. Redirect to     │ /_droply/wework/callback ← OAuth  │
         │           WeCom OAuth     └──────────────┬───────────────────┘
@@ -51,8 +51,8 @@ WeCom QR code login is one of three access control methods in droply (alongside 
 ## Prerequisites
 
 - A WeCom organization with admin access to create a custom app
-- droply-server **v0.4.0 or later** with WeCom flags configured
-- Your droply base domain must be reachable from WeCom's servers (for OAuth callbacks)
+- A current droply-server installation with WeCom configuration
+- The configured callback and protected site must be reachable over HTTPS
 
 ---
 
@@ -71,77 +71,40 @@ WeCom QR code login is one of three access control methods in droply (alongside 
 
 ## Step 2: Configure Trusted Domain
 
-In the app detail page → **网页授权及 JS-SDK** (Web Authorization & JS-SDK) → **设置可信域名** (Set Trusted Domain):
+Configure the trusted domain in the app's **网页授权及 JS-SDK** settings to match your intended OAuth setup. If the console requires a verification file such as `WW_verify_AbCdEf123.txt`, it must be reachable at the root of the exact hostname being verified.
 
-```
-Trusted domain: example.com   ← your droply base domain (without leading dot)
-```
+Droply can serve this as an ordinary static file from a **public project's root hostname** (the project URL returned by deployment) or a **verified custom domain** bound to that project. Include the supplied file unchanged in the project's deployed directory, and check `https://<that-host>/WW_verify_AbCdEf123.txt` without a login cookie. Access rules must not block the verification request. A legacy URL such as `/docs/WW_verify_AbCdEf123.txt` is not a root-level file.
 
-WeCom will require you to download a verification file (e.g. `WW_verify_AbCdEf123.txt`) and host it at the root of your domain to prove ownership.
-
-> ⚠️ **droply does not yet provide a built-in way to serve this file.** You have two workarounds:
->
-> **Option A — Static file via Caddy**: Add a temporary route in `/etc/caddy/Caddyfile`:
-> ```caddyfile
-> example.com {
->     handle /WW_verify_AbCdEf123.txt {
->         respond "AbCdEf123" 200
->     }
->     # ... your other config
-> }
-> ```
-> Reload Caddy: `sudo systemctl reload caddy`
->
-> **Option B — Deploy as a project**: Use droply itself to deploy a directory containing the verification file to a subdomain matching the trusted domain. This only works if the trusted domain happens to be a deployable subdomain.
-
-Once WeCom successfully verifies, you can remove the static route.
+There is no special verification-file handler on `api.<domain>` or the bare base domain. Deploying a file on a different hostname does not verify those hosts. Confirm the hostname required by the console before choosing where to publish the file; Droply does not automatically provision it.
 
 ## Step 3: Configure droply-server
 
-Add these environment variables to your `/etc/systemd/system/droply.service`:
+API and site traffic share the configured HTTP/HTTPS entry and are routed by Host. A separate site port and Caddy are not required. Follow [TLS and deployment configuration](operations-m3.md) first; the bare binary defaults to HTTP on `:8080`, so it does not enable HTTPS by itself. Use an existing HTTPS listener or trusted TLS gateway for the OAuth flow.
 
-```ini
-[Service]
-Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
-Environment="DROPLY_WEWORK_AGENT_ID=1000002"
-Environment="DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
-ExecStart=/usr/local/bin/droply-server \
-  --addr :8080 \
-  --site-addr :8081 \
-  --data-dir /data/droply \
-  --domain example.com \
-  --caddy-admin http://localhost:2019
-Restart=always
-User=www-data
+For an installation created by the repository installer, add or update these four values in its existing environment file (default `/etc/droply/env`). Preserve the other settings, file permissions, service user and `ExecStart`:
+
+```sh
+DROPLY_WEWORK_CORP_ID=ww1234567890abcdef
+DROPLY_WEWORK_AGENT_ID=1000002
+DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DROPLY_WEWORK_REDIRECT_URI=https://api.example.com/_droply/wework/callback
 ```
 
-Equivalent CLI flags also work:
+The equivalent flags are listed in the reference below. A custom service should use its existing environment/configuration mechanism; this example does not replace the service unit.
 
-```ini
-ExecStart=/usr/local/bin/droply-server \
-  --wework-corp-id ww1234567890abcdef \
-  --wework-agent-id 1000002 \
-  --wework-secret xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  --wework-redirect-uri https://login.example.com/_droply/wework/callback \
-  --domain example.com \
-  ...
-```
+The callback path is `/_droply/wework/callback`. `api.<domain>` supports this central callback explicitly; a registered site hostname or verified custom domain can also serve it. The configured URL must point to a reachable handler and match the OAuth setup. Unknown hosts are rejected. Startup URL validation checks syntax, not domain ownership or the remote app configuration.
 
-**Important constraints on `DROPLY_WEWORK_REDIRECT_URI`:**
+Droply uses one configured callback URL per server. When callback and original site are different subdomains of the configured base domain, the callback sets a parent-domain cookie so the redirect back can retain the session. On the same host it uses a host-only cookie. A callback on `api.example.com` cannot share its cookie with an unrelated custom domain; see Known Limitations.
 
-1. The host **must** be one of your droply subdomains (not `api.`), because the callback is served by the site server on port `:8081`.
-2. WeCom only allows **one** redirect URI per app. If you want multiple sites (`alice.example.com`, `bob.example.com`) to share WeCom login, you must use a single "login portal" subdomain (e.g. `login.example.com`) for the callback.
-3. After the callback, the session cookie is scoped to the callback host. If you visit `alice.example.com` first, you'll need to ensure the cookie can be read there too — see **Known Limitations** below.
-
-Reload systemd and restart:
+Restart the existing service and inspect its status/logs:
 
 ```bash
-sudo systemctl daemon-reload
 sudo systemctl restart droply
-sudo journalctl -u droply -f | grep -i wework
-# Look for: "WeWork OAuth enabled (corp=..., agent=...)"
+sudo systemctl status droply
+sudo journalctl -u droply -n 50 --no-pager
 ```
+
+All four values unset leaves WeCom disabled. Setting only some values fails startup with `all four WeCom options must be configured`; an invalid URL fails with `invalid WeCom callback URL`. These checks run before opening the installation's data resources. Do not rely on a warning or an OAuth-enabled startup banner.
 
 ## Step 4: Enable WeCom Login per Project
 
@@ -239,13 +202,13 @@ droply access get --subdomain alice --project docs
 | `--wework-corp-id` | `DROPLY_WEWORK_CORP_ID` | WeCom CorpID |
 | `--wework-agent-id` | `DROPLY_WEWORK_AGENT_ID` | WeCom AgentID for the custom app |
 | `--wework-secret` | `DROPLY_WEWORK_SECRET` | WeCom app secret |
-| `--wework-redirect-uri` | `DROPLY_WEWORK_REDIRECT_URI` | OAuth callback URL (must be a site-served subdomain) |
+| `--wework-redirect-uri` | `DROPLY_WEWORK_REDIRECT_URI` | OAuth callback URL (`api.<domain>` or an allowed site host) |
 
-All four must be set for WeCom login to activate; if any is missing, the server logs a warning and the feature stays off (existing IP/password rules continue to work).
+All four unset disables WeCom. If any is set, all four are required and the callback URL must pass startup validation; incomplete configuration stops startup.
 
 ### Public Endpoints
 
-The site server exposes two routes when WeCom is configured:
+The unified listener exposes these site routes when WeCom is configured. The API host also serves the callback route; start authorization on the protected site:
 
 | Path | Method | Purpose |
 |------|--------|---------|
@@ -275,18 +238,15 @@ The HMAC payload includes `sha256(allowed_users_json + userid)`, so:
 
 ## Known Limitations
 
-### 1. Single redirect URI per WeCom app
+### 1. One configured callback and cookie boundaries
 
-WeCom allows only one OAuth callback URL per app. droply uses a fixed `--wework-redirect-uri` at startup. If you have many subdomains needing WeCom login, you must use a single "portal" subdomain for the callback. Cookies set on the portal subdomain are not automatically shared with other subdomains.
+Droply uses one `--wework-redirect-uri` per server. Different hosts beneath the configured base domain can use a central callback such as `api.example.com`; parent-domain cookies are already implemented. The signed cookie still identifies its subdomain/project and is checked against current access rules. Making a cookie available to sibling hosts does not grant access to every project.
 
-**Current workarounds**:
-
-- **One app per subdomain**: register a separate WeCom app per subdomain, run multiple droply-server processes
-- **Parent-domain cookies** (planned): scope the cookie to `.example.com` so all subdomains share the session (sacrifices isolation between subdomains)
+A callback and original site without that shared base-domain suffix do not receive a shared cookie. Central login across unrelated custom domains is unsupported. A same-host callback uses a host-only cookie.
 
 ### 2. Verification file hosting
 
-droply has no built-in handler for WeCom's domain verification file. Configure it manually in Caddy (see Step 2). A future release may add a `--wework-verify-file` flag.
+Publish the file at a public project's root hostname or an already verified custom domain, as described in Step 2. There is no automatic verification-file route on the API host or bare base domain, and no `--wework-verify-file` option.
 
 ### 3. WeCom user_id requirement
 
@@ -309,13 +269,7 @@ External contacts who scan/visit will hit an error. This is intentional — drop
 
 ### "WeWork login is not configured" (503)
 
-Server didn't start with all four `--wework-*` flags. Check `journalctl -u droply` for the startup banner:
-
-```
-WeWork OAuth enabled (corp=ww1234..., agent=1000002)
-```
-
-If you see `WeWork OAuth NOT enabled: all of corp-id, agent-id, secret, redirect-uri are required` — fix the missing variable in your systemd unit.
+The running server has WeCom disabled, for example because all four settings are unset. Check the actual service environment and `journalctl -u droply`. A partial configuration prevents the current server from starting; complete all four settings and restart. A failed restart is not a running server with a warning-only disabled feature.
 
 ### "Access denied: user not in allow-list" (403)
 
@@ -334,7 +288,7 @@ OAuth state tokens expire after 10 minutes. If the user took too long to scan, a
 
 ### WeCom redirects to `redirect_uri_mismatch`
 
-The `DROPLY_WEWORK_REDIRECT_URI` does not match the **trusted domain** in WeCom console. They must share the same root domain. Re-configure Step 2 if needed.
+Compare the exact `DROPLY_WEWORK_REDIRECT_URI` with the app configuration in the WeCom console, including scheme, host and callback path. Re-check Step 2; Droply does not validate the remote configuration at startup.
 
 ### Login button does not appear on login page
 
@@ -345,4 +299,4 @@ droply access get --subdomain alice --project docs
 # Should show "WeCom login: enabled"
 ```
 
-If the rule is correct but the button still doesn't show, the template only renders WeCom button when `s.wework != nil` server-side — check the server startup log.
+If the rule is correct but the button still does not show, verify that the running service received all four WeCom settings. Check its status and logs for startup failures; the login template only shows the button when the service has a WeCom client configured.

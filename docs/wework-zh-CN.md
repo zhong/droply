@@ -35,7 +35,7 @@
                                                            │ 4. OAuth 回调带 code
                                                            ▼
    ┌──────────┐  1. 点击"扫码登录"  ┌──────────────────────────────────┐
-   │  访客    │ ──────────────────▶ │ droply-server :8081 (站点端口)   │
+   │  访客    │ ──────────────────▶ │ droply-server HTTPS 统一入口   │
    │（浏览器）│ ◀──────────────────│ /_droply/wework/auth → 跳转      │
    └────┬─────┘  2. 跳转到企业微信  │ /_droply/wework/callback ← 回调  │
         │           OAuth 授权页    └──────────────┬───────────────────┘
@@ -51,8 +51,8 @@
 ## 前置条件
 
 - 一个企业微信组织，且你有管理员权限创建自建应用
-- droply-server **v0.4.0 或更高版本**，且启动时已配置 WeCom 参数
-- droply 的 base domain 能被企业微信服务器访问（OAuth 回调需要）
+- 当前版本的 droply-server，已配置 WeCom 参数
+- 配置的回调地址和受保护站点均可通过 HTTPS 访问
 
 ---
 
@@ -71,77 +71,40 @@
 
 ## 步骤 2：配置可信域名
 
-在应用详情页 → **网页授权及 JS-SDK** → **设置可信域名**：
+在应用的 **网页授权及 JS-SDK** 设置中，按实际 OAuth 配置填写可信域名。如果后台要求提供校验文件（如 `WW_verify_AbCdEf123.txt`），文件必须位于待校验的准确主机名的根路径。
 
-```
-可信域名：example.com   ← 你 droply 的 base domain（不带前导点）
-```
+Droply 可以把它作为普通静态文件，托管在**公开项目的根路径域名**（部署返回的项目 URL），或绑定到该项目的**已验证自定义域名**上。将后台提供的文件原样放入项目部署目录，确认无需登录 Cookie 即可访问 `https://<该主机名>/WW_verify_AbCdEf123.txt`。访问规则不能拦截校验请求；旧式 `/docs/WW_verify_AbCdEf123.txt` 路径不是域名根路径。
 
-企业微信会要求你下载一个校验文件（如 `WW_verify_AbCdEf123.txt`），放到该域名根路径下来证明你拥有该域名。
-
-> ⚠️ **droply 暂时没有内置方式服务这个文件**，有两种变通办法：
->
-> **方案 A — 用 Caddy 静态托管**：在 `/etc/caddy/Caddyfile` 中临时加一条路由：
-> ```caddyfile
-> example.com {
->     handle /WW_verify_AbCdEf123.txt {
->         respond "AbCdEf123" 200
->     }
->     # ... 其他配置
-> }
-> ```
-> 重新加载 Caddy：`sudo systemctl reload caddy`
->
-> **方案 B — 作为项目部署**：如果你恰好有一个子域名与可信域名同名，可以用 droply 部署一个包含校验文件的目录。
->
-> 校验通过后即可移除上述静态路由。
+`api.<domain>` 和裸基域名没有专用校验文件 handler。在另一个主机名上部署文件，不能完成对它们的校验。先核对企业微信后台要求校验的主机名，再选择文件托管位置；Droply 不会自动配置该文件。
 
 ## 步骤 3：配置 droply-server
 
-在 `/etc/systemd/system/droply.service` 中添加环境变量：
+API 和站点共用配置的 HTTP/HTTPS 入口，按 Host 分流，不需要独立站点端口或 Caddy。先完成[部署与 TLS 配置](operations-m3.md)：裸二进制默认只在 `:8080` 提供 HTTP，不会自动启用 HTTPS。OAuth 流程应使用已有的 HTTPS 监听器或受信 TLS 网关。
 
-```ini
-[Service]
-Environment="DROPLY_WEWORK_CORP_ID=ww1234567890abcdef"
-Environment="DROPLY_WEWORK_AGENT_ID=1000002"
-Environment="DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-Environment="DROPLY_WEWORK_REDIRECT_URI=https://login.example.com/_droply/wework/callback"
-ExecStart=/usr/local/bin/droply-server \
-  --addr :8080 \
-  --site-addr :8081 \
-  --data-dir /data/droply \
-  --domain example.com \
-  --caddy-admin http://localhost:2019
-Restart=always
-User=www-data
+使用仓库安装器部署时，在现有环境文件（默认 `/etc/droply/env`）中添加或更新以下四个值。保留其他配置、文件权限、服务用户和 `ExecStart`：
+
+```sh
+DROPLY_WEWORK_CORP_ID=ww1234567890abcdef
+DROPLY_WEWORK_AGENT_ID=1000002
+DROPLY_WEWORK_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DROPLY_WEWORK_REDIRECT_URI=https://api.example.com/_droply/wework/callback
 ```
 
-也可以用命令行参数（等效）：
+等效命令行参数见下方参考表。自定义服务使用已有的环境变量或配置方式，无需用本示例替换 service unit。
 
-```ini
-ExecStart=/usr/local/bin/droply-server \
-  --wework-corp-id ww1234567890abcdef \
-  --wework-agent-id 1000002 \
-  --wework-secret xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  --wework-redirect-uri https://login.example.com/_droply/wework/callback \
-  --domain example.com \
-  ...
-```
+回调路径为 `/_droply/wework/callback`。`api.<domain>` 明确支持中央回调；已登记的站点主机名或已验证自定义域名也可处理回调。配置的 URL 必须指向可访问的回调入口，并与 OAuth 设置一致；未知 Host 会被拒绝。启动时只检查 URL 语法，不验证域名归属或远端应用配置。
 
-**`DROPLY_WEWORK_REDIRECT_URI` 的关键约束：**
+每个 Droply 服务使用一个配置的回调 URL。回调与原站点是所配置基域名下的不同子域时，会设置父域 Cookie，使跳转回原站点后仍保留会话；同一主机名使用 host-only Cookie。`api.example.com` 的回调不能把 Cookie 共享给无共同基域的自定义域名，详见已知限制。
 
-1. host **必须**是 droply 的某个站点子域（不能是 `api.`），因为回调由站点服务（:8081）处理
-2. 企业微信每个应用只允许配置**一个**回调 URL。如果你想让多个子域（`alice.example.com`、`bob.example.com`）都用扫码登录，必须用一个"登录中转"子域（如 `login.example.com`）作为回调
-3. 回调成功后 cookie 的作用域是回调 host。如果你访问的是 `alice.example.com`，需要确保 cookie 能在那边读到 —— 详见 **已知限制**
-
-重新加载 systemd 并重启：
+重启已有服务并检查状态和日志：
 
 ```bash
-sudo systemctl daemon-reload
 sudo systemctl restart droply
-sudo journalctl -u droply -f | grep -i wework
-# 应看到：WeWork OAuth enabled (corp=..., agent=...)
+sudo systemctl status droply
+sudo journalctl -u droply -n 50 --no-pager
 ```
+
+四项均未设置时，WeCom 功能关闭。仅设置部分值会以 `all four WeCom options must be configured` 拒绝启动；URL 无效会报 `invalid WeCom callback URL`。这些检查发生在打开安装数据资源之前，不能依赖“只打印警告后继续运行”或 OAuth 启用日志横幅。
 
 ## 步骤 4：为项目启用扫码登录
 
@@ -239,13 +202,13 @@ droply access get --subdomain alice --project docs
 | `--wework-corp-id` | `DROPLY_WEWORK_CORP_ID` | 企业微信 CorpID |
 | `--wework-agent-id` | `DROPLY_WEWORK_AGENT_ID` | 自建应用 AgentID |
 | `--wework-secret` | `DROPLY_WEWORK_SECRET` | 应用 Secret |
-| `--wework-redirect-uri` | `DROPLY_WEWORK_REDIRECT_URI` | OAuth 回调 URL（必须是某个站点子域） |
+| `--wework-redirect-uri` | `DROPLY_WEWORK_REDIRECT_URI` | OAuth 回调 URL（`api.<domain>` 或获允许的站点主机名） |
 
-四个参数都必须设置才会启用 WeCom 功能；缺一不可。缺失时服务器会打印警告并跳过此功能（已有的 IP / 密码规则照常工作）。
+四项均未设置时关闭 WeCom；只要设置其中一项，就必须补齐全部四项，且回调 URL 须通过启动校验。配置不完整会阻止启动。
 
 ### 公开端点
 
-WeCom 启用后，站点服务器会暴露两个路由：
+WeCom 启用后，统一入口在站点 Host 上提供以下路由。API Host 也处理回调路由；授权流程应从受保护站点发起：
 
 | 路径 | 方法 | 用途 |
 |------|------|------|
@@ -275,18 +238,15 @@ HMAC payload 包含 `sha256(allowed_users_json + userid)`，所以：
 
 ## 已知限制
 
-### 1. 每个企业微信应用只允许一个回调 URL
+### 1. 单个回调配置与 Cookie 边界
 
-企业微信限制每个应用只能配置一个 OAuth 回调地址。droply 在启动时固定 `--wework-redirect-uri`。如果有多个子域都需要扫码登录，必须用一个"中转"子域作为回调。中转子域的 cookie 不会自动共享给其他子域。
+每个 Droply 服务使用一个 `--wework-redirect-uri`。配置基域名下的不同子域可以使用 `api.example.com` 等中央回调；父域 Cookie 已实现。签名 Cookie 仍包含子域/项目身份，并按当前访问规则校验；Cookie 能发送到同级主机名，不等于获准访问全部项目。
 
-**当前变通方案**：
-
-- **每个子域用单独应用**：为每个子域注册一个独立的企业微信应用，运行多个 droply-server 实例
-- **父域 cookie**（计划中）：把 cookie 作用域设为 `.example.com`，让所有子域共享会话（代价：子域之间的隔离变弱）
+回调和原站点没有共同的配置基域名后缀时，不会获得共享 Cookie，不支持跨无关自定义域名的中央登录。同一主机名的回调使用 host-only Cookie。
 
 ### 2. 校验文件托管
 
-droply 没有内置 handler 来服务企业微信的域名校验文件，需要在 Caddy 中手动配置（见步骤 2）。未来版本可能加 `--wework-verify-file` 参数。
+按步骤 2，将文件发布到公开项目的根路径域名或已验证自定义域名。API Host 和裸基域名没有自动校验文件路由，也没有 `--wework-verify-file` 参数。
 
 ### 3. 必须用 user_id
 
@@ -309,13 +269,7 @@ OAuth 流程会根据访问者的 User-Agent 自动选择端点：
 
 ### "WeWork login is not configured" (503)
 
-服务器启动时缺少四个 `--wework-*` 参数。检查 `journalctl -u droply` 启动日志：
-
-```
-WeWork OAuth enabled (corp=ww1234..., agent=1000002)
-```
-
-如果看到 `WeWork OAuth NOT enabled: all of corp-id, agent-id, secret, redirect-uri are required` —— 补全 systemd unit 中的缺失变量。
+运行中的服务未启用 WeCom，例如四项配置均未设置。检查实际服务的环境变量和 `journalctl -u droply`。当前版本遇到不完整配置会拒绝启动，补齐四项后再重启；重启失败不能理解为“仅警告并关闭功能后继续运行”。
 
 ### "Access denied: user not in allow-list" (403)
 
@@ -334,7 +288,7 @@ OAuth state token 10 分钟过期。如果用户扫码花了过长时间，让�
 
 ### 企业微信跳转报 `redirect_uri_mismatch`
 
-`DROPLY_WEWORK_REDIRECT_URI` 与企业微信后台的**可信域名**不匹配。两者必须是同一根域。回到步骤 2 重新配置。
+核对 `DROPLY_WEWORK_REDIRECT_URI` 与企业微信后台应用配置，包括协议、主机名和回调路径，并重新检查步骤 2。Droply 启动时不会验证远端配置。
 
 ### 登录页不显示扫码按钮
 
@@ -345,4 +299,4 @@ droply access get --subdomain alice --project docs
 # 应包含："WeCom login: enabled"
 ```
 
-如果规则正确但按钮仍不显示：登录页只在 `s.wework != nil` 时才渲染按钮 —— 检查服务器启动日志确认 WeCom 已启用。
+如果规则正确但按钮仍不显示，核对运行中的服务是否收到全部四项 WeCom 配置，并检查服务状态和启动失败日志；只有服务已配置 WeCom 客户端时，登录页才显示按钮。
