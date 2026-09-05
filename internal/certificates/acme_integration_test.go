@@ -218,6 +218,21 @@ func TestLocalACME(t *testing.T) {
 	if _, e = dnsManager.GetCertificate(&tls.ClientHelloInfo{ServerName: "unknown.example.test"}); e == nil {
 		t.Fatal("wildcard bypassed authorization")
 	}
+
+	// A shared wildcard must renew after its first requesting user is removed and
+	// the process restarts, without requiring a handshake from remaining users.
+	allowed.Store("api.example.test", true)
+	allowed.Delete("site.example.test")
+	dnsRestarted, err := New(dnsCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dnsRestarted.cfg.RenewBefore = 365 * 24 * time.Hour
+	dnsRestarted.renew(t.Context())
+	if serial := verify(dnsRestarted, "other.example.test"); serial == wildcard {
+		t.Fatal("wildcard renewal was lost after deleting original host and restarting")
+	}
+	allowed.Store("site.example.test", true)
 	for _, failure := range []string{"present", "cleanup"} {
 		failingCfg := dnsCfg
 		failingCfg.Directory = t.TempDir()

@@ -71,6 +71,7 @@ func Start(cfg Config) (*Service, error) {
 		} else {
 			svc.httpsAddress = ln.Addr().String()
 			srv.TLSConfig = cfg.TLSConfig.Clone()
+			allowCertificateIssuance(srv.TLSConfig, srv.ReadHeaderTimeout)
 		}
 		svc.servers = append(svc.servers, srv)
 		svc.wg.Go(func() {
@@ -86,6 +87,31 @@ func Start(cfg Config) (*Service, error) {
 		})
 	}
 	return svc, nil
+}
+
+// net/http applies ReadHeaderTimeout to the entire TLS handshake using socket
+// deadlines. ACME can legitimately take longer after ClientHello has arrived.
+// Give only certificate selection extra time, then restore the short deadline
+// for the peer to finish its handshake. ServeTLS retains native HTTP/2 support.
+func allowCertificateIssuance(cfg *tls.Config, handshakeTimeout time.Duration) {
+	getCertificate := cfg.GetCertificate
+	if getCertificate == nil {
+		return
+	}
+	cfg.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if err := hello.Conn.SetDeadline(time.Now().Add(5*time.Minute + handshakeTimeout)); err != nil {
+			return nil, err
+		}
+		cert, err := getCertificate(hello)
+		deadlineErr := hello.Conn.SetDeadline(time.Now().Add(handshakeTimeout))
+		if err != nil {
+			return nil, err
+		}
+		if deadlineErr != nil {
+			return nil, deadlineErr
+		}
+		return cert, nil
+	}
 }
 
 func (s *Service) HTTPAddress() string  { return s.httpAddress }

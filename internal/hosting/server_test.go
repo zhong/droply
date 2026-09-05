@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -86,5 +87,61 @@ func TestPortConflictDoesNotStartPartialService(t *testing.T) {
 	if err == nil {
 		svc.Shutdown(t.Context())
 		t.Fatal("expected busy-port error")
+	}
+}
+
+func TestCertificateIssuanceMayOutlastHeaderTimeout(t *testing.T) {
+	fixture := httptest.NewTLSServer(http.NotFoundHandler())
+	defer fixture.Close()
+	pair := fixture.TLS.Certificates[0]
+	leaf := fixture.Certificate()
+	roots := x509.NewCertPool()
+	roots.AddCert(leaf)
+	svc, err := hosting.Start(hosting.Config{HTTPSAddr: "127.0.0.1:0", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "issued") }), TLSConfig: &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		select {
+		case <-time.After(11 * time.Second):
+			return &pair, nil
+		case <-hello.Context().Done():
+			return nil, hello.Context().Err()
+		}
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		svc.Shutdown(ctx)
+	})
+	// A peer that never sends ClientHello must still hit the original ten-second limit.
+	idle, err := net.Dial("tcp", svc.HTTPSAddress())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer idle.Close()
+	idleDone := make(chan error, 1)
+	go func() {
+		idle.SetReadDeadline(time.Now().Add(14 * time.Second))
+		var b [1]byte
+		_, err := idle.Read(b[:])
+		idleDone <- err
+	}()
+	client := &http.Client{Transport: &http.Transport{ForceAttemptHTTP2: true, TLSHandshakeTimeout: 15 * time.Second, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: leaf.DNSNames[0]}}, Timeout: 15 * time.Second}
+	defer client.CloseIdleConnections()
+	res, err := client.Get("https://" + svc.HTTPSAddress())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.ProtoMajor != 2 {
+		t.Fatalf("native HTTP/2 lost: %s", res.Proto)
+	}
+	if data, err := io.ReadAll(res.Body); err != nil || string(data) != "issued" {
+		t.Fatalf("response %q: %v", data, err)
+	}
+	if err := <-idleDone; err == nil {
+		t.Fatal("idle TLS peer was not closed")
+	} else if e, ok := err.(net.Error); ok && e.Timeout() {
+		t.Fatal("initial handshake deadline was extended for an idle peer")
 	}
 }

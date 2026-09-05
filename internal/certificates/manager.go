@@ -483,10 +483,18 @@ func (m *Manager) Run(ctx context.Context) {
 func (m *Manager) renew(ctx context.Context) {
 	m.mu.Lock()
 	var hosts []string
-	for _, e := range m.entries {
-		if e.cert != nil {
-			hosts = append(hosts, e.Hosts...)
+	for key, e := range m.entries {
+		if e.cert == nil {
+			continue
 		}
+		if m.cfg.DNSProvider != nil && key == "*."+m.cfg.BaseDomain {
+			// The shared platform wildcard also serves the API. Its renewal must
+			// survive deletion of the first tenant that requested it and restart.
+			// Authorization is checked below against the current platform state.
+			hosts = append(hosts, "api."+m.cfg.BaseDomain)
+			continue
+		}
+		hosts = append(hosts, e.Hosts...)
 	}
 	m.mu.Unlock()
 	for _, host := range hosts {

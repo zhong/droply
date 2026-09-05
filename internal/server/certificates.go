@@ -13,19 +13,23 @@ func (s *Server) SetCertificates(manager *certificates.Manager) { s.certificates
 
 func (s *Server) handleCertificateStatus(w http.ResponseWriter, r *http.Request) {
 	host := strings.ToLower(strings.TrimSuffix(chi.URLParam(r, "domain"), "."))
-	sub, _, ok := s.resolveHost(host)
-	if !ok {
-		jsonError(w, "domain not found", http.StatusNotFound)
-		return
-	}
-	owner, err := s.store.GetSubdomainByName(sub)
-	if err != nil {
-		jsonError(w, "domain not found", http.StatusNotFound)
-		return
-	}
-	if owner.UserID != userFromContext(r.Context()).ID {
-		jsonError(w, "forbidden", http.StatusForbidden)
-		return
+	// Platform certificate metadata is shared with authenticated accounts; tenant
+	// certificates remain owner-only until a separate administrator role exists.
+	if host != s.baseDomain && host != "api."+s.baseDomain {
+		sub, _, ok := s.resolveHost(host)
+		if !ok {
+			jsonError(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		owner, err := s.store.GetSubdomainByName(sub)
+		if err != nil {
+			jsonError(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		if owner.UserID != userFromContext(r.Context()).ID {
+			jsonError(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 	if s.certificates == nil {
 		jsonResponse(w, map[string]string{"domain": host, "state": "externally-managed"}, http.StatusOK)

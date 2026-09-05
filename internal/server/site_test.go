@@ -354,24 +354,37 @@ func TestSiteHandlerRateLimiting(t *testing.T) {
 
 	siteHandler := srv.NewSiteHandler()
 
-	// Make 11 login attempts; the 11th should be rate limited.
-	var lastCode int
+	// Burst concurrently: sequential bcrypt checks can cross the refill interval
+	// under the race detector, legitimately allowing the eleventh request.
+	codes := make(chan int, 11)
+	start := make(chan struct{})
 	for i := 0; i < 11; i++ {
-		form := url.Values{}
-		form.Set("password", "wrongpassword1234")
-		form.Set("redirect", "/docs/hello.txt")
-		form.Set("host", "alice.droplydoc.com")
-		req := httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader(form.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Host = "alice.droplydoc.com"
-		req.RemoteAddr = "1.2.3.4:9999"
-		rr := httptest.NewRecorder()
-		siteHandler.ServeHTTP(rr, req)
-		lastCode = rr.Code
+		go func() {
+			<-start
+			form := url.Values{}
+			form.Set("password", "wrongpassword1234")
+			form.Set("redirect", "/docs/hello.txt")
+			form.Set("host", "alice.droplydoc.com")
+			req := httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Host = "alice.droplydoc.com"
+			req.RemoteAddr = "1.2.3.4:9999"
+			rr := httptest.NewRecorder()
+			siteHandler.ServeHTTP(rr, req)
+			codes <- rr.Code
+		}()
 	}
-
-	if lastCode != http.StatusTooManyRequests {
-		t.Fatalf("expected 429 on 11th attempt, got %d", lastCode)
+	close(start)
+	limited := 0
+	for range 11 {
+		if code := <-codes; code == http.StatusTooManyRequests {
+			limited++
+		} else if code != http.StatusOK {
+			t.Errorf("unexpected login status: %d", code)
+		}
+	}
+	if limited != 1 {
+		t.Fatalf("expected one rate-limited request in burst, got %d", limited)
 	}
 }
 

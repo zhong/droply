@@ -26,3 +26,5 @@ sh scripts/setup_test.sh
 The ordinary integration suite covers host-based routing, trusted proxy rejection, API permissions, private access, HTTP and manual TLS listeners, startup errors, shutdown and legacy database migration. Tests use temporary SQLite databases, files and listeners. A real Cloudflare production account is not part of automated verification; operators must validate their token's zone permissions when enabling that provider.
 
 Lego may finish an in-progress DNS operation or propagation wait before cancellation takes effect. Service shutdown configuration allows for those bounded provider operations. CA requests and queued issuance waits use cancellable contexts; application resources close only after HTTP requests and background jobs have drained.
+
+Certificate status authorization: authenticated accounts can read sanitized status for the platform base domain and API domain. Tenant subdomain and custom-domain status remains owner-only. Unauthenticated requests cannot read either category. API responses contain expiry, state and controlled failure codes, never ACME account material or provider credentials.

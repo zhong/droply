@@ -33,7 +33,7 @@ func TestCertificateStatusAuthorizationAndFailure(t *testing.T) {
 		name, token, domain string
 		code                int
 	}{
-		{"unauthenticated", "", host, 401}, {"invalid token", "invalid", host, 401}, {"non-owner", stranger, host, 403}, {"unknown domain", owner, "missing.droplydoc.com", 404},
+		{"unauthenticated", "", host, 401}, {"platform unauthenticated", "", "api.droplydoc.com", 401}, {"base unauthenticated", "", "droplydoc.com", 401}, {"invalid token", "invalid", host, 401}, {"non-owner", stranger, host, 403}, {"unknown domain", owner, "missing.droplydoc.com", 404},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			w := request(test.token, test.domain)
@@ -55,7 +55,7 @@ func TestCertificateStatusAuthorizationAndFailure(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		if response["state"] != want || response["domain"] != host {
+		if response["state"] != want || response["domain"] != strings.ToLower(strings.TrimSuffix(domain, ".")) {
 			t.Fatalf("bad status: %+v", response)
 		}
 		return response
@@ -69,6 +69,21 @@ func TestCertificateStatusAuthorizationAndFailure(t *testing.T) {
 	}
 	srv.SetCertificates(manager)
 	state(host, "pending")
+	for _, platform := range []string{"api.droplydoc.com", "droplydoc.com"} {
+		state(platform, "pending")
+		if _, err := manager.GetCertificate(&tls.ClientHelloInfo{ServerName: platform}); err == nil {
+			t.Fatal("CA failure unexpectedly succeeded")
+		}
+		response := state(platform, "error")
+		if response["last_error"] != "acme_issuance_failed" {
+			t.Fatalf("platform failure missing: %+v", response)
+		}
+		w := request(stranger, platform)
+		if w.Code != 200 || strings.Contains(w.Body.String(), "sensitive-provider-token") {
+			t.Fatalf("authenticated platform status: %d %s", w.Code, w.Body)
+		}
+	}
+
 	if _, err = manager.GetCertificate(&tls.ClientHelloInfo{ServerName: host}); err == nil {
 		t.Fatal("CA failure unexpectedly succeeded")
 	}
