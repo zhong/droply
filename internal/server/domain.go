@@ -172,7 +172,7 @@ func normalizeDomain(domain string) (string, error) {
 	if len(domain) > 253 || !strings.Contains(domain, ".") || net.ParseIP(domain) != nil {
 		return "", fmt.Errorf("invalid hostname")
 	}
-	for _, label := range strings.Split(domain, ".") {
+	for label := range strings.SplitSeq(domain, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return "", fmt.Errorf("invalid hostname")
 		}

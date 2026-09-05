@@ -767,7 +767,7 @@ func extractQueryParam(rawURL, key string) string {
 	}
 	// Trim fragment if present.
 	q, _, _ := strings.Cut(query, "#")
-	for _, pair := range strings.Split(q, "&") {
+	for pair := range strings.SplitSeq(q, "&") {
 		kv := strings.SplitN(pair, "=", 2)
 		if len(kv) == 2 && kv[0] == key {
 			return kv[1]
