@@ -12,9 +12,9 @@ func TestAccessRuleWithWeWork(t *testing.T) {
 	sub, _ := s.CreateSubdomain(user.ID, "wesite")
 
 	allowed := []string{"alice", "bob"}
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "", 3600, true, allowed)
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "", SessionTTL: 3600, WeWorkEnabled: true, AllowedWeWorkUsers: allowed})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 	if !rule.WeWorkEnabled {
 		t.Error("expected WeWorkEnabled=true")
@@ -27,7 +27,7 @@ func TestAccessRuleWithWeWork(t *testing.T) {
 	}
 
 	// Round-trip via GetAccessRule.
-	got, err := s.GetAccessRule(sub.ID, nil)
+	got, err := s.GetAccessRule(t.Context(), sub.ID, nil)
 	if err != nil {
 		t.Fatalf("GetAccessRule: %v", err)
 	}
@@ -46,9 +46,9 @@ func TestAccessRuleWeWorkAnyMember(t *testing.T) {
 	sub, _ := s.CreateSubdomain(user.ID, "anysite")
 
 	// wework_enabled=true with no allow-list → any corp member.
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "", 3600, true, nil)
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "", SessionTTL: 3600, WeWorkEnabled: true, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 	if !rule.WeWorkEnabled {
 		t.Error("expected WeWorkEnabled=true")
@@ -64,9 +64,9 @@ func TestAccessRuleWeWorkCombinedWithPassword(t *testing.T) {
 	user, _ := s.CreateUser("combo@example.com", "hash", "token-combo")
 	sub, _ := s.CreateSubdomain(user.ID, "combosite")
 
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "bcrypt-hash", 7200, true, []string{"alice"})
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: []string{"10.0.0.1"}, PasswordHash: "bcrypt-hash", SessionTTL: 7200, WeWorkEnabled: true, AllowedWeWorkUsers: []string{"alice"}})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 	if !rule.HasPassword {
 		t.Error("expected HasPassword=true")
@@ -86,13 +86,13 @@ func TestAccessRuleUpdateDisablesWeWork(t *testing.T) {
 	sub, _ := s.CreateSubdomain(user.ID, "dissite")
 
 	// Enable, then disable.
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "", 3600, true, []string{"alice"})
+	_, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "", SessionTTL: 3600, WeWorkEnabled: true, AllowedWeWorkUsers: []string{"alice"}})
 	if err != nil {
-		t.Fatalf("first CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("first PutAccessRule: %v", err)
 	}
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass-hash", 3600, false, nil)
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "pass-hash", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("update CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("update PutAccessRule: %v", err)
 	}
 	if rule.WeWorkEnabled {
 		t.Error("expected WeWorkEnabled=false after disable")

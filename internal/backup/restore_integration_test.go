@@ -38,7 +38,7 @@ func TestRestoreRealHTTPAndTLSAccessDomainsAndRollback(t *testing.T) {
 	hash, err := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
 	must(t, err)
 	pid := int64(1)
-	_, err = st.CreateOrUpdateAccessRule(1, &pid, nil, string(hash), 3600, false, nil)
+	_, err = st.PutAccessRule(t.Context(), store.AccessRuleInput{SubdomainID: 1, ProjectID: &pid, AllowedIPs: nil, PasswordHash: string(hash), SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	must(t, err)
 	key, err := os.ReadFile(filepath.Join(cfg.DataDir, "hmac.key"))
 	must(t, err)

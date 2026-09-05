@@ -10,9 +10,9 @@ func TestCreateAndGetAccessRule(t *testing.T) {
 	user, _ := s.CreateUser("access@example.com", "hash", "token-access")
 	sub, _ := s.CreateSubdomain(user.ID, "protected")
 
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1", "192.168.1.0/24"}, "bcrypt-hash", 3600, false, nil)
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: []string{"10.0.0.1", "192.168.1.0/24"}, PasswordHash: "bcrypt-hash", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 	if rule.ID == 0 {
 		t.Error("expected non-zero rule ID")
@@ -49,7 +49,7 @@ func TestCreateAndGetAccessRule(t *testing.T) {
 	}
 
 	// Verify GetAccessRule returns the same data
-	got, err := s.GetAccessRule(sub.ID, nil)
+	got, err := s.GetAccessRule(t.Context(), sub.ID, nil)
 	if err != nil {
 		t.Fatalf("GetAccessRule: %v", err)
 	}
@@ -61,21 +61,21 @@ func TestCreateAndGetAccessRule(t *testing.T) {
 	}
 }
 
-func TestCreateOrUpdateAccessRuleUpsert(t *testing.T) {
+func TestPutAccessRuleUpsert(t *testing.T) {
 	s := newTestStore(t)
 
 	user, _ := s.CreateUser("upsert@example.com", "hash", "token-upsert")
 	sub, _ := s.CreateSubdomain(user.ID, "upsertsite")
 
-	rule1, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "pass1", 3600, false, nil)
+	rule1, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: []string{"10.0.0.1"}, PasswordHash: "pass1", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("first CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("first PutAccessRule: %v", err)
 	}
 
 	// Update the same rule (same subdomain_id, nil project_id)
-	rule2, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.2", "10.0.0.3"}, "pass2", 7200, false, nil)
+	rule2, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: []string{"10.0.0.2", "10.0.0.3"}, PasswordHash: "pass2", SessionTTL: 7200, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("second CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("second PutAccessRule: %v", err)
 	}
 
 	if rule2.ID != rule1.ID {
@@ -100,9 +100,9 @@ func TestProjectLevelAccessRule(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "app")
 
 	projID := proj.ID
-	rule, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.1"}, "projpass", 1800, false, nil)
+	rule, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: &projID, AllowedIPs: []string{"10.0.0.1"}, PasswordHash: "projpass", SessionTTL: 1800, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule project-level: %v", err)
+		t.Fatalf("PutAccessRule project-level: %v", err)
 	}
 	if rule.ProjectID == nil {
 		t.Fatal("expected non-nil project_id")
@@ -111,7 +111,7 @@ func TestProjectLevelAccessRule(t *testing.T) {
 		t.Errorf("expected project_id %d, got %d", proj.ID, *rule.ProjectID)
 	}
 
-	got, err := s.GetAccessRule(sub.ID, &projID)
+	got, err := s.GetAccessRule(t.Context(), sub.ID, &projID)
 	if err != nil {
 		t.Fatalf("GetAccessRule project-level: %v", err)
 	}
@@ -126,16 +126,16 @@ func TestDeleteAccessRule(t *testing.T) {
 	user, _ := s.CreateUser("del@example.com", "hash", "token-del")
 	sub, _ := s.CreateSubdomain(user.ID, "delsite")
 
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600, false, nil)
+	_, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "pass", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 
-	if err := s.DeleteAccessRule(sub.ID, nil); err != nil {
+	if err := s.DeleteAccessRule(t.Context(), sub.ID, nil); err != nil {
 		t.Fatalf("DeleteAccessRule: %v", err)
 	}
 
-	got, err := s.GetAccessRule(sub.ID, nil)
+	got, err := s.GetAccessRule(t.Context(), sub.ID, nil)
 	if err != nil {
 		t.Fatalf("GetAccessRule after delete: %v", err)
 	}
@@ -152,20 +152,20 @@ func TestFindAccessRuleForSite(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "myapp")
 
 	// Create subdomain-level rule
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, nil, []string{"10.0.0.1"}, "subpass", 3600, false, nil)
+	_, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: []string{"10.0.0.1"}, PasswordHash: "subpass", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
 		t.Fatalf("create subdomain rule: %v", err)
 	}
 
 	// Create project-level rule
 	projID := proj.ID
-	_, err = s.CreateOrUpdateAccessRule(sub.ID, &projID, []string{"10.0.0.2"}, "projpass", 1800, false, nil)
+	_, err = s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: &projID, AllowedIPs: []string{"10.0.0.2"}, PasswordHash: "projpass", SessionTTL: 1800, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
 		t.Fatalf("create project rule: %v", err)
 	}
 
 	// Project-level should take priority
-	rule, err := s.FindAccessRuleForSite("findsite", "myapp")
+	rule, err := s.FindAccessRuleForSite(t.Context(), "findsite", "myapp")
 	if err != nil {
 		t.Fatalf("FindAccessRuleForSite: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestFindAccessRuleForSite(t *testing.T) {
 
 	// For a project without its own rule, should fall back to subdomain-level
 	_, _ = s.CreateProject(sub.ID, "other")
-	rule, err = s.FindAccessRuleForSite("findsite", "other")
+	rule, err = s.FindAccessRuleForSite(t.Context(), "findsite", "other")
 	if err != nil {
 		t.Fatalf("FindAccessRuleForSite fallback: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestFindAccessRuleForSiteNoRule(t *testing.T) {
 	sub, _ := s.CreateSubdomain(user.ID, "norulesite")
 	_, _ = s.CreateProject(sub.ID, "app")
 
-	rule, err := s.FindAccessRuleForSite("norulesite", "app")
+	rule, err := s.FindAccessRuleForSite(t.Context(), "norulesite", "app")
 	if err != nil {
 		t.Fatalf("FindAccessRuleForSite: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestHasAccessRules(t *testing.T) {
 	user, _ := s.CreateUser("has@example.com", "hash", "token-has")
 	sub, _ := s.CreateSubdomain(user.ID, "hassite")
 
-	has, err := s.HasAccessRules(sub.ID)
+	has, err := s.HasAccessRules(t.Context(), sub.ID)
 	if err != nil {
 		t.Fatalf("HasAccessRules: %v", err)
 	}
@@ -226,12 +226,12 @@ func TestHasAccessRules(t *testing.T) {
 		t.Error("expected false before creating rule")
 	}
 
-	_, err = s.CreateOrUpdateAccessRule(sub.ID, nil, nil, "pass", 3600, false, nil)
+	_, err = s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: nil, AllowedIPs: nil, PasswordHash: "pass", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 
-	has, err = s.HasAccessRules(sub.ID)
+	has, err = s.HasAccessRules(t.Context(), sub.ID)
 	if err != nil {
 		t.Fatalf("HasAccessRules after create: %v", err)
 	}
@@ -248,9 +248,9 @@ func TestAccessRuleCascadeDeleteProject(t *testing.T) {
 	proj, _ := s.CreateProject(sub.ID, "app")
 
 	projID := proj.ID
-	_, err := s.CreateOrUpdateAccessRule(sub.ID, &projID, nil, "pass", 3600, false, nil)
+	_, err := s.PutAccessRule(t.Context(), AccessRuleInput{SubdomainID: sub.ID, ProjectID: &projID, AllowedIPs: nil, PasswordHash: "pass", SessionTTL: 3600, WeWorkEnabled: false, AllowedWeWorkUsers: nil})
 	if err != nil {
-		t.Fatalf("CreateOrUpdateAccessRule: %v", err)
+		t.Fatalf("PutAccessRule: %v", err)
 	}
 
 	// Delete the project; access rule should be cascade-deleted
@@ -258,7 +258,7 @@ func TestAccessRuleCascadeDeleteProject(t *testing.T) {
 		t.Fatalf("DeleteProject: %v", err)
 	}
 
-	got, err := s.GetAccessRule(sub.ID, &projID)
+	got, err := s.GetAccessRule(t.Context(), sub.ID, &projID)
 	if err != nil {
 		t.Fatalf("GetAccessRule after cascade: %v", err)
 	}

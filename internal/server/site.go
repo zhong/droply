@@ -190,7 +190,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check access rule.
-	rule, err := s.store.FindAccessRuleForSite(subdomainName, projectName)
+	rule, err := s.store.FindAccessRuleForSite(r.Context(), subdomainName, projectName)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -357,7 +357,7 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ip
 	}
 
 	// Find access rule.
-	rule, err := s.store.FindAccessRuleForSite(subdomainName, projectName)
+	rule, err := s.store.FindAccessRuleForSite(r.Context(), subdomainName, projectName)
 	if err != nil || rule == nil || !rule.HasPassword {
 		http.NotFound(w, r)
 		return

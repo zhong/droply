@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/zhong/droply/internal/store"
 )
 
 const alphanumChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -182,7 +184,15 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		return
 	}
 
-	rule, err := s.store.CreateOrUpdateAccessRule(sub.ID, projectID, req.AllowedIPs, passwordHash, ttl, req.WeWorkEnabled, req.AllowedWeWorkUsers)
+	rule, err := s.store.PutAccessRule(r.Context(), store.AccessRuleInput{
+		SubdomainID:        sub.ID,
+		ProjectID:          projectID,
+		AllowedIPs:         req.AllowedIPs,
+		PasswordHash:       passwordHash,
+		SessionTTL:         ttl,
+		WeWorkEnabled:      req.WeWorkEnabled,
+		AllowedWeWorkUsers: req.AllowedWeWorkUsers,
+	})
 	if err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -224,7 +234,7 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		projectID = &proj.ID
 	}
 
-	rule, err := s.store.GetAccessRule(sub.ID, projectID)
+	rule, err := s.store.GetAccessRule(r.Context(), sub.ID, projectID)
 	if err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -269,7 +279,7 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		projectID = &proj.ID
 	}
 
-	if err := s.store.DeleteAccessRule(sub.ID, projectID); err != nil {
+	if err := s.store.DeleteAccessRule(r.Context(), sub.ID, projectID); err != nil {
 		jsonError(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
