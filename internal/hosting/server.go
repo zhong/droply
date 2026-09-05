@@ -19,6 +19,8 @@ type Config struct {
 	Handler     http.Handler
 	HTTPHandler http.Handler
 	TLSConfig   *tls.Config
+	// CertificateTimeout is the extra time granted during certificate selection.
+	CertificateTimeout time.Duration
 }
 
 type Service struct {
@@ -71,7 +73,7 @@ func Start(cfg Config) (*Service, error) {
 		} else {
 			svc.httpsAddress = ln.Addr().String()
 			srv.TLSConfig = cfg.TLSConfig.Clone()
-			allowCertificateIssuance(srv.TLSConfig, srv.ReadHeaderTimeout)
+			allowCertificateIssuance(srv.TLSConfig, srv.ReadHeaderTimeout, cfg.CertificateTimeout)
 		}
 		svc.servers = append(svc.servers, srv)
 		svc.wg.Go(func() {
@@ -93,13 +95,13 @@ func Start(cfg Config) (*Service, error) {
 // deadlines. ACME can legitimately take longer after ClientHello has arrived.
 // Give only certificate selection extra time, then restore the short deadline
 // for the peer to finish its handshake. ServeTLS retains native HTTP/2 support.
-func allowCertificateIssuance(cfg *tls.Config, handshakeTimeout time.Duration) {
+func allowCertificateIssuance(cfg *tls.Config, handshakeTimeout, certificateTimeout time.Duration) {
 	getCertificate := cfg.GetCertificate
 	if getCertificate == nil {
 		return
 	}
 	cfg.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		if err := hello.Conn.SetDeadline(time.Now().Add(5*time.Minute + handshakeTimeout)); err != nil {
+		if err := hello.Conn.SetDeadline(time.Now().Add(certificateTimeout + handshakeTimeout)); err != nil {
 			return nil, err
 		}
 		cert, err := getCertificate(hello)
