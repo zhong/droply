@@ -36,7 +36,7 @@ func deploymentCommandFixture(t *testing.T) (func(...string) (string, error), fu
 		t.Fatal(err)
 	}
 	t.Cleanup(app.ShutdownAnalytics)
-	listener := httptest.NewServer(app.Handler())
+	listener := httptest.NewServer(app)
 	t.Cleanup(listener.Close)
 	dialer := &net.Dialer{}
 	transport := http.DefaultTransport.(*http.Transport).Clone()

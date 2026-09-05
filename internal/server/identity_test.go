@@ -20,6 +20,7 @@ func TestPrivateIdentityRegistrationAndAdministration(t *testing.T) {
 	request := func(method, path, token, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		r.Host = "api.example.test"
 		if token != "" {
 			r.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -102,6 +103,7 @@ func TestAuthenticationThrottleIgnoresForgedForwardingHeaders(t *testing.T) {
 	srv := newTestServer(t)
 	for i := range 12 {
 		r := httptest.NewRequest("POST", "/auth/login", bytes.NewBufferString(`{"email":"absent@test","password":"secret"`))
+		r.Host = "api.droplydoc.com"
 		r.Header.Set("X-Forwarded-For", string(rune(65+i)))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, r)

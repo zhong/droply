@@ -48,7 +48,7 @@ func TestRestoreRealHTTPAndTLSAccessDomainsAndRollback(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://custom.other.test/_droply/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
-	source.NewSiteHandler().ServeHTTP(w, req)
+	source.ServeHTTP(w, req)
 	cookies := w.Result().Cookies()
 	if len(cookies) == 0 {
 		t.Fatalf("login %d %s", w.Code, w.Body.String())
@@ -90,7 +90,7 @@ func TestRestoreRealHTTPAndTLSAccessDomainsAndRollback(t *testing.T) {
 	srv := server.New(st, filepath.Join(target, "sites"), "example.test", restoredKey)
 	defer srv.ShutdownAnalytics()
 	must(t, srv.PrepareDeployments(t.Context()))
-	running, err := hosting.Start(hosting.Config{HTTPAddr: "127.0.0.1:0", HTTPSAddr: "127.0.0.1:0", Handler: srv.NewSiteHandler(), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}})
+	running, err := hosting.Start(hosting.Config{HTTPAddr: "127.0.0.1:0", HTTPSAddr: "127.0.0.1:0", Handler: srv, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}})
 	must(t, err)
 	defer running.Shutdown(t.Context())
 	pool := x509.NewCertPool()
@@ -127,6 +127,7 @@ func TestRestoreRealHTTPAndTLSAccessDomainsAndRollback(t *testing.T) {
 	defer api.Close()
 	r, err := http.NewRequest(http.MethodPost, api.URL+"/subdomains/backup/projects/site/rollback/1", nil)
 	must(t, err)
+	r.Host = "api.example.test"
 	r.Header.Set("Authorization", "Bearer dp_backup")
 	resp, err := api.Client().Do(r)
 	must(t, err)

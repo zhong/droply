@@ -43,6 +43,7 @@ type Server struct {
 	sitesDir          string
 	baseDomain        string
 	router            *chi.Mux
+	sitesHandler      http.Handler
 	hmacKey           []byte
 	visitCh           chan visitRecord
 	done              chan struct{}
@@ -63,6 +64,7 @@ func New(s store.Store, sitesDir, baseDomain string, hmacKey []byte) *Server {
 		done:              make(chan struct{}),
 	}
 	srv.router = srv.buildRouter()
+	srv.sitesHandler = srv.NewSiteHandler()
 	return srv
 }
 
@@ -75,8 +77,8 @@ func (s *Server) SetWeWork(client *wework.Client) {
 	}
 }
 
-// ServeHTTP implements http.Handler.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// serveAPI handles management routes after the public entry validates the Host.
+func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 

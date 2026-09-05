@@ -63,6 +63,7 @@ func buildDeployRequest(t *testing.T, url string, archive *bytes.Buffer, token s
 	mw.Close()
 
 	req := httptest.NewRequest(http.MethodPost, url, &body)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+token)
 	return req
@@ -87,6 +88,7 @@ func TestDeploy(t *testing.T) {
 	// Create subdomain first.
 	body, _ := json.Marshal(map[string]string{"name": "alice"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -143,6 +145,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "redeployer"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -281,6 +284,7 @@ func TestDeployWithFileInfoHeader(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"name": "fihtest"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -329,6 +333,7 @@ func TestDeployAutoCreatesProject(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "bobsite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -356,6 +361,7 @@ func TestDeploySizeLimit(t *testing.T) {
 	// Create subdomain.
 	body, _ := json.Marshal(map[string]string{"name": "carolsite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()

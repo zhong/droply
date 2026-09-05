@@ -15,6 +15,7 @@ func TestSubdomainCRUD(t *testing.T) {
 	// Create subdomain
 	body, _ := json.Marshal(map[string]string{"name": "alice"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -25,6 +26,7 @@ func TestSubdomainCRUD(t *testing.T) {
 
 	// List subdomains
 	req = httptest.NewRequest(http.MethodGet, "/subdomains", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -44,6 +46,7 @@ func TestSubdomainCRUD(t *testing.T) {
 
 	// Delete subdomain
 	req = httptest.NewRequest(http.MethodDelete, "/subdomains/alice", nil)
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -58,6 +61,7 @@ func TestSubdomainInvalidName(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"name": "INVALID!"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
@@ -72,6 +76,7 @@ func TestSubdomainUnauthorized(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"name": "mysite"})
 	req := httptest.NewRequest(http.MethodPost, "/subdomains", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	// No Authorization header
 	rr := httptest.NewRecorder()

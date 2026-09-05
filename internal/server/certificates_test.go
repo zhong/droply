@@ -22,6 +22,7 @@ func TestCertificateStatusAuthorizationAndFailure(t *testing.T) {
 	request := func(token, domain string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(http.MethodGet, "/certificates/"+domain, nil)
+		r.Host = "api.droplydoc.com"
 		if token != "" {
 			r.Header.Set("Authorization", "Bearer "+token)
 		}

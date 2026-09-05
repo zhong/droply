@@ -34,6 +34,7 @@ type observedCleanup struct {
 
 func cleanupRequest(f *recoveryFixture, method, query string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "/subdomains/recovery/projects/site/cleanup"+query, nil)
+	r.Host = "api.droplydoc.com"
 	r.Header.Set("Authorization", "Bearer "+f.token)
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, r)
@@ -52,6 +53,7 @@ func cleanupResult(t *testing.T, w *httptest.ResponseRecorder) observedCleanup {
 }
 func rollbackRequest(f *recoveryFixture, version int) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/subdomains/recovery/projects/site/rollback/%d", version), nil)
+	r.Host = "api.droplydoc.com"
 	r.Header.Set("Authorization", "Bearer "+f.token)
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, r)
@@ -342,6 +344,7 @@ func TestCleanupRejectsUnownedAndAnonymousRequests(t *testing.T) {
 			status int
 		}{{"", 401}, {other, 403}} {
 			r := httptest.NewRequest(method, "/subdomains/recovery/projects/site/cleanup?keep=0&days=0", nil)
+			r.Host = "api.droplydoc.com"
 			if test.token != "" {
 				r.Header.Set("Authorization", "Bearer "+test.token)
 			}

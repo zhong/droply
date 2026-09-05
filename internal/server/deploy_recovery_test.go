@@ -54,6 +54,7 @@ func (f *recoveryFixture) upload(t *testing.T, content string) *httptest.Respons
 func (f *recoveryFixture) history(t *testing.T) []model.Deployment {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/subdomains/recovery/projects/site/deployments", nil)
+	r.Host = "api.droplydoc.com"
 	r.Header.Set("Authorization", "Bearer "+f.token)
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, r)

@@ -33,6 +33,7 @@ func TestLoginSurfacesHaveIndependentQuotasAndProxyTrust(t *testing.T) {
 				}
 				response := httptest.NewRecorder()
 				if account {
+					req.Host = "api.droplydoc.com"
 					srv.ServeHTTP(response, req)
 				} else {
 					visitor.ServeHTTP(response, req)

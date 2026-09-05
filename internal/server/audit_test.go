@@ -41,6 +41,7 @@ func TestAuditRealManagementAndSecretBoundaries(t *testing.T) {
 	request := func(token, method, path, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		r.Host = "api.droplydoc.com"
 		r.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, r)

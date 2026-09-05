@@ -10,23 +10,41 @@ import (
 	"testing"
 )
 
-func TestUnifiedHandlerRejectsUnknownAPIHost(t *testing.T) {
-	srv, _ := newTestSiteServer(t)
-	for _, tc := range []struct {
-		host   string
-		status int
-	}{
-		{"api.droplydoc.com", http.StatusUnauthorized},
-		{"API.DROPLYDOC.COM:8080", http.StatusUnauthorized},
-		{"attacker.example", http.StatusNotFound},
-		{"alice.droplydoc.com", http.StatusNotFound},
-	} {
-		t.Run(tc.host, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "http://"+tc.host+"/subdomains", nil)
-			rr := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rr, req)
-			if rr.Code != tc.status {
-				t.Fatalf("status %d, want %d", rr.Code, tc.status)
+func TestDefaultHandlerRejectsUnknownAPIHostOverHTTPAndTLS(t *testing.T) {
+	for _, protocol := range []string{"http", "https"} {
+		t.Run(protocol, func(t *testing.T) {
+			srv, _ := newTestSiteServer(t)
+			listener := httptest.NewUnstartedServer(srv)
+			if protocol == "https" {
+				listener.StartTLS()
+			} else {
+				listener.Start()
+			}
+			defer listener.Close()
+			for _, tc := range []struct {
+				host   string
+				status int
+			}{
+				{"api.droplydoc.com", http.StatusUnauthorized},
+				{"API.DROPLYDOC.COM:8080", http.StatusUnauthorized},
+				{"attacker.example", http.StatusNotFound},
+				{"alice.droplydoc.com", http.StatusNotFound},
+			} {
+				t.Run(tc.host, func(t *testing.T) {
+					req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, listener.URL+"/subdomains", nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Host = tc.host
+					response, err := listener.Client().Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					response.Body.Close()
+					if response.StatusCode != tc.status {
+						t.Fatalf("status %d, want %d", response.StatusCode, tc.status)
+					}
+				})
 			}
 		})
 	}
@@ -48,7 +66,7 @@ func TestHTTPLoginCookieAndRedirectBoundary(t *testing.T) {
 			req := httptest.NewRequest("POST", "http://alice.droplydoc.com/_droply/login", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rr := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rr, req)
+			srv.ServeHTTP(rr, req)
 			if rr.Code != tc.status {
 				t.Fatalf("got %d want %d", rr.Code, tc.status)
 			}
@@ -66,6 +84,7 @@ func TestDirectRequestCannotSpoofWhitelistedIP(t *testing.T) {
 	srv, dir := newTestSiteServer(t)
 	token, _ := setupProtectedSite(t, srv, dir)
 	request := httptest.NewRequest("PUT", "/subdomains/alice/projects/docs/access", strings.NewReader(`{"allowed_ips":["10.1.2.3"]}`))
+	request.Host = "api.droplydoc.com"
 	request.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, request)
@@ -90,7 +109,7 @@ func TestDirectRequestCannotSpoofWhitelistedIP(t *testing.T) {
 			req.Header.Set("X-Forwarded-For", tc.xff)
 			req.Header.Set("X-Real-IP", "10.1.2.3")
 			rr := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rr, req)
+			srv.ServeHTTP(rr, req)
 			if rr.Code != tc.status {
 				t.Fatalf("status %d, want %d: %s", rr.Code, tc.status, rr.Body.String())
 			}

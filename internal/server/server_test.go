@@ -33,6 +33,7 @@ func registerAndGetToken(t *testing.T, srv http.Handler, email, password string)
 	}
 	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -58,6 +59,7 @@ func TestRegister(t *testing.T) {
 		"password": "secret123",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -92,6 +94,7 @@ func TestRegisterDuplicate(t *testing.T) {
 		"password": "password2",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -110,6 +113,7 @@ func TestLogin(t *testing.T) {
 		"password": "mypassword",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
@@ -137,6 +141,7 @@ func TestLoginWrongPassword(t *testing.T) {
 		"password": "wrongpassword",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.ServeHTTP(rr, req)
