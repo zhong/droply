@@ -415,3 +415,27 @@ func TestRestoreCancellationAfterStagingMove(t *testing.T) {
 	// A failed restore must leave the archive usable for a fresh attempt.
 	must(t, Restore(t.Context(), RestoreConfig{Input: cfg.Output, DataDir: target}))
 }
+
+func TestPrepareRestoredTreeMakesExtractedFilesWritable(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	must(t, os.Mkdir(nested, 0755))
+	file := filepath.Join(nested, "payload")
+	must(t, os.WriteFile(file, []byte("verified payload"), 0444))
+	before, err := os.Stat(file)
+	must(t, err)
+	must(t, prepareRestoredTree(t.Context(), root))
+	after, err := os.Stat(file)
+	must(t, err)
+	if !os.SameFile(before, after) {
+		t.Fatal("staging preparation replaced file contents")
+	}
+	f, err := os.OpenFile(file, os.O_RDWR, 0)
+	must(t, err)
+	must(t, f.Close())
+	content, err := os.ReadFile(file)
+	must(t, err)
+	if string(content) != "verified payload" {
+		t.Fatalf("changed payload: %q", content)
+	}
+}

@@ -7,6 +7,7 @@ reference verification remain in place. The backup format is unchanged.
 
 ## Reproducible measurement
 
+Measured implementation: `dcbc552` (the initial PR #84 implementation).
 Baseline: `e5db47e22fb68b95709ab6d0dc52d4246bd4f6a2` (PR #78), with the
 benchmark added but no production changes. Darwin/arm64, Apple M3 Pro, Go 1.27.1,
 12 logical CPUs; local heavy tests were paused during timed sampling. Measurements
@@ -98,3 +99,28 @@ links, cancellation, private permissions, full integration tests and race tests.
 The real HTTP/TLS restore test also checks old sessions, access rules, custom
 domains and rollback. No validation pass was removed because the copy/space
 reduction already provides measurable benefit without weakening those boundaries.
+
+## Windows handle follow-up
+
+A separate follow-up preserves the measured Darwin chmod/sync sequence and adds
+a Windows implementation. The raw Darwin samples above belong to `dcbc552`; they
+are not Windows measurements or fresh measurements of the follow-up commit.
+Go 1.27.1 `internal/poll.FD.Fchmod` uses `SetFileInformationByHandle(FileBasicInfo)`
+to clear READONLY, which requires attribute-write access. `syscall.Fsync` uses
+`FlushFileBuffers`, whose handle must have GENERIC_WRITE. Opening an extracted
+read-only file through `os.Open` provides neither right.
+
+Windows now opens an attribute-write handle, verifies file identity and clears
+READONLY, then reopens regular files with `os.O_RDWR`, verifies identity again and
+flushes through the writable handle. Every operation error is returned. The
+Windows CI job executes the actual staging preparation on a read-only file and
+checks unchanged identity/content, writable reopening, link refusal and cancellation.
+
+This targeted test does not claim complete Windows server restore support:
+existing `syncDir` in backup and safe extraction opens directory handles read-only
+and propagates synchronization failures; this predates #57 and is unchanged.
+The published Windows binary is the client CLI; server operations are documented
+for Linux. No directory-flush error is silently discarded by this change.
+
+References: [Microsoft FlushFileBuffers](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)
+and [SetFileInformationByHandle](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle).
