@@ -31,14 +31,16 @@ sudo systemctl start droply
 | `http` | `--addr`，通常只监听可信代理可达地址 | TLS 由外部网关管理 |
 | `manual` | `--https-addr` + `--tls-cert`/`--tls-key` | 管理员续期并重启加载 |
 | `auto` | `--addr :80 --https-addr :443`，公开可达 HTTP-01 | 内置 ACME 签发、持久化、后台续期 |
-| `cloudflare` | `--https-addr`，Cloudflare DNS API 凭证及 DNS 可达 | 平台通配符及受授权域名使用 DNS-01，后台续期 |
+| `cloudflare` | `--addr :80 --https-addr :443`，Cloudflare DNS API 凭证及 DNS 可达 | 平台通配符使用 DNS-01；其余域名使用 HTTP-01，后台续期 |
+
+Cloudflare 模式只对平台通配符证书使用 DNS-01；未由该通配符覆盖的域名（包括自定义域名）仍通过 HTTP-01 签发和续期。关闭公网端口 80 或阻断 ACME 挑战路径会使这些域名无法签发、续期，即使通配符证书仍可正常更新。Cloudflare token 只需覆盖平台通配符所属 zone，不需要为自定义域名扩大 DNS 凭证范围。
 
 ```sh
 # 公网 HTTP-01；必须让 CA 从端口 80 访问挑战
 ./bin/droply-server --domain example.com --data-dir /data/droply \
   --tls-mode auto --addr :80 --https-addr :443 --acme-email admin@example.com
 
-# DNS-01；凭证文件应可由服务用户读取且限制为该用户
+# 平台通配符 DNS-01，其余域名 HTTP-01；凭证文件仅允许服务用户读取
 ./bin/droply-server --domain example.com --data-dir /data/droply \
   --tls-mode cloudflare --addr :80 --https-addr :443 \
   --acme-email admin@example.com --cloudflare-token-file /etc/droply/cloudflare-token
