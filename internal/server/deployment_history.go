@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zhong/droply/internal/model"
@@ -38,17 +37,9 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 	defer s.deploymentMu.Unlock()
 	// Authorization may have changed while this request waited for a publisher
 	// or membership mutation. Recheck the exact project and credential under the lock.
-	role, err := s.store.ProjectRole(r.Context(), project.ID, userFromContext(r.Context()).ID)
-	if err != nil || !roleAllows(role, "deployer") {
-		jsonError(w, "project permission revoked", 403)
+	if err := s.recheckPublication(r, project); err != nil {
+		jsonError(w, err.Error(), 403)
 		return
-	}
-	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok {
-		current, err := s.store.AuthenticateProjectToken(r.Context(), strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if err != nil || current.ID != token.ID || current.ProjectID != project.ID || !s.projectTokenAllows(r, current) {
-			jsonError(w, "project token permission revoked", 403)
-			return
-		}
 	}
 
 	d, err := s.store.GetDeployment(r.Context(), project.ID, version)

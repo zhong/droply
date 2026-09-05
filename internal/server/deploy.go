@@ -99,9 +99,9 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot create project", 500)
 		return
 	}
-	if !s.canAccessSubdomainProject(r, sub) {
+	if err := s.recheckPublication(r, proj); err != nil {
 		s.deploymentMu.Unlock()
-		jsonError(w, "project permission revoked", 403)
+		jsonError(w, err.Error(), 403)
 		return
 	}
 	id := rand.Text()
@@ -187,8 +187,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deploymentMu.Lock()
 	defer s.deploymentMu.Unlock()
-	if !s.canAccessSubdomainProject(r, sub) {
-		fail("project permission revoked", 403)
+	if err := s.recheckPublication(r, proj); err != nil {
+		fail(err.Error(), 403)
 		return
 	}
 	if r.Context().Err() != nil {

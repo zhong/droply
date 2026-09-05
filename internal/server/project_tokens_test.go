@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,7 +67,7 @@ func TestProjectTokenHTTPAuthorizationMatrix(t *testing.T) {
 		if w := projectCredentialRequest(f, "GET", base+"/deployments", credential.Token, ""); w.Code != 200 {
 			t.Fatalf("scoped history: %d %s", w.Code, w.Body.String())
 		}
-		for _, test := range []struct{ method, path string }{{"POST", base + "/tokens"}, {"GET", base + "/tokens"}, {"DELETE", base + "/tokens/1"}, {"GET", base + "/domains"}, {"PUT", base + "/access"}, {"POST", base + "/cleanup"}, {"DELETE", base}, {"GET", "/subdomains"}, {"POST", "/subdomains"}} {
+		for _, test := range []struct{ method, path string }{{"POST", base + "/tokens"}, {"GET", base + "/tokens"}, {"DELETE", base + "/tokens/1"}, {"GET", base + "/domains"}, {"GET", base + "/members"}, {"GET", base + "/access"}, {"GET", base + "/stats"}, {"GET", base + "/logs"}, {"GET", base + "/cleanup"}, {"GET", base + "/audit"}, {"PUT", base + "/members"}, {"DELETE", base + "/members/1"}, {"DELETE", base + "/access"}, {"POST", base + "/domains"}, {"DELETE", base + "/domains/example.test"}, {"POST", base + "/domains/example.test/verify"}, {"PUT", base + "/access"}, {"POST", base + "/cleanup"}, {"DELETE", base}, {"GET", "/subdomains"}, {"POST", "/subdomains"}} {
 			if w := projectCredentialRequest(f, test.method, test.path, credential.Token, "{}"); w.Code != 403 {
 				t.Fatalf("%s %s accepted project token: %d %s", test.method, test.path, w.Code, w.Body.String())
 			}
@@ -125,5 +126,57 @@ func TestProjectTokenHTTPAuthorizationMatrix(t *testing.T) {
 	}
 	if w := projectCredentialRequest(f, "GET", base+"/deployments", production.Token, ""); w.Code != 401 {
 		t.Fatalf("expired token: %d", w.Code)
+	}
+}
+
+func TestProjectTokenRevokedDuringUploadPreventsPublication(t *testing.T) {
+	for _, viaHTTP := range []bool{true, false} {
+		t.Run(fmt.Sprintf("http=%t", viaHTTP), func(t *testing.T) {
+			f := newRecoveryFixture(t)
+			if w := f.upload(t, "original"); w.Code != 200 {
+				t.Fatal(w.Body.String())
+			}
+			credential := issueProjectCredential(t, f, []string{"production"})
+			request := buildDeployRequest(t, "/subdomains/recovery/projects/site/deploy", createTestTarGz(t, map[string]string{"index.html": "revoked"}), credential.Token)
+			request.Host = "api.droplydoc.com"
+			blocked := &pausedUploadBody{ReadCloser: request.Body, entered: make(chan struct{}), resume: make(chan struct{})}
+			request.Body = blocked
+			resume := sync.OnceFunc(func() { close(blocked.resume) })
+			defer resume()
+			result := make(chan *httptest.ResponseRecorder, 1)
+			go func() { w := httptest.NewRecorder(); f.srv.ServeHTTP(w, request); result <- w }()
+			select {
+			case <-blocked.entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("upload did not start")
+			}
+			if viaHTTP {
+				revoke := httptest.NewRequest("DELETE", fmt.Sprintf("/subdomains/recovery/projects/site/tokens/%d", credential.ID), nil)
+				revoke.Host = "api.droplydoc.com"
+				revoke.Header.Set("Authorization", "Bearer "+f.token)
+				response := httptest.NewRecorder()
+				f.srv.ServeHTTP(response, revoke)
+				if response.Code != 204 {
+					t.Fatal(response.Code, response.Body.String())
+				}
+			} else if err := f.st.RevokeProjectToken(t.Context(), credential.ProjectID, credential.IssuerID, credential.ID); err != nil {
+				t.Fatal(err)
+			}
+			// Revocation has returned before upload can finish streaming.
+			resume()
+			select {
+			case response := <-result:
+				if response.Code != 403 {
+					t.Fatalf("revoked upload: %d %s", response.Code, response.Body.String())
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("upload did not finish")
+			}
+			f.assertContent(t, "original")
+			active, err := f.st.GetActiveDeployment(t.Context(), credential.ProjectID)
+			if err != nil || active.Version != 1 {
+				t.Fatalf("revoked credential published: %+v %v", active, err)
+			}
+		})
 	}
 }

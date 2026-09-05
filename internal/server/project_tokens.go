@@ -128,6 +128,8 @@ func (s *Server) handleRevokeProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "invalid token ID", 400)
 		return
 	}
+	s.deploymentMu.Lock()
+	defer s.deploymentMu.Unlock()
 	err = s.store.RevokeProjectToken(r.Context(), project.ID, userFromContext(r.Context()).ID, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		jsonError(w, "project token not found", 404)

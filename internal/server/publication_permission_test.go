@@ -31,7 +31,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 	for _, tc := range []struct {
 		action, change string
 		token          bool
-	}{{"rollback/1", "remove", false}, {"promote/2", "downgrade", false}, {"promote/2", "revoke", true}} {
+	}{{"rollback/1", "remove", false}, {"promote/2", "downgrade", false}, {"promote/2", "revoke", true}, {"promote/2", "downgrade", true}, {"deploy", "revoke", true}} {
 		t.Run(tc.action+"-"+tc.change, func(t *testing.T) {
 			st, err := store.NewSQLiteStore(":memory:")
 			if err != nil {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zhong/droply/internal/model"
@@ -85,4 +86,21 @@ func roleAllows(role, required string) bool {
 		return role == "viewer" || role == "deployer"
 	}
 	return role == "deployer" && required == "deployer"
+}
+
+// recheckPublication must run under deploymentMu after any upload or lock wait.
+// Stored project identity, current issuer role, token revocation and scope all
+// remain authoritative; the authenticated request is not a permission cache.
+func (s *Server) recheckPublication(r *http.Request, project *model.Project) error {
+	userID := userFromContext(r.Context()).ID
+	if !s.projectAllows(r, project, userID, nil) {
+		return errors.New("project permission revoked")
+	}
+	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok {
+		current, err := s.store.AuthenticateProjectToken(r.Context(), strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		if err != nil || current.ID != token.ID || current.IssuerID != userID || !s.projectAllows(r, project, current.IssuerID, current) {
+			return errors.New("project token permission revoked")
+		}
+	}
+	return nil
 }
