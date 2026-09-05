@@ -163,16 +163,13 @@ func (s *SQLiteStore) PromoteDeployment(ctx context.Context, projectID int64, ve
 	if d.Status == "active" {
 		return d, false, nil
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='archived' WHERE project_id=? AND status='active'`, projectID); err != nil {
-		return nil, false, err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='active' WHERE id=?`, d.ID); err != nil {
+	if err := switchProductionTx(ctx, tx, projectID, d.ID); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO publication_events(project_id,deployment_id,source_version,actor_id,action) VALUES(?,?,?,?,'promote')`, projectID, d.ID, d.Version, actorID); err != nil {
 		return nil, false, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?`, projectID); err != nil {
+	if err := touchPublishedProjectTx(ctx, tx, projectID); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {
