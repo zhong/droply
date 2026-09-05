@@ -25,7 +25,7 @@ const userContextKey contextKey = "user"
 // Server holds all dependencies for the HTTP server.
 type Server struct {
 	openRegistration  bool
-	authThrottle      authThrottle
+	authThrottle      ipLimiter
 	uploadMu          sync.Mutex
 	deploymentMu      sync.RWMutex
 	prepareOnce       sync.Once
@@ -53,6 +53,7 @@ type Server struct {
 // New creates a new Server and registers all routes.
 func New(s store.Store, sitesDir, baseDomain string, hmacKey []byte) *Server {
 	srv := &Server{
+		authThrottle:      ipLimiter{capacity: 4096},
 		deploymentOptions: DeploymentOptions{RetainCount: 10, RetainDays: 30, OrphanGrace: time.Hour},
 		store:             s,
 		sitesDir:          sitesDir,

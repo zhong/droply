@@ -13,11 +13,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/time/rate"
 
 	"github.com/zhong/droply/internal/model"
 	"github.com/zhong/droply/internal/staticweb"
@@ -65,52 +63,10 @@ var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
 </body>
 </html>`))
 
-// rateLimiter tracks per-IP rate limiters.
-type rateLimiter struct {
-	mu          sync.Mutex
-	limiters    map[string]*rateLimiterEntry
-	lastCleanup time.Time
-}
-
-type rateLimiterEntry struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func newRateLimiter() *rateLimiter {
-	rl := &rateLimiter{
-		limiters: make(map[string]*rateLimiterEntry),
-	}
-	return rl
-}
-
-func (rl *rateLimiter) getLimiter(ip string) *rate.Limiter {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	if time.Since(rl.lastCleanup) > 5*time.Minute {
-		for ip, entry := range rl.limiters {
-			if time.Since(entry.lastSeen) > 10*time.Minute {
-				delete(rl.limiters, ip)
-			}
-		}
-		rl.lastCleanup = time.Now()
-	}
-
-	entry, ok := rl.limiters[ip]
-	if !ok {
-		// 10 requests per minute = 1 every 6 seconds, burst of 10.
-		limiter := rate.NewLimiter(rate.Every(6*time.Second), 10)
-		rl.limiters[ip] = &rateLimiterEntry{limiter: limiter, lastSeen: time.Now()}
-		return limiter
-	}
-	entry.lastSeen = time.Now()
-	return entry.limiter
-}
-
 // NewSiteHandler returns an http.Handler that serves site content with access control.
 // Handler selects this handler for site hosts on the unified listener.
 func (s *Server) NewSiteHandler() http.Handler {
-	rl := newRateLimiter()
+	rl := &ipLimiter{idleTTL: 10 * time.Minute}
 	return s.withTrustedProxy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := s.PrepareDeployments(r.Context()); err != nil {
 			http.Error(w, "deployment storage unavailable", 503)
@@ -355,10 +311,9 @@ func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *m
 }
 
 // siteLoginHandler handles POST /_droply/login.
-func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *rateLimiter) {
+func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ipLimiter) {
 	clientIP := getClientIP(r)
-	limiter := rl.getLimiter(clientIP)
-	if !limiter.Allow() {
+	if !rl.allow(clientIP) {
 		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 		return
 	}

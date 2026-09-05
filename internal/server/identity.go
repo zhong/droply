@@ -6,51 +6,15 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zhong/droply/internal/store"
-	"golang.org/x/time/rate"
 )
 
 // SetOpenRegistration must be called before serving. Private installations are closed by default.
 func (s *Server) SetOpenRegistration(open bool) { s.openRegistration = open }
 
-type authThrottle struct {
-	mu      sync.Mutex
-	entries map[string]*authThrottleEntry
-}
-type authThrottleEntry struct {
-	limiter *rate.Limiter
-	seen    time.Time
-}
-
-func (a *authThrottle) allow(ip string) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	now := time.Now()
-	if a.entries == nil {
-		a.entries = map[string]*authThrottleEntry{}
-	}
-	entry := a.entries[ip]
-	if entry == nil {
-		if len(a.entries) >= 4096 {
-			oldestKey := ""
-			oldest := now
-			for key, value := range a.entries {
-				if value.seen.Before(oldest) {
-					oldestKey, oldest = key, value.seen
-				}
-			}
-			delete(a.entries, oldestKey)
-		}
-		entry = &authThrottleEntry{limiter: rate.NewLimiter(rate.Every(6*time.Second), 10)}
-		a.entries[ip] = entry
-	}
-	entry.seen = now
-	return entry.limiter.Allow()
-}
 func (s *Server) allowAuthentication(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Cache-Control", "no-store")
 	if !s.authThrottle.allow(getClientIP(r)) {
