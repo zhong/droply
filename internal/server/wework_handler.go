@@ -81,6 +81,17 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		projectName = parts[0]
 	}
 
+	sub, err := s.store.GetSubdomainByName(subdomainName)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	project, err := s.store.GetProject(sub.ID, projectName)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Verify a rule with WeWork enabled exists.
 	rule, err := s.store.FindAccessRuleForSite(subdomainName, projectName)
 	if err != nil || rule == nil || !rule.WeWorkEnabled {
@@ -89,6 +100,7 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state, err := s.weworkState.Generate(wework.StateData{
+		ProjectID: project.ID,
 		Subdomain: subdomainName,
 		Project:   projectName,
 		Host:      host,
@@ -151,6 +163,28 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("wework callback: failed to get user ID: %v", err)
 		markWeWorkAttemptFailed(w, cookieParentDomain(r.Host, stateData.Host, s.baseDomain))
 		http.Error(w, "WeWork login failed", http.StatusUnauthorized)
+		return
+	}
+
+	// The network exchange ran without the deployment lock. Pin the project
+	// while validating the current destination and issuing its cookie.
+	s.deploymentMu.RLock()
+	defer s.deploymentMu.RUnlock()
+	subdomainName, customProject, ok := s.resolveHost(stateData.Host)
+	if !ok || subdomainName != stateData.Subdomain ||
+		(stateData.IsCustom && customProject != stateData.Project) ||
+		(!stateData.IsCustom && customProject != "") {
+		http.NotFound(w, r)
+		return
+	}
+	sub, err := s.store.GetSubdomainByName(stateData.Subdomain)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	project, err := s.store.GetProject(sub.ID, stateData.Project)
+	if err != nil || project.ID != stateData.ProjectID {
+		http.NotFound(w, r)
 		return
 	}
 

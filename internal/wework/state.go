@@ -9,6 +9,7 @@ import (
 
 // StateData carries information associated with an OAuth state token.
 type StateData struct {
+	ProjectID int64
 	Subdomain string
 	Project   string
 	Host      string

@@ -116,8 +116,6 @@ func (s *Server) NewSiteHandler() http.Handler {
 			http.Error(w, "deployment storage unavailable", 503)
 			return
 		}
-		s.deploymentMu.RLock()
-		defer s.deploymentMu.RUnlock()
 		if target := s.requestSiteTarget(r); target != nil && target.Kind != "production" {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		}
@@ -125,15 +123,22 @@ func (s *Server) NewSiteHandler() http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/_droply/") {
 			w.Header().Set("Cache-Control", "private, no-store")
 		}
+		// OAuth callback performs remote I/O and never selects an artifact.
+		// Its handler revalidates the destination after the network exchange.
+		if r.Method == http.MethodGet && r.URL.Path == "/_droply/wework/callback" {
+			s.weworkCallbackHandler(w, r)
+			return
+		}
+		// Protect the selected artifact from publication cleanup/GC until the
+		// response is complete. Moving only OAuth out preserves reader safety.
+		s.deploymentMu.RLock()
+		defer s.deploymentMu.RUnlock()
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/_droply/login":
 			s.siteLoginHandler(w, r, rl)
 			return
 		case r.Method == http.MethodGet && r.URL.Path == "/_droply/wework/auth":
 			s.weworkAuthHandler(w, r)
-			return
-		case r.Method == http.MethodGet && r.URL.Path == "/_droply/wework/callback":
-			s.weworkCallbackHandler(w, r)
 			return
 		}
 		s.siteHandler(w, r)
