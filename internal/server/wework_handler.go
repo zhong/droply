@@ -64,7 +64,8 @@ func (s *Server) weworkAuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve host to find subdomain/project.
-	subdomainName, customProject, ok := s.resolveHost(host)
+	identity, ok := s.resolveHost(r.Context(), host)
+	subdomainName, customProject := identity.subdomain, identity.project
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -170,7 +171,8 @@ func (s *Server) weworkCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// while validating the current destination and issuing its cookie.
 	s.deploymentMu.RLock()
 	defer s.deploymentMu.RUnlock()
-	subdomainName, customProject, ok := s.resolveHost(stateData.Host)
+	identity, ok := s.resolveHost(r.Context(), stateData.Host)
+	subdomainName, customProject := identity.subdomain, identity.project
 	if !ok || subdomainName != stateData.Subdomain ||
 		(stateData.IsCustom && customProject != stateData.Project) ||
 		(!stateData.IsCustom && customProject != "") {

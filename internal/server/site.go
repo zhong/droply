@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -72,11 +71,10 @@ func (s *Server) NewSiteHandler() http.Handler {
 			http.Error(w, "deployment storage unavailable", 503)
 			return
 		}
-		if target := s.requestSiteTarget(r); target != nil && target.Kind != "production" {
-			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		}
-
 		if strings.HasPrefix(r.URL.Path, "/_droply/") {
+			if target := s.requestSiteTarget(r); target != nil && target.Kind != "production" {
+				w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+			}
 			w.Header().Set("Cache-Control", "private, no-store")
 		}
 		// OAuth callback performs remote I/O and never selects an artifact.
@@ -101,52 +99,20 @@ func (s *Server) NewSiteHandler() http.Handler {
 	}))
 }
 
-// resolveHost resolves the Host header to a subdomain name and optional project name.
-// For subdomain hosts like alice.droplydoc.com, it returns (alice, "", true).
-// For custom domains, it looks up the domain in the store and returns (subdomain, project, true).
-// For unknown hosts, it returns ("", "", false).
-func (s *Server) resolveHost(host string) (subdomainName, projectName string, ok bool) {
-	// Strip port if present.
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
-
-	// Check if it's a subdomain of baseDomain.
-	suffix := "." + s.baseDomain
-	if strings.HasSuffix(host, suffix) {
-		sub := strings.TrimSuffix(host, suffix)
-		if sub != "" && !strings.Contains(sub, ".") {
-			if target, err := s.store.GetSiteTarget(context.Background(), sub); err == nil {
-				return target.SubdomainName, target.ProjectName, true
-			}
-			return sub, "", true
-		}
-	}
-
-	// Check custom domains.
-	domains, err := s.store.ListAllVerifiedDomainsWithPaths()
-	if err != nil {
-		return "", "", false
-	}
-	for _, d := range domains {
-		if strings.EqualFold(d.Domain, host) {
-			return d.SubdomainName, d.ProjectName, true
-		}
-	}
-
-	return "", "", false
-}
-
 // siteHandler serves site content, enforcing access rules.
 func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 
-	subdomainName, customProject, ok := s.resolveHost(host)
+	identity, ok := s.resolveHost(r.Context(), host)
+	subdomainName, customProject := identity.subdomain, identity.project
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+
+	preview := identity.target != nil && identity.target.Kind != "production"
+	if preview {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	}
 
 	// Verify the subdomain still exists in the database.
@@ -184,7 +150,8 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := s.store.GetProject(sub.ID, projectName); err != nil {
+	project, err := s.store.GetProject(sub.ID, projectName)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -196,6 +163,17 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resolved := siteRequest{
+		subdomain: sub,
+		project:   project,
+		target:    identity.target,
+		path:      servePath,
+		private:   rule != nil || strings.HasPrefix(r.URL.Path, "/_droply/"),
+		preview:   preview,
+	}
+	if !isCustomDomain {
+		resolved.prefix = "/" + projectName
+	}
 	if rule != nil {
 		w.Header().Set("Cache-Control", "private, no-store")
 		w.Header().Add("Vary", "Cookie")
@@ -214,7 +192,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 			clientIP := getClientIP(r)
 			if isIPAllowed(clientIP, rule.AllowedIPs) {
 				// IP is whitelisted, serve directly.
-				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
+				s.serveFile(w, r, resolved)
 				return
 			}
 			// If no other auth method, block.
@@ -227,7 +205,7 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 		// Check cookie (works for both password and WeWork sessions).
 		if rule.HasPassword || rule.WeWorkEnabled {
 			if s.isValidAccessCookie(r, subdomainName, projectName, isCustomDomain, rule) {
-				s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
+				s.serveFile(w, r, resolved)
 				return
 			}
 			// Auto-redirect to WeCom OAuth when the rule has only WeCom enabled
@@ -253,28 +231,23 @@ func (s *Server) siteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No rule — serve directly.
-	s.serveFile(w, r, sub.ID, subdomainName, projectName, servePath)
+	s.serveFile(w, r, resolved)
 }
 
-// serveFile serves a static file from the sites directory.
-func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID int64, subdomain, project, servePath string) {
-	proj, err := s.store.GetProject(subdomainID, project)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	var deployment *model.Deployment
-	target := s.requestSiteTarget(r)
-	if target != nil && target.DeploymentID != 0 {
-		deployment, err = s.store.GetDeploymentByID(r.Context(), target.DeploymentID)
+// serveFile selects the current deployment after visitor authorization. The caller
+// holds deploymentMu for the entire response, protecting its artifact from GC.
+func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, resolved siteRequest) {
+	var err error
+	if resolved.target != nil && resolved.target.DeploymentID != 0 {
+		resolved.deployment, err = s.store.GetDeploymentByID(r.Context(), resolved.target.DeploymentID)
 	} else {
-		deployment, err = s.store.GetActiveDeployment(r.Context(), proj.ID)
+		resolved.deployment, err = s.store.GetActiveDeployment(r.Context(), resolved.project.ID)
 	}
-	if err != nil || !deployment.Available {
+	if err != nil || !resolved.deployment.Available {
 		http.NotFound(w, r)
 		return
 	}
-	root := s.artifacts.Path(deployment.ArtifactID)
+	root := s.artifacts.Path(resolved.deployment.ArtifactID)
 	if root == "" {
 		http.Error(w, "artifact unavailable", 503)
 		return
@@ -284,16 +257,10 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, subdomainID i
 		http.Error(w, "invalid static site configuration", 503)
 		return
 	}
-	prefix := ""
-	if _, custom, _ := s.resolveHost(r.Host); custom == "" {
-		prefix = "/" + project
-	}
-	site.ServeHTTP(w, r, staticweb.Options{Path: servePath, Prefix: prefix, Private: strings.Contains(w.Header().Get("Cache-Control"), "no-store"), Preview: target != nil && target.Kind != "production", ETagSeed: deployment.Checksum})
-
-	// Record visit asynchronously after serving the file.
-	if shouldTrack(servePath) {
-		normalizedPath := normalizePath(servePath)
-		s.recordVisit(subdomainID, project, normalizedPath, getClientIP(r), r.Referer(), r.UserAgent())
+	site.ServeHTTP(w, r, staticweb.Options{Path: resolved.path, Prefix: resolved.prefix,
+		Private: resolved.private, Preview: resolved.preview, ETagSeed: resolved.deployment.Checksum})
+	if shouldTrack(resolved.path) {
+		s.recordVisit(resolved.subdomain.ID, resolved.project.Name, normalizePath(resolved.path), getClientIP(r), r.Referer(), r.UserAgent())
 	}
 }
 
@@ -337,7 +304,8 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ip
 	}
 
 	// Resolve the host to find subdomain/project.
-	subdomainName, customProject, ok := s.resolveHost(host)
+	identity, ok := s.resolveHost(r.Context(), host)
+	subdomainName, customProject := identity.subdomain, identity.project
 	if !ok {
 		http.NotFound(w, r)
 		return
