@@ -62,7 +62,7 @@ func setupProtectedSite(t *testing.T, srv *server.Server, sitesDir string) (toke
 	})
 
 	// Set password access rule.
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/alice/projects/docs/access", bytes.NewReader(accessBody))
@@ -75,7 +75,7 @@ func setupProtectedSite(t *testing.T, srv *server.Server, sitesDir string) (toke
 		t.Fatalf("set access: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode access response: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestSiteHandlerIPBlocked(t *testing.T) {
 	})
 
 	// Set IP-only access rule (only allow 10.0.0.1).
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"allowed_ips": []string{"10.0.0.1"},
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/ipsite/projects/proj/access", bytes.NewReader(accessBody))
@@ -327,7 +327,7 @@ func TestSiteHandlerIPAllowed(t *testing.T) {
 	})
 
 	// Set IP-only access rule.
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"allowed_ips": []string{"10.0.0.0/8"},
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/ipallow/projects/proj/access", bytes.NewReader(accessBody))
@@ -560,7 +560,7 @@ func TestSiteHandlerCookieInvalidAfterPasswordChange(t *testing.T) {
 	}
 
 	// Step 3: Change the password via API.
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"password": "newpassword12345",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/alice/projects/docs/access", bytes.NewReader(accessBody))
@@ -620,7 +620,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 	})
 
 	// Set SUBDOMAIN-level password rule.
-	accessBody, _ := json.Marshal(map[string]interface{}{
+	accessBody, _ := json.Marshal(map[string]any{
 		"password": "subdomainpass1",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))
@@ -634,7 +634,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 	}
 
 	// ALSO set PROJECT-level password rule (different password).
-	accessBody, _ = json.Marshal(map[string]interface{}{
+	accessBody, _ = json.Marshal(map[string]any{
 		"password": "projectpass12",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/projects/app/access", bytes.NewReader(accessBody))
@@ -691,7 +691,7 @@ func TestSiteHandlerSubdomainCookieWithProjectRule(t *testing.T) {
 	}
 
 	// Now change the SUBDOMAIN password — subdomain-scoped cookie should be invalidated.
-	accessBody, _ = json.Marshal(map[string]interface{}{
+	accessBody, _ = json.Marshal(map[string]any{
 		"password": "newsubpass123",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/bob/access", bytes.NewReader(accessBody))

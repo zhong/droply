@@ -267,7 +267,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, resolved site
 // renderLoginPage renders the login page template, showing password and/or WeWork buttons based on rule.
 func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *model.AccessRule, errorMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Error":        errorMsg,
 		"Redirect":     r.URL.RequestURI(),
 		"Host":         r.Host,

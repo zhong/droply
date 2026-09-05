@@ -27,7 +27,7 @@ func TestSetSubdomainAccess(t *testing.T) {
 	token := registerAndGetToken(t, srv, "access@example.com", "password123")
 	createSubdomain(t, srv, token, "mysite")
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/mysite/access", bytes.NewReader(body))
@@ -41,7 +41,7 @@ func TestSetSubdomainAccess(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGetSubdomainAccess(t *testing.T) {
 	createSubdomain(t, srv, token, "getsite")
 
 	// Set access first.
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/getsite/access", bytes.NewReader(body))
@@ -86,7 +86,7 @@ func TestGetSubdomainAccess(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestDeleteSubdomainAccess(t *testing.T) {
 	createSubdomain(t, srv, token, "delsite")
 
 	// Set access.
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/delsite/access", bytes.NewReader(body))
@@ -149,7 +149,7 @@ func TestSetAccessForbiddenForNonOwner(t *testing.T) {
 	otherToken := registerAndGetToken(t, srv, "other@example.com", "password123")
 	createSubdomain(t, srv, ownerToken, "ownersite")
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/ownersite/access", bytes.NewReader(body))
@@ -170,7 +170,7 @@ func TestSetAccessValidation(t *testing.T) {
 	createSubdomain(t, srv, token, "validsite")
 
 	// Empty rule should fail.
-	body, _ := json.Marshal(map[string]interface{}{})
+	body, _ := json.Marshal(map[string]any{})
 	req := httptest.NewRequest(http.MethodPut, "/subdomains/validsite/access", bytes.NewReader(body))
 	req.Host = "api.droplydoc.com"
 	req.Header.Set("Content-Type", "application/json")
@@ -183,7 +183,7 @@ func TestSetAccessValidation(t *testing.T) {
 	}
 
 	// Short password should fail.
-	body, _ = json.Marshal(map[string]interface{}{
+	body, _ = json.Marshal(map[string]any{
 		"password": "short",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/subdomains/validsite/access", bytes.NewReader(body))
@@ -203,7 +203,7 @@ func TestSetAccessLargeTTL(t *testing.T) {
 	token := registerAndGetToken(t, srv, "largettl@example.com", "password123")
 	createSubdomain(t, srv, token, "largettl")
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"auto_password": true,
 		"session_ttl":   315360000, // 10 years
 	})
@@ -218,7 +218,7 @@ func TestSetAccessLargeTTL(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

@@ -73,7 +73,7 @@ func TestCustomDomainCRUD(t *testing.T) {
 		t.Fatalf("create domain: expected 201, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var created map[string]interface{}
+	var created map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create domain response: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCustomDomainCRUD(t *testing.T) {
 		t.Fatalf("list domains: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var domains []map[string]interface{}
+	var domains []map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&domains); err != nil {
 		t.Fatalf("decode list domains response: %v", err)
 	}

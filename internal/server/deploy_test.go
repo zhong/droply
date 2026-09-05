@@ -109,7 +109,7 @@ func TestDeploy(t *testing.T) {
 		t.Fatalf("deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode deploy response: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 		t.Fatalf("first deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp1 map[string]interface{}
+	var resp1 map[string]any
 	json.NewDecoder(rr.Body).Decode(&resp1)
 	if int(resp1["version"].(float64)) != 1 {
 		t.Fatalf("first deploy: expected version=1, got %v", resp1["version"])
@@ -196,7 +196,7 @@ func TestRedeployOverwritesFiles(t *testing.T) {
 		t.Fatalf("second deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp2 map[string]interface{}
+	var resp2 map[string]any
 	json.NewDecoder(rr.Body).Decode(&resp2)
 	if int(resp2["version"].(float64)) != 2 {
 		t.Fatalf("second deploy: expected version=2, got %v", resp2["version"])
@@ -307,7 +307,7 @@ func TestDeployWithFileInfoHeader(t *testing.T) {
 		t.Fatalf("deploy: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	json.NewDecoder(rr.Body).Decode(&resp)
 	t.Logf("deploy response: %+v", resp)
 

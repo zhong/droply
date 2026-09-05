@@ -33,7 +33,7 @@ func TestSubdomainCRUD(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("list subdomains: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	var subs []map[string]interface{}
+	var subs []map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&subs); err != nil {
 		t.Fatalf("list subdomains: decode response: %v", err)
 	}
