@@ -26,12 +26,20 @@ type DeploymentOptions struct {
 	OrphanGrace      time.Duration
 }
 
-func (s *Server) SetDeploymentOptions(options DeploymentOptions) error {
+// Validate checks limits without opening storage or initializing deployments.
+func (options DeploymentOptions) Validate() error {
 	if options.MaxExpandedBytes < 0 || options.MaxFiles < 0 || options.MaxStorageBytes < 0 || options.RetainCount < 0 || options.RetainDays < 0 || options.OrphanGrace < 0 {
 		return errors.New("deployment limits and retention must not be negative")
 	}
 	if options.RetainDays > 100000 {
 		return errors.New("deployment retention days must not exceed 100000")
+	}
+	return nil
+}
+
+func (s *Server) SetDeploymentOptions(options DeploymentOptions) error {
+	if err := options.Validate(); err != nil {
+		return err
 	}
 	s.deploymentOptions = options
 	return nil

@@ -7,22 +7,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/zhong/droply/internal/hosting"
 )
 
-// This structural step retains the existing validation order. The follow-up
-// preflight change will intentionally move the late failures before data writes.
+// Invalid configuration must fail before creating persistent state.
 func TestStartupValidationOrderAndFailureCleanup(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		args       []string
-		failure    string
-		dataOpened bool
+		name    string
+		args    []string
+		failure string
 	}{
-		{"base domain", []string{"--domain", "invalid"}, "invalid base domain", false},
-		{"proxy", []string{"--trusted-proxies", "invalid"}, "trusted proxy", true},
-		{"WeCom", []string{"--wework-corp-id", "corp"}, "all four WeCom", true},
+		{"base domain", []string{"--domain", "invalid"}, "invalid base domain"},
+		{"proxy", []string{"--trusted-proxies", "invalid"}, "trusted proxy"},
+		{"WeCom", []string{"--wework-corp-id", "corp"}, "all four WeCom"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DROPLY_WEWORK_CORP_ID", "")
@@ -36,17 +32,8 @@ func TestStartupValidationOrderAndFailureCleanup(t *testing.T) {
 			}
 			for _, file := range []string{"droply.db", "hmac.key"} {
 				_, err := os.Stat(filepath.Join(data, file))
-				if tc.dataOpened && err != nil || !tc.dataOpened && !os.IsNotExist(err) {
-					t.Fatalf("%s: expected dataOpened=%t, stat=%v", file, tc.dataOpened, err)
-				}
-			}
-			if tc.dataOpened {
-				lock, err := hosting.LockDataDirectory(data)
-				if err != nil {
-					t.Fatalf("failed startup leaked data lock: %v", err)
-				}
-				if err := lock.Close(); err != nil {
-					t.Fatal(err)
+				if !os.IsNotExist(err) {
+					t.Fatalf("%s: invalid config created persistent state: %v", file, err)
 				}
 			}
 		})
