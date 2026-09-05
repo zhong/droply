@@ -250,7 +250,7 @@ func (m *Manager) obtain(ctx context.Context, host string, renew bool) (*tls.Cer
 	m.mu.Lock()
 	e := m.entries[key]
 	if e == nil {
-		e = &entry{storedCertificate: storedCertificate{Hosts: []string{host}}}
+		e = &entry{Hosts: []string{host}}
 		m.entries[key] = e
 	}
 	m.remember(e, host)

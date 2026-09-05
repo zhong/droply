@@ -162,7 +162,7 @@ func TestExpiredCertificateIsNotServedAndRevokedIsNotRenewed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.entries["example.com"] = &entry{storedCertificate: storedCertificate{Hosts: []string{"example.com"}}, cert: &cert}
+	m.entries["example.com"] = &entry{Hosts: []string{"example.com"}, cert: &cert}
 	now = cert.Leaf.NotAfter.Add(time.Second)
 	if _, err = m.GetCertificate(&tls.ClientHelloInfo{ServerName: "example.com"}); err == nil {
 		t.Fatal("expired certificate served")
