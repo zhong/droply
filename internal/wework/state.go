@@ -9,12 +9,12 @@ import (
 
 // StateData carries information associated with an OAuth state token.
 type StateData struct {
-	Subdomain  string
-	Project    string
-	Host       string
-	Redirect   string
-	IsCustom   bool
-	ExpiresAt  time.Time
+	Subdomain string
+	Project   string
+	Host      string
+	Redirect  string
+	IsCustom  bool
+	ExpiresAt time.Time
 }
 
 // StateStore is a thread-safe in-memory store for OAuth state tokens with TTL.
@@ -25,13 +25,12 @@ type StateStore struct {
 }
 
 // NewStateStore creates a new state store with the given TTL.
-// A background goroutine periodically cleans up expired entries.
+// Expired entries are reclaimed during use; no background worker is needed.
 func NewStateStore(ttl time.Duration) *StateStore {
 	s := &StateStore{
 		states: make(map[string]StateData),
 		ttl:    ttl,
 	}
-	go s.cleanup()
 	return s
 }
 
@@ -46,6 +45,7 @@ func (s *StateStore) Generate(data StateData) (string, error) {
 	data.ExpiresAt = time.Now().Add(s.ttl)
 
 	s.mu.Lock()
+	s.cleanupLocked()
 	s.states[token] = data
 	s.mu.Unlock()
 
@@ -69,16 +69,11 @@ func (s *StateStore) Consume(token string) (StateData, bool) {
 	return data, true
 }
 
-func (s *StateStore) cleanup() {
-	for {
-		time.Sleep(5 * time.Minute)
-		s.mu.Lock()
-		now := time.Now()
-		for token, data := range s.states {
-			if now.After(data.ExpiresAt) {
-				delete(s.states, token)
-			}
+func (s *StateStore) cleanupLocked() {
+	now := time.Now()
+	for token, data := range s.states {
+		if now.After(data.ExpiresAt) {
+			delete(s.states, token)
 		}
-		s.mu.Unlock()
 	}
 }

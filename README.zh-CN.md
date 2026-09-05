@@ -6,31 +6,15 @@
 
 ## 架构
 
-```
-CLI (droply)                         Browser
-     |                                  |
-     | upload tar.gz                    | HTTPS
-     v                                  v
-+-------------------------------------------------+
-|                Caddy (443/80)                    |
-|          Auto HTTPS + Wildcard TLS               |
-+-------------------+-----------------------------+
-| api.droplydoc.com |  *.droplydoc.com            |
-| reverse_proxy     |  file_server / reverse_proxy|
-|    :8080          |  :8081 (受保护站点)          |
-+--------+----------+-----------------------------+
-         |
-         v
-+------------------+    +-----------------+
-|  droply-server   |--->|     SQLite      |
-|  API :8080       |    |   droply.db     |
-|  Site :8081      |    +-----------------+
-+------------------+
+```text
+CLI / Browser → Droply HTTP + HTTPS
+                    ├─ api.example.com → authentication / deployment API
+                    └─ site hosts      → access control / files / statistics
+                                         ↓
+                                    SQLite + disk
 ```
 
-- **Caddy** — TLS 终止、自动 HTTPS（通配符 + 自定义域名）、API 反代、静态文件服务、受保护站点反代
-- **droply-server** — 用户认证、上传处理、元数据管理、访问控制、通过 Caddy Admin API 动态更新路由
-- **droply** — CLI 客户端，打包目录并上传
+Droply 单进程提供 API、静态文件服务和 HTTPS，外部网关可选。所有站点使用同一个访问控制入口。
 
 ## 快速开始
 
@@ -120,289 +104,84 @@ droply deploy
 
 ## 服务端部署
 
-### 一键部署
+新安装仅运行 `droply-server`，无需 Caddy。已有安装先阅读 [M0 迁移与恢复指南](docs/migration-m0.md)，不要直接覆盖服务文件。
 
-在全新 VPS（Ubuntu/Debian）上一键部署完整的 droply 服务端：
+### Linux 安装
 
-```bash
-curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-```
-
-脚本会提示你选择 **TLS 模式**：
-
-| 模式 | 适用场景 | 要求 |
-|------|----------|------|
-| **on-demand**（默认） | 大多数用户、新增子域 <50 张/周 | 80 + 443 端口可达、A 记录指向服务器 |
-| **cloudflare** | 大量子域，或 80 端口不可用 | Cloudflare API Token |
-| **manual** | 企业 PKI、自建 CA、隔离环境 | 自带证书文件 |
-
-**on-demand 模式**（推荐）**无需任何 DNS API 配置** —— 只要把 A 记录指向服务器即可，无论 DNS 在哪家服务商（阿里云/腾讯云/GoDaddy/公司 DNS）。Caddy 在每个子域名首次访问时通过 HTTP-01 challenge 自动签发独立证书（首次访问延迟 2-5 秒，之后立即返回）。
-
-非交互式部署：
+下载脚本后将环境变量传给执行脚本的进程：
 
 ```bash
-# on-demand 模式（默认）
-DOMAIN=example.com TLS_MODE=on-demand curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-
-# cloudflare 模式（通配符证书）
-DOMAIN=example.com TLS_MODE=cloudflare CF_API_TOKEN=xxx curl -fsSL https://droplydoc.com/setup.sh | sudo bash
-
-# manual 模式（自带证书）
-DOMAIN=example.com TLS_MODE=manual CERT_PATH=/path/to/cert.pem KEY_PATH=/path/to/key.pem \
-  curl -fsSL https://droplydoc.com/setup.sh | sudo bash
+curl -fsSL https://droplydoc.com/setup.sh -o setup.sh
+sudo env DOMAIN=example.com TLS_MODE=auto ACME_EMAIL=admin@example.com sh setup.sh
 ```
 
-### TLS 模式对比
+脚本安装发行版并强制核验 checksum，创建独立的 `droply` 用户和 systemd 服务；默认使用 80/443。先将根域名、`*.example.com` 和 `api.example.com` 指向服务器。脚本检查监听端口，遇到已有服务、环境文件或数据目录会停止，不会覆盖或卸载已有代理。
 
-```
-┌──────────────────┬──────────────┬────────────────┬─────────────────┐
-│                  │ On-Demand    │ Cloudflare     │ Manual          │
-├──────────────────┼──────────────┼────────────────┼─────────────────┤
-│ 需要 DNS API     │ 否           │ 是             │ 否              │
-│ 需要 80 端口     │ 是           │ 否             │ 否              │
-│ 证书类型         │ 单子域名     │ 通配符         │ 用户自带        │
-│ 首次访问延迟     │ 2-5 秒       │ 无             │ 无              │
-│ LE 限流影响      │ 50/周/注册域 │ 不受影响       │ 不适用          │
-│ 子域规模         │ 数百         │ 无限           │ 受证书限制      │
-└──────────────────┴──────────────┴────────────────┴─────────────────┘
-```
-
-**如何选择：**
-
-- **on-demand**：大多数部署的默认选择。和任何 DNS 服务商兼容（无需 API 集成），只需配置 A 记录即可使用。
-- **cloudflare**：有大量子域（数百以上）或需要关闭 80 端口（如企业防火墙限制）时使用。需要 Cloudflare DNS 和 API Token。
-- **manual**：使用企业内部 PKI、自定义证书颁发机构或隔离网络环境。
-
-<details>
-<summary>手动部署</summary>
-
-### 前置条件
-
-- 一台 VPS（推荐 Ubuntu/Debian）
-- 一个域名（如 `droplydoc.com`），DNS 已配置：
-  - `A` 记录：`droplydoc.com` → 服务器 IP
-  - `A` 记录：`*.droplydoc.com` → 服务器 IP
-  - `A` 记录：`api.droplydoc.com` → 服务器 IP
-- 安装 [Caddy](https://caddyserver.com/docs/install)
-
-### 1. 安装 Caddy
-
-**on-demand 或 manual 模式**（大多数用户）：
+其他模式：
 
 ```bash
-curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
-sudo mv /tmp/caddy /usr/bin/caddy
-sudo chmod +x /usr/bin/caddy
+# Cloudflare DNS 通配符证书：令牌放在受保护的文件中
+sudo env DOMAIN=example.com TLS_MODE=cloudflare \
+  CF_TOKEN_FILE=/root/cloudflare-token ACME_EMAIL=admin@example.com sh setup.sh
+
+# 自带证书，必须包含 api.example.com，站点域名也需被证书覆盖
+sudo env DOMAIN=example.com TLS_MODE=manual \
+  CERT_PATH=/root/cert.pem KEY_PATH=/root/key.pem sh setup.sh
+
+# 接在已有网关后，默认仅监听 loopback；按实际网关网段设置可信代理
+sudo env DOMAIN=example.com TLS_MODE=http HTTP_ADDR=127.0.0.1:8080 \
+  TRUSTED_PROXIES=127.0.0.1/32 sh setup.sh
+
+# 安装本地构建的服务器二进制，不访问发行下载服务
+sudo env DOMAIN=example.com TLS_MODE=auto \
+  LOCAL_BINARY="$PWD/bin/droply-server" sh setup.sh
 ```
 
-**cloudflare 模式**（通配符证书，需要 DNS-01）：
+`UPGRADE=1` 只备份并替换已有二进制，保留服务、环境、数据与证书，不自动重启。切换前按照迁移指南备份数据库和内容。`VERSION=vX.Y.Z` 可指定发行版；`DATA_DIR` 可指定新数据目录；`ACME_CA` 可使用 ACME 测试环境。
+
+### 直接启动
 
 ```bash
-# 如未安装 Go
-curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
-export PATH="/usr/local/go/bin:$PATH"
+# 单域名自动 HTTPS，证书存放于 data-dir/certificates
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :80 --https-addr :443 --tls-mode auto --acme-email admin@example.com
 
-# 安装 xcaddy 并编译带 Cloudflare DNS 模块的 Caddy
-go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-~/go/bin/xcaddy build --with github.com/caddy-dns/cloudflare
-sudo mv caddy /usr/bin/caddy
+# DNS 通配符 HTTPS
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :80 --tls-mode cloudflare --cloudflare-token-file ./cloudflare-token
+
+# 自带证书
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr :8080 --https-addr :8443 --tls-mode manual --tls-cert ./cert.pem --tls-key ./key.pem
+
+# HTTP，由可选的已有网关终止 TLS
+./bin/droply-server --domain example.com --data-dir ./data \
+  --addr 127.0.0.1:8080 --tls-mode http --trusted-proxies 127.0.0.1/32
 ```
 
-### 2. TLS 配置
+80/443 需要相应绑定权限；安装脚本通过 systemd 授予 `CAP_NET_BIND_SERVICE`。自动单域名模式需要公网 ACME 验证可达；Cloudflare DNS 模式需要 `Zone:DNS:Edit` 与 `Zone:Zone:Read` 权限，并覆盖实际签发域名所属的 zone。手动证书由管理员续期并重启服务加载。
 
-从下面三种模式中选择一种。
-
-#### 方案 A：On-Demand TLS（推荐）
-
-Caddy 在子域名首次访问时自动签发证书。需要 80 + 443 端口可达。
-
-创建 `/etc/caddy/Caddyfile`：
-
-```caddyfile
-{
-    admin localhost:2019
-    on_demand_tls {
-        ask http://localhost:8080/_droply/tls-check
-    }
-}
-
-*.droplydoc.com, droplydoc.com {
-    tls {
-        on_demand
-    }
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    tls {
-        on_demand
-    }
-    reverse_proxy localhost:8080
-}
-```
-
-#### 方案 B：Cloudflare DNS（通配符证书）
-
-一张通配符证书覆盖所有子域。需要 Cloudflare API Token。
-
-1. 在 [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) 创建 API Token
-   - **Permissions**：Zone → DNS → Edit
-   - **Zone Resources**：Include → Specific zone → `droplydoc.com`
-
-2. 保存 Token：
-
-```bash
-sudo tee /etc/caddy/env > /dev/null << 'EOF'
-CLOUDFLARE_API_TOKEN=你的-token
-EOF
-sudo chmod 600 /etc/caddy/env
-```
-
-3. 创建 `/etc/caddy/Caddyfile`：
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-*.droplydoc.com {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    reverse_proxy localhost:8080
-}
-```
-
-#### 方案 C：Manual（自带证书）
-
-使用自己的证书文件（例如来自企业 PKI）。
-
-```bash
-# 将证书和私钥复制到 /etc/caddy/
-sudo cp /path/to/cert.pem /etc/caddy/cert.pem
-sudo cp /path/to/key.pem /etc/caddy/key.pem
-sudo chmod 600 /etc/caddy/key.pem
-```
-
-创建 `/etc/caddy/Caddyfile`：
-
-```caddyfile
-{
-    admin localhost:2019
-}
-
-*.droplydoc.com {
-    tls /etc/caddy/cert.pem /etc/caddy/key.pem
-    reverse_proxy localhost:8081
-}
-
-api.droplydoc.com {
-    tls /etc/caddy/cert.pem /etc/caddy/key.pem
-    reverse_proxy localhost:8080
-}
-```
-
-### 3. 部署 droply-server
-
-```bash
-# 创建数据目录
-sudo mkdir -p /data/droply/sites
-
-# 下载最新版本
-VERSION=$(curl -fsSL https://api.github.com/repos/zhong/droply/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-curl -fsSL -o /tmp/droply-server "https://github.com/zhong/droply/releases/download/${VERSION}/droply-server-linux-amd64"
-sudo mv /tmp/droply-server /usr/local/bin/droply-server
-sudo chmod +x /usr/local/bin/droply-server
-
-# 创建 systemd 服务
-sudo tee /etc/systemd/system/droply.service > /dev/null << 'EOF'
-[Unit]
-Description=Droply Static Publishing Server
-After=network.target caddy.service
-
-[Service]
-ExecStart=/usr/local/bin/droply-server \
-  --addr :8080 \
-  --site-addr :8081 \
-  --data-dir /data/droply \
-  --domain droplydoc.com \
-  --caddy-admin http://localhost:2019
-Restart=always
-User=www-data
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now droply
-```
-
-#### 服务端启动参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--addr` | `:8080` | API 监听地址 |
-| `--site-addr` | `:8081` | 站点服务监听地址（受保护站点） |
-| `--data-dir` | `/data/droply` | 数据目录（数据库 + 静态文件） |
+| 参数 | 默认值 | 用途 |
+|---|---|---|
+| `--addr` | `:8080` | API 与站点统一 HTTP 入口，auto 通常设 `:80` |
+| `--https-addr` | `:443` | HTTPS 入口 |
+| `--tls-mode` | `http` | `http` / `manual` / `auto` / `cloudflare` |
 | `--domain` | `droplydoc.com` | 基础域名 |
-| `--caddy-admin` | `http://localhost:2019` | Caddy Admin API 地址 |
-| `--hmac-secret` | （自动生成） | Cookie 签名密钥（留空则自动生成并持久化到 `hmac.key`） |
-| `--wework-corp-id` | | 企业微信 Corp ID（可选，扫码登录） |
-| `--wework-agent-id` | | 企业微信 Agent ID（可选） |
-| `--wework-secret` | | 企业微信 Agent Secret（可选） |
-| `--wework-redirect-uri` | | 企业微信 OAuth 回调 URL（可选） |
+| `--data-dir` | `/data/droply` | 数据库、内容、持久化会话签名密钥 |
+| `--cert-dir` | 数据目录下 `certificates` | ACME 账户与证书存储 |
+| `--tls-cert`, `--tls-key` | 空 | 手动 PEM 证书与私钥 |
+| `--acme-email`, `--acme-ca` | 空 / Let's Encrypt production | ACME 账户邮箱与服务地址 |
+| `--cloudflare-token-file` | 空 | DNS API 令牌文件，也支持 `DROPLY_CLOUDFLARE_API_TOKEN` |
+| `--trusted-proxies` | 空 | 可信代理 CIDR 列表；默认忽略转发 IP |
+| `--hmac-secret` | 自动持久化 | 保留旧的显式会话签名密钥 |
+| `--log-retention-days` | `30` | 访问明细保留天数 |
 
-### 4. 启动 Caddy
-
-```bash
-# 创建 Caddy systemd 服务
-sudo tee /etc/systemd/system/caddy.service > /dev/null << 'EOF'
-[Unit]
-Description=Caddy
-After=network.target network-online.target
-Requires=network-online.target
-
-[Service]
-Type=notify
-ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
-TimeoutStopSec=5s
-LimitNOFILE=1048576
-PrivateTmp=true
-ProtectSystem=full
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-EnvironmentFile=-/etc/caddy/env
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now caddy
-```
-
-### 5. 验证
+完整参数见 `droply-server --help`。正常 HTTP 退出最多等待 15 秒；进行中的 DNS 操作可能延迟退出至库超时（最长约 5 分钟），安装的服务预留 360 秒。`--site-addr` 暂时作为额外统一 HTTP 监听兼容旧服务，`--caddy-admin` 被忽略；新安装不应使用它们。`on-demand` 是 `auto` 的兼容名称。
 
 ```bash
-# 检查服务状态
-sudo systemctl status droply caddy
-
-# 测试 API
-curl https://api.droplydoc.com
-
-# 查看日志
+sudo systemctl status droply
 sudo journalctl -u droply -f
-sudo journalctl -u caddy -f
 ```
-
-droply-server 启动时会通过 Caddy Admin API 自动注册自定义域名路由。
-
-</details>
 
 ### 数据目录结构
 
@@ -602,7 +381,7 @@ droply domain list --sub alice --project blog
 droply domain remove blog.example.com --sub alice --project blog
 ```
 
-添加自定义域名后，在 DNS 服务商处添加 CNAME 或 A 记录指向输出的目标地址，然后运行 `droply domain verify` 确认。Caddy 会自动为验证通过的自定义域名申请 HTTPS 证书。
+添加自定义域名后，在 DNS 服务商处添加 CNAME 或 A 记录指向输出的目标地址，然后运行 `droply domain verify` 确认。还需发布 CLI 输出的 `_droply-verification` 专属 TXT 记录，再重试验证；仅 A/CNAME 指向服务器不能证明所有权。Droply 只服务已验证绑定，并允许为其申请自动证书。
 
 ### 访问控制
 
@@ -652,7 +431,7 @@ droply access remove --subdomain alice --project blog
 - **组合使用**：同时配置多种方式时，**任一通过即可访问**（OR 逻辑）。IP 先校验；未命中则展示登录页，按配置显示密码框和/或扫码按钮
 - **规则优先级**：项目级规则完全覆盖子域名级规则
 
-受保护的站点会通过 Caddy 反代到 droply-server 的站点服务端口（`:8081`），由 server 处理验证逻辑。
+所有站点（包括自定义域名）经过 Droply 统一访问控制。受保护响应使用 `Cache-Control: private, no-store`；项目规则覆盖子域会话。
 
 ### 企业微信扫码登录
 
@@ -715,7 +494,7 @@ droply access set --subdomain alice --project docs \
 | Cookie 签名 | HMAC-SHA256 |
 | 限流 | golang.org/x/time/rate |
 | 配置文件 | TOML |
-| 反向代理/HTTPS | Caddy |
+| HTTP/HTTPS | Go net/http + lego/ACME |
 
 ## License
 

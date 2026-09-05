@@ -14,6 +14,13 @@ cli:
 test:
 	go test ./...
 
+.PHONY: test-integration test-acme
+test-integration:
+	CGO_ENABLED=0 go test -tags=integration ./...
+
+test-acme:
+	sh scripts/test-acme.sh
+
 clean:
 	rm -rf bin/ dist/
 

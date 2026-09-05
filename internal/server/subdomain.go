@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/zhong/droply/internal/model"
 	"github.com/go-chi/chi/v5"
+	"github.com/zhong/droply/internal/model"
 )
 
 // nameRegex validates subdomain names: lowercase alphanumeric, hyphens allowed in middle,
@@ -26,7 +26,7 @@ type createSubdomainRequest struct {
 }
 
 // handleCreateSubdomain validates the name, creates the subdomain record in the store,
-// optionally registers it with Caddy, and returns 201 with the new subdomain.
+// and returns 201 with the new subdomain.
 func (s *Server) handleCreateSubdomain(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 
@@ -71,7 +71,7 @@ func (s *Server) handleListSubdomains(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteSubdomain verifies the user owns the subdomain, deletes it from the store,
-// removes it from Caddy, and returns 204.
+// and returns 204.
 func (s *Server) handleDeleteSubdomain(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")

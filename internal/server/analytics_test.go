@@ -20,7 +20,7 @@ func newAnalyticsServer(t *testing.T) (*server.Server, *store.SQLiteStore) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-for-testing-1234"), "localhost:8081")
+	srv := server.New(st, "/tmp/sites", "droplydoc.com", []byte("test-hmac-key-for-testing-1234"))
 	return srv, st
 }
 

@@ -1,13 +1,16 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/zhong/droply/internal/model"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 const dtLayout = "2006-01-02 15:04:05"
@@ -21,6 +24,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
+
+	// Keep one persistent connection: SQLite PRAGMAs and in-memory databases are connection-local.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		db.Close()
@@ -39,6 +46,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 	if err := s.migrateWeWork(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate wework: %w", err)
+	}
+	if err := s.migrateDomainVerification(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate domain verification: %w", err)
 	}
 	return s, nil
 }
@@ -493,9 +504,12 @@ func (s *SQLiteStore) getDeploymentByID(id int64) (*model.Deployment, error) {
 
 func (s *SQLiteStore) CreateCustomDomain(projectID int64, domain string) (*model.CustomDomain, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO custom_domains (project_id, domain) VALUES (?, ?)`, projectID, domain,
+		`INSERT INTO custom_domains (project_id, domain, verification_token) VALUES (?, ?, ?)`, projectID, strings.ToLower(strings.TrimSuffix(domain, ".")), rand.Text(),
 	)
 	if err != nil {
+		if sqliteErr, ok := errors.AsType[*sqlite.Error](err); ok && sqliteErr.Code() == 2067 {
+			return nil, ErrDomainTaken
+		}
 		return nil, fmt.Errorf("create custom domain: %w", err)
 	}
 	id, _ := res.LastInsertId()
@@ -504,21 +518,31 @@ func (s *SQLiteStore) CreateCustomDomain(projectID int64, domain string) (*model
 
 func (s *SQLiteStore) GetCustomDomain(domain string) (*model.CustomDomain, error) {
 	row := s.db.QueryRow(
-		`SELECT id, project_id, domain, verified, created_at FROM custom_domains WHERE domain = ?`, domain,
+		`SELECT id, project_id, domain, verified, created_at, verification_token FROM custom_domains WHERE domain = ?`, domain,
 	)
 	return scanCustomDomain(row)
 }
 
 func (s *SQLiteStore) VerifyCustomDomain(domain string) error {
-	_, err := s.db.Exec(
+	res, err := s.db.Exec(
 		`UPDATE custom_domains SET verified = 1 WHERE domain = ?`, domain,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *SQLiteStore) ListCustomDomains(projectID int64) ([]model.CustomDomain, error) {
 	rows, err := s.db.Query(
-		`SELECT id, project_id, domain, verified, created_at FROM custom_domains WHERE project_id = ? ORDER BY created_at DESC`,
+		`SELECT id, project_id, domain, verified, created_at, verification_token FROM custom_domains WHERE project_id = ? ORDER BY created_at DESC`,
 		projectID,
 	)
 	if err != nil {
@@ -531,10 +555,15 @@ func (s *SQLiteStore) ListCustomDomains(projectID int64) ([]model.CustomDomain, 
 		var cd model.CustomDomain
 		var createdAt string
 		var verified int
-		if err := rows.Scan(&cd.ID, &cd.ProjectID, &cd.Domain, &verified, &createdAt); err != nil {
+		if err := rows.Scan(&cd.ID, &cd.ProjectID, &cd.Domain, &verified, &createdAt, &cd.VerificationToken); err != nil {
 			return nil, fmt.Errorf("scan custom domain: %w", err)
 		}
 		cd.Verified = verified == 1
+		cd.Status = "pending"
+		if cd.Verified {
+			cd.Status = "verified"
+		}
+		cd.VerificationRecord = "_droply-verification." + cd.Domain
 		cd.CreatedAt = parseTime(createdAt)
 		result = append(result, cd)
 	}
@@ -575,7 +604,7 @@ func (s *SQLiteStore) ListAllVerifiedDomainsWithPaths() ([]model.DomainWithPath,
 
 func (s *SQLiteStore) getCustomDomainByID(id int64) (*model.CustomDomain, error) {
 	row := s.db.QueryRow(
-		`SELECT id, project_id, domain, verified, created_at FROM custom_domains WHERE id = ?`, id,
+		`SELECT id, project_id, domain, verified, created_at, verification_token FROM custom_domains WHERE id = ?`, id,
 	)
 	return scanCustomDomain(row)
 }
@@ -584,10 +613,15 @@ func scanCustomDomain(row *sql.Row) (*model.CustomDomain, error) {
 	var cd model.CustomDomain
 	var createdAt string
 	var verified int
-	if err := row.Scan(&cd.ID, &cd.ProjectID, &cd.Domain, &verified, &createdAt); err != nil {
+	if err := row.Scan(&cd.ID, &cd.ProjectID, &cd.Domain, &verified, &createdAt, &cd.VerificationToken); err != nil {
 		return nil, fmt.Errorf("scan custom domain: %w", err)
 	}
 	cd.Verified = verified == 1
+	cd.Status = "pending"
+	if cd.Verified {
+		cd.Status = "verified"
+	}
+	cd.VerificationRecord = "_droply-verification." + cd.Domain
 	cd.CreatedAt = parseTime(createdAt)
 	return &cd, nil
 }
@@ -946,4 +980,65 @@ func (s *SQLiteStore) CleanupVisitLogs(retentionDays int) (int64, error) {
 	)
 
 	return affected, nil
+}
+
+// ErrDomainTaken indicates that another binding already owns the hostname.
+var ErrDomainTaken = errors.New("domain already bound")
+
+// Existing verified bindings remain trusted. Pending bindings gain a persistent challenge.
+func (s *SQLiteStore) migrateDomainVerification() error {
+	// Canonicalize legacy names too; uniqueness conflicts stop startup rather than
+	// assigning an ambiguous hostname to an arbitrary project.
+	if _, err := s.db.Exec(`UPDATE custom_domains SET domain = lower(rtrim(trim(domain), '.'))`); err != nil {
+		return fmt.Errorf("normalize legacy domains: %w", err)
+	}
+	cols, err := s.tableColumns("custom_domains")
+	if err != nil {
+		return err
+	}
+	if !cols["verification_token"] {
+		if _, err := s.db.Exec(`ALTER TABLE custom_domains ADD COLUMN verification_token TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	rows, err := s.db.Query(`SELECT id FROM custom_domains WHERE verification_token = ''`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := s.db.Exec(`UPDATE custom_domains SET verification_token = ? WHERE id = ?`, rand.Text(), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// VerifyCustomDomainChallenge atomically binds ownership proof to the current binding.
+func (s *SQLiteStore) VerifyCustomDomainChallenge(domain, token string) error {
+	res, err := s.db.Exec(`UPDATE custom_domains SET verified = 1 WHERE domain = ? AND verification_token = ? AND verification_token != ''`, domain, token)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

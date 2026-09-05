@@ -93,7 +93,7 @@ func newSiteServerWithWeWork(t *testing.T, mockAPIURL string) (*server.Server, s
 	}
 	t.Cleanup(func() { st.Close() })
 	sitesDir := t.TempDir()
-	srv := server.New(st, sitesDir, "droplydoc.com", nil, []byte("test-hmac-secret-key-1234567890"), "localhost:8081")
+	srv := server.New(st, sitesDir, "droplydoc.com", []byte("test-hmac-secret-key-1234567890"))
 
 	weClient := wework.NewClient(wework.Config{
 		CorpID:             "corp-test",
@@ -431,6 +431,7 @@ func TestWeWorkLoginPageButtonHrefIsClickable(t *testing.T) {
 		t.Errorf("expected redirect to WeCom SSO login URL, got %q", rr.Header().Get("Location"))
 	}
 }
+
 // TestWeWorkCallbackCrossSubdomainRedirect verifies the fix for a 404 that
 // occurred in production (login.example.com/vpn/) when:
 //   - User starts login on its.example.com (state stored with this host)
@@ -571,28 +572,28 @@ func TestWeWorkAuthDispatchByUserAgent(t *testing.T) {
 	defer mockAPI.Close()
 
 	cases := []struct {
-		name        string
-		userAgent   string
+		name           string
+		userAgent      string
 		wantInLocation string
 	}{
 		{
-			name:        "desktop chrome",
-			userAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+			name:           "desktop chrome",
+			userAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
 			wantInLocation: "/wwlogin/sso/login",
 		},
 		{
-			name:        "wecom ios",
-			userAgent:   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) wxwork/5.0.10 MicroMessenger/7.0.1",
+			name:           "wecom ios",
+			userAgent:      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) wxwork/5.0.10 MicroMessenger/7.0.1",
 			wantInLocation: "/connect/oauth2/authorize",
 		},
 		{
-			name:        "wecom android",
-			userAgent:   "Mozilla/5.0 (Linux; Android 13) wxwork/4.1.36 MicroMessenger/8.0",
+			name:           "wecom android",
+			userAgent:      "Mozilla/5.0 (Linux; Android 13) wxwork/4.1.36 MicroMessenger/8.0",
 			wantInLocation: "/connect/oauth2/authorize",
 		},
 		{
-			name:        "plain wechat (not wecom) → still PC QR",
-			userAgent:   "Mozilla/5.0 (iPhone) MicroMessenger/8.0",
+			name:           "plain wechat (not wecom) → still PC QR",
+			userAgent:      "Mozilla/5.0 (iPhone) MicroMessenger/8.0",
 			wantInLocation: "/wwlogin/sso/login",
 		},
 	}

@@ -115,7 +115,7 @@ func TestTLSCheckVerifiedCustomDomain(t *testing.T) {
 		t.Fatalf("create store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv := server.New(st, "/tmp/sites", "droplydoc.com", nil, []byte("test-hmac-key-1234567890abcdef"), "localhost:8081")
+	srv := server.New(st, "/tmp/sites", "droplydoc.com", []byte("test-hmac-key-1234567890abcdef"))
 
 	token := registerAndGetToken(t, srv, "cd@example.com", "password123")
 

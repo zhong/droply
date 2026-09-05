@@ -6,20 +6,7 @@ import (
 	"strings"
 )
 
-// handleTLSCheck is called by Caddy's on-demand TLS to decide whether to obtain a certificate
-// for a given hostname. This prevents Let's Encrypt rate-limit exhaustion from random scanning.
-//
-// Allowed hostnames:
-//   - The base domain itself (e.g. droplydoc.com)
-//   - The api.{baseDomain} hostname (used by the CLI)
-//   - Any direct subdomain registered in the store (alice.droplydoc.com)
-//   - Any verified custom domain (blog.example.com)
-//
-// Caddy contract:
-//   - HTTP 200 with any body → obtain certificate
-//   - Any other status       → refuse
-//
-// Reference: https://caddyserver.com/docs/json/apps/tls/automation/on_demand/ask/
+// handleTLSCheck exposes hostname authorization for optional external gateways.
 func (s *Server) handleTLSCheck(w http.ResponseWriter, r *http.Request) {
 	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
 	if domain == "" {
@@ -27,7 +14,7 @@ func (s *Server) handleTLSCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Strip port if Caddy includes one.
+	// Strip an optional port.
 	if host, _, err := net.SplitHostPort(domain); err == nil {
 		domain = host
 	}
@@ -39,9 +26,9 @@ func (s *Server) handleTLSCheck(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "not authorized", http.StatusForbidden)
 }
 
-// isAllowedTLSHost returns true if Caddy should be permitted to obtain a TLS certificate
-// for the given hostname.
-func (s *Server) isAllowedTLSHost(host string) bool {
+// AllowedTLSHost authorizes certificates only for active platform or verified custom hosts.
+func (s *Server) AllowedTLSHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	base := strings.ToLower(s.baseDomain)
 
 	// Exact base domain or api.{base}
@@ -73,3 +60,5 @@ func (s *Server) isAllowedTLSHost(host string) bool {
 	}
 	return false
 }
+
+func (s *Server) isAllowedTLSHost(host string) bool { return s.AllowedTLSHost(host) }
