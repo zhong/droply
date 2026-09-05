@@ -114,7 +114,7 @@ func (s *SQLiteStore) BeginDeploymentTarget(ctx context.Context, projectID int64
 	if strings.TrimSpace(artifactID) == "" {
 		return nil, fmt.Errorf("artifact ID is required: %w", ErrDeploymentState)
 	}
-	return s.createDeployment(ctx, projectID, artifactID, "pending", 0, 0, environment, branch, commit)
+	return s.createDeployment(ctx, projectID, artifactID, environment, branch, commit)
 }
 
 func (s *SQLiteStore) GetSiteTarget(ctx context.Context, label string) (*model.SiteTarget, error) {
