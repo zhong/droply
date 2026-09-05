@@ -1,3 +1,5 @@
+export CGO_ENABLED := 0
+
 VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
@@ -25,11 +27,8 @@ clean:
 	rm -rf bin/ dist/
 
 deploy:
-	git pull
-	go build -ldflags "$(LDFLAGS)" -o bin/droply-server ./cmd/droply-server
-	sudo systemctl stop droply
-	sudo cp bin/droply-server /usr/local/bin/droply-server
-	sudo systemctl start droply
+	@echo "Stop and back up the service first; follow docs/operations-m3.md."
+	@exit 1
 
 build-all: build-darwin-arm64 build-darwin-amd64 build-linux-amd64 build-windows-amd64
 

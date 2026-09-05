@@ -62,7 +62,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", 404)
 		return
 	}
-	if sub.UserID != userFromContext(r.Context()).ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", 403)
 		return
 	}
@@ -86,12 +86,22 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "project token cannot target this project", 403)
 		return
 	}
+	if errors.Is(err, sql.ErrNoRows) && sub.UserID != userFromContext(r.Context()).ID {
+		s.deploymentMu.Unlock()
+		jsonError(w, "project not found", 404)
+		return
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		proj, err = s.store.CreateProject(sub.ID, projName)
 	}
 	if err != nil {
 		s.deploymentMu.Unlock()
 		jsonError(w, "cannot create project", 500)
+		return
+	}
+	if !s.canAccessSubdomainProject(r, sub) {
+		s.deploymentMu.Unlock()
+		jsonError(w, "project permission revoked", 403)
 		return
 	}
 	id := rand.Text()
@@ -177,6 +187,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deploymentMu.Lock()
 	defer s.deploymentMu.Unlock()
+	if !s.canAccessSubdomainProject(r, sub) {
+		fail("project permission revoked", 403)
+		return
+	}
 	if r.Context().Err() != nil {
 		fail("upload canceled before publication", 400)
 		return
@@ -215,7 +229,6 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // handleListDeployments verifies subdomain ownership and returns all deployments for the project.
 // Always returns an array (never null).
 func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -224,12 +237,12 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
-	proj, err := s.store.GetProject(sub.ID, projName)
+	proj, err := s.authorizedProject(r, sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return

@@ -31,6 +31,7 @@ func deploymentCommandFixture(t *testing.T) (func(...string) (string, error), fu
 	}
 	t.Cleanup(func() { st.Close() })
 	app := server.New(st, t.TempDir(), "droply.test", []byte("test-hmac"))
+	app.SetOpenRegistration(true)
 	if err := app.PrepareDeployments(t.Context()); err != nil {
 		t.Fatal(err)
 	}

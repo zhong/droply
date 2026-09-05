@@ -25,7 +25,7 @@ command -v "$SYSTEMCTL" >/dev/null 2>&1 || fail 'systemctl executable is require
 existing=0
 if [ -e "$UNIT" ] || [ -e "$CONF_DIR/env" ] || [ -e "$BIN_DIR/droply-server" ]; then existing=1; fi
 if [ "$existing" = 1 ] && [ "${UPGRADE:-0}" != 1 ]; then
-    fail 'Existing installation detected; no files changed. Read docs/migration-m0.md, or set UPGRADE=1 for a backed-up binary-only upgrade.'
+    fail 'Existing installation detected; no files changed. Read docs/operations-m3.md, or set UPGRADE=1 for a backed-up binary-only upgrade.'
 fi
 if [ "$existing" = 0 ]; then
     DOMAIN=${DOMAIN:-}
@@ -89,6 +89,7 @@ fi
 chmod 755 "$setup_tmp/droply-server"
 binary_help=$("$setup_tmp/droply-server" --help 2>&1) || fail 'Downloaded/local binary is not executable on this host'
 case "$binary_help" in *-tls-mode*) ;; *) fail 'Binary predates standalone HTTPS; select an M0-capable VERSION or LOCAL_BINARY' ;; esac
+case "$binary_help" in *-audit-retention-days*) ;; *) fail 'Binary predates the M3 private platform; select an M3-capable VERSION or LOCAL_BINARY' ;; esac
 (umask 022; mkdir -p "$BIN_DIR")
 if [ "$existing" = 1 ]; then
     backup="$ROOT/var/backups/droply/$(date +%Y%m%d-%H%M%S)-$$"
@@ -99,7 +100,7 @@ if [ "$existing" = 1 ]; then
     cp "$setup_tmp/droply-server" "$BIN_DIR/droply-server.new"
 chmod 755 "$BIN_DIR/droply-server.new"
     mv "$BIN_DIR/droply-server.new" "$BIN_DIR/droply-server"
-    printf 'Binary updated. Backup: %s\nService, environment, data and certificates were preserved. No service was restarted. Follow docs/migration-m0.md before restarting.\n' "$backup"
+    printf 'Binary updated. Backup: %s\nService, environment, data and certificates were preserved. No service was restarted. Follow docs/operations-m3.md before restarting.\n' "$backup"
     exit 0
 fi
 service_user=droply
@@ -111,7 +112,7 @@ mkdir -p "$CONF_DIR" "$DATA_DIR/sites"
 cp "$setup_tmp/droply-server" "$BIN_DIR/droply-server.new"
 chmod 755 "$BIN_DIR/droply-server.new"
 mv "$BIN_DIR/droply-server.new" "$BIN_DIR/droply-server"
-printf '# Optional Droply environment overrides; never overwritten during upgrades.\n' > "$CONF_DIR/env"
+printf '# Private signup is the default. Set true only to deliberately allow public registration.\nDROPLY_OPEN_REGISTRATION=false\n# Other environment overrides are preserved during upgrades.\n' > "$CONF_DIR/env"
 args="--domain $DOMAIN --data-dir $DATA_DIR --addr $HTTP_ADDR --tls-mode $TLS_MODE"
 if [ "$TLS_MODE" != http ]; then args="$args --https-addr $HTTPS_ADDR"; fi
 if [ -n "${ACME_EMAIL:-}" ]; then args="$args --acme-email $ACME_EMAIL"; fi
@@ -154,3 +155,5 @@ if [ -z "$ROOT" ]; then chown -R droply:droply "$CONF_DIR" "$DATA_DIR"; fi
 "$SYSTEMCTL" is-active --quiet droply || fail 'Droply did not become active; inspect journalctl -u droply'
 printf 'Droply installed. Service: %s\nData: %s\nInspect: systemctl status droply; journalctl -u droply\n' "$UNIT" "$DATA_DIR"
 printf 'Point the base domain, wildcard and api hostname DNS to this server. Existing gateways were not changed.\n'
+printf 'Registration is closed by default. Stop Droply and initialize a local administrator using init-admin; see docs/identity-m3.md.\n'
+printf 'Console: https://api.%s/console/ (HTTPS required for sign-in). Health: /healthz on the API hostname.\n' "$DOMAIN"

@@ -6,6 +6,10 @@ import (
 )
 
 type Store interface {
+	ConsoleSessionStore
+	AuditStore
+	IdentityStore
+	MembershipStore
 	ProjectTokenStore
 	GetSiteTarget(context.Context, string) (*model.SiteTarget, error)
 	BeginDeploymentTarget(context.Context, int64, string, string, string, string) (*model.Deployment, error)

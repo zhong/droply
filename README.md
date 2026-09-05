@@ -1,6 +1,8 @@
 # Droply
 
-A lightweight private static deployment platform: one server binary, immutable versions, project root hosts, branch previews, scoped CI tokens and automatic HTTPS.
+A lightweight, privately deployed alternative to the static publishing workflow of Cloudflare Pages: one server binary, SQLite and local disk, built-in HTTPS, immutable versions, project root hosts, previews and team permissions. Caddy is not required.
+
+Droply targets a single server or small team. It does not provide a global CDN, Workers/Functions, a managed build fleet or multi-node high availability. Deploy an already-built directory. Account registration is closed by default; account roles and visitor access rules are separate, so sites and previews remain public unless protected.
 
 [中文文档](README.zh-CN.md)
 
@@ -16,6 +18,28 @@ CLI / Browser → Droply HTTP + HTTPS
 
 One Droply process serves the API, static files and HTTPS. An external gateway is optional; all sites share the same access-control path.
 
+## Private deployment and operations
+
+Initialize an administrator locally before inviting accounts. Open `https://api.<base-domain>/console/` for the embedded console. CLI and console share owner/deployer/viewer permissions: owners manage members and visitor rules; deployers publish, roll back and manage their own project tokens; viewers read project information. Visitor password, IP and WeCom rules remain independent.
+
+```sh
+# On the server: stop serving; password file must be mode 0600 and contain 8–72 bytes
+sudo systemctl stop droply
+sudo /usr/local/bin/droply-server init-admin --data-dir /data/droply \
+  --email admin@example.com --password-file /secure/initial-password
+# When using the installer's droply service account, retain its data ownership
+sudo chown -R droply:droply /data/droply
+sudo systemctl start droply
+
+# On your workstation
+droply login --api-url https://api.example.com
+droply invitation create colleague@example.com
+droply member set colleague@example.com --role deployer --sub alice --project blog
+droply audit --sub alice --project blog --limit 50
+```
+
+Create the `alice/blog` project and let the invited account register before granting membership. For an existing installation without an administrator, use local `claim-admin --email ...` to explicitly select an existing account. Keep public registration closed during initialization. See [identity setup](docs/identity-m3.md), [console](docs/console-m3.md), [audit](docs/audit-m3.md), [backup and restore](docs/backup-m3.md), and [operations, upgrades and acceptance checks](docs/operations-m3.md).
+
 ## Quick Start
 
 ### Install CLI
@@ -29,7 +53,8 @@ curl -fsSL https://droplydoc.com/install.sh | bash
 Or install a specific version:
 
 ```bash
-VERSION=v0.1.0 curl -fsSL https://droplydoc.com/install.sh | bash
+curl -fsSL https://droplydoc.com/install.sh -o install.sh
+VERSION=vX.Y.Z bash install.sh
 ```
 
 <details>
@@ -81,16 +106,18 @@ Produces binaries in `dist/` for all supported platforms.
 
 ### Run Tests
 
-```bash
+```sh
 make test
+make test-integration
+go vet ./...
 ```
 
 ### Deploy to Server
 
-On the server, pull latest code, rebuild, and restart the service:
+Follow the [upgrade and downgrade procedure](docs/operations-m3.md) to stop serving, take a full backup and retain the old binary before building and switching. `make deploy` refuses an unprepared automatic upgrade and points to that guide.
 
-```bash
-make deploy
+```sh
+make build
 ```
 
 ### Deploy Website
@@ -104,7 +131,7 @@ droply deploy
 
 ## Server Deployment
 
-New installations run only `droply-server`; Caddy is not required. Existing installations should follow the [M0 migration and rollback guide](docs/migration-m0.md) before changing their service.
+New installations run only `droply-server`; Caddy is not required. Read the [M3 operations guide](docs/operations-m3.md) before production changes. Existing installations should follow the [M0 migration and rollback guide](docs/migration-m0.md) before changing their service.
 
 ### Linux installation
 
@@ -137,7 +164,7 @@ sudo env DOMAIN=example.com TLS_MODE=auto \
   LOCAL_BINARY="$PWD/bin/droply-server" sh setup.sh
 ```
 
-`UPGRADE=1` backs up and replaces only the existing binary, preserving the service, environment, data and certificates without restarting. Back up the database and content using the migration guide before switching. `VERSION=vX.Y.Z` pins a release; `DATA_DIR` selects a new data directory; `ACME_CA` can select an ACME staging endpoint.
+`UPGRADE=1` backs up and replaces only the existing binary, preserving the service, environment, data and certificates without restarting. Stop serving and take a [complete backup](docs/backup-m3.md) before switching; follow the [upgrade and downgrade procedure](docs/operations-m3.md). `VERSION=vX.Y.Z` pins a release; `DATA_DIR` selects a new data directory; `ACME_CA` can select an ACME staging endpoint.
 
 ### Run directly
 
@@ -175,6 +202,12 @@ Binding ports 80/443 requires permission; the installer grants `CAP_NET_BIND_SER
 | `--trusted-proxies` | empty | Trusted proxy CIDRs; forwarded IPs are ignored by default |
 | `--hmac-secret` | generated and persisted | Preserve an existing explicit session signing key |
 | `--log-retention-days` | `30` | Detailed visit log retention |
+| `--open-registration` | `false` | Explicitly open registration; also DROPLY_OPEN_REGISTRATION=true |
+| `--audit-retention-days` | `90` | Audit retention; must be positive |
+| `--deploy-max-expanded-bytes`, `--deploy-max-files` | `268435456`, `10000` | Per-deployment extracted byte/entry limits |
+| `--artifact-max-bytes` | `0` | Artifact/staging quota; 0 means disk capacity only |
+| `--deployment-retain-count`, `--deployment-retain-days` | `10`, `30` | History retention protections |
+| `--artifact-orphan-grace` | `1h` | Grace period before orphan cleanup |
 
 Run `droply-server --help` for all flags. Normal HTTP shutdown drains for up to 15 seconds; an in-flight DNS job can delay exit until its library timeout (up to five minutes), so the installed unit allows 360 seconds. `--site-addr` temporarily supports an additional unified HTTP listener; `--caddy-admin` is ignored. New installations should omit both. `on-demand` remains an alias for `auto`.
 
@@ -187,13 +220,16 @@ sudo journalctl -u droply -f
 
 ```
 /data/droply/
-├── droply.db              SQLite database
+├── droply.db                  SQLite: accounts, projects, history, sessions, audit
+├── hmac.key                   Persistent visitor/console signing key
+├── certificates/              Default ACME certificates and accounts
+├── server.lock                Exclusive installation lock
+├── upgrade-backups/           Database-only snapshots before schema migration
 └── sites/
-    ├── alice/
-    │   ├── blog/          alice.droplydoc.com/blog
-    │   └── portfolio/     alice.droplydoc.com/portfolio
-    └── bob/
-        └── docs/          bob.droplydoc.com/docs
+    ├── .artifacts/<id>/files/  Immutable deployment content
+    ├── .artifacts/<id>/manifest.json
+    ├── .artifacts/.staging/    In-progress uploads
+    └── <sub>/<project>/       Legacy directories awaiting migration
 ```
 
 ## CLI Guide
@@ -271,8 +307,8 @@ When running `droply` commands inside that directory, the `staging` context is u
 ### Register and Login
 
 ```bash
-# Register a new account
-droply register
+# Register using an administrator invitation (set DROPLY_INVITE first)
+droply register --api-url https://api.example.com
 # Interactive email and password input
 
 # Login to existing account
@@ -310,11 +346,7 @@ droply deploy --sub alice --project blog
 # Deploy a specific directory
 droply deploy ./dist --sub alice --project blog
 
-# Example output:
-# Packaging ./dist...
-# Deploying to alice.droplydoc.com/blog...
-# Deployed! Version 1
-# URL: https://alice.droplydoc.com/blog
+# The response prints the project root URL and deployed version.
 ```
 
 #### Project Config File
@@ -484,12 +516,21 @@ droply access set --subdomain alice --project docs \
 
 ## API
 
-All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentication uses `Authorization: Bearer <token>` header.
+API endpoints use `api.<base-domain>` and JSON. CLI authentication uses `Authorization: Bearer <token>`; the console uses a secure session Cookie, with Origin/CSRF checks on writes.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/register` | Register |
+| POST | `/auth/register` | Invite-only registration unless explicitly opened |
 | POST | `/auth/login` | Login |
+| GET | `/healthz` | Database reachability without sensitive details |
+| GET | `/auth/me` | Current account and administrator flag |
+| GET | `/projects` | Projects accessible to the current account |
+| GET / POST | `/admin/invitations` | Administrator invitation list/create |
+| DELETE | `/admin/invitations/:id` | Administrator invitation revocation |
+| GET / PUT | `/subdomains/:sub/projects/:name/members` | List/set project members |
+| DELETE | `/subdomains/:sub/projects/:name/members/:id` | Remove member |
+| GET | `/subdomains/:sub/projects/:name/audit` | Paginated project audit |
+| GET | `/admin/audit` | Administrator installation audit |
 | POST | `/subdomains` | Create subdomain |
 | GET | `/subdomains` | List subdomains |
 | DELETE | `/subdomains/:name` | Delete subdomain |

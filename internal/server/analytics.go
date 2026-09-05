@@ -112,7 +112,6 @@ type logsResponse struct {
 
 // handleGetStats returns aggregated page view statistics for a project.
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -121,7 +120,7 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -159,7 +158,6 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 
 // handleGetLogs returns detailed visit logs for a project.
 func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -168,7 +166,7 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}

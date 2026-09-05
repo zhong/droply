@@ -115,7 +115,9 @@ func newRegisterCmd() *cobra.Command {
 			var resp struct {
 				APIToken string `json:"api_token"`
 			}
+			invite := os.Getenv("DROPLY_INVITE")
 			if err := client.doJSON("POST", "/auth/register", map[string]string{
+				"invite":   invite,
 				"email":    email,
 				"password": password,
 			}, &resp); err != nil {

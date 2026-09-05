@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import {pathToFileURL} from "node:url";
+const {chromium}=await import(pathToFileURL(process.env.DROPLY_PLAYWRIGHT_PATH||"/tmp/droply-console-browser-deps/node_modules/playwright/index.mjs"));
+const origin=process.argv[2];if(!origin)throw new Error("Pass local console HTTPS origin");
+const browser=await chromium.launch({headless:true,args:["--host-resolver-rules=MAP *.console.localhost 127.0.0.1","--no-proxy-server"]});
+try{
+ const context=await browser.newContext({ignoreHTTPSErrors:true});const page=await context.newPage();const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ await page.goto(origin+"/console/");await page.getByLabel("邮箱").fill("viewer@console.test");await page.getByLabel("密码").fill("console-password");await page.getByRole("button",{name:"登录",exact:true}).click();
+ await page.getByRole("button",{name:"team / site"}).click();await page.getByRole("heading",{name:"部署版本",exact:true}).waitFor();
+ assert.equal(await page.getByRole("button",{name:"team / secret"}).count(),0);
+ assert.ok((await page.locator("body").innerText()).includes("v2"));
+ assert.equal(await page.evaluate(()=>document.cookie.includes("droply_console")),false);
+ const stored=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));assert.ok(!stored.includes("secret"));
+ const session=await page.evaluate(()=>fetch("/console/session").then(r=>r.json()));assert.ok(!JSON.stringify(session).includes("api_token"));
+ const denied=await page.evaluate(async csrf=>(await fetch("/subdomains/team/projects/site/rollback/1",{method:"POST",headers:{"X-CSRF-Token":csrf}})).status,session.csrf_token);assert.equal(denied,403);
+ if(process.env.DROPLY_CONSOLE_SCREENSHOT)await page.screenshot({path:process.env.DROPLY_CONSOLE_SCREENSHOT,fullPage:true});
+ await page.getByRole("button",{name:"退出",exact:true}).click();await page.getByRole("heading",{name:"登录控制台"}).waitFor();
+ assert.equal(await page.evaluate(async()=>(await fetch("/projects")).status),401);
+ await page.getByLabel("邮箱").fill("empty@console.test");await page.getByLabel("密码").fill("console-password");await page.getByRole("button",{name:"登录",exact:true}).click();await page.getByText("暂无获授权项目").waitFor();
+ await page.getByRole("button",{name:"退出",exact:true}).click();await page.getByRole("heading",{name:"登录控制台"}).waitFor();
+ await page.getByLabel("邮箱").fill("owner@console.test");await page.getByLabel("密码").fill("console-password");await page.getByRole("button",{name:"登录",exact:true}).click();await page.getByRole("button",{name:"team / site"}).click();
+ const deployments=()=>page.evaluate(()=>fetch("/subdomains/team/projects/site/deployments").then(r=>r.json()));
+ page.once("dialog",dialog=>dialog.dismiss());await page.getByRole("button",{name:"发布为生产 v2",exact:true}).click();assert.equal((await deployments()).find(d=>d.production).version,1);
+ page.once("dialog",dialog=>{assert.ok(dialog.message().includes("team / site"));return dialog.accept()});await page.getByRole("button",{name:"发布为生产 v2",exact:true}).click();await page.getByText("team / site：操作完成，已刷新服务端状态。",{exact:true}).waitFor();assert.equal((await deployments()).find(d=>d.production).version,2);
+ page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"回滚 v1",exact:true}).click();await page.getByRole("button",{name:"发布为生产 v2",exact:true}).waitFor();assert.equal((await deployments()).find(d=>d.production).version,1);
+ await page.getByLabel("允许的 IP / CIDR（逗号分隔）").fill("invalid-ip");page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"保存访问规则",exact:true}).click();await page.getByText("invalid IP: invalid-ip",{exact:true}).waitFor();
+ await page.getByLabel("允许的 IP / CIDR（逗号分隔）").fill("127.0.0.1");await page.getByLabel("站点密码（至少 8 字符）").fill("private-site-password");page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"保存访问规则",exact:true}).click();await page.getByRole("button",{name:"删除项目规则",exact:true}).waitFor();
+ const access=await page.evaluate(()=>fetch("/subdomains/team/projects/site/access").then(r=>r.json()));assert.deepEqual(access.allowed_ips,["127.0.0.1"]);assert.equal(access.has_password,true);assert.equal(await page.getByLabel("站点密码（至少 8 字符）").inputValue(),"");
+ page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"删除项目规则",exact:true}).click();await page.getByText("未设置项目规则；站点仍可能继承子域名规则。",{exact:true}).waitFor();
+ const audit=await page.evaluate(()=>fetch("/subdomains/team/projects/site/audit").then(r=>r.json()));assert.ok(audit.events.some(e=>e.result==="success"&&e.target==="version:2"));assert.ok(audit.events.some(e=>e.result==="failure"&&e.status_code===400));
+ if(process.env.DROPLY_CONSOLE_SCREENSHOT)await page.screenshot({path:process.env.DROPLY_CONSOLE_SCREENSHOT,fullPage:true});
+ await context.clearCookies();await page.getByRole("button",{name:"刷新",exact:true}).click();await page.getByText("会话已过期，请重新登录。",{exact:true}).waitFor();
+ assert.deepEqual(errors,[]);await context.close();console.log("PASS real Chromium login, authorized details, viewer refusal, HttpOnly isolation, logout, empty state, promote, rollback, access mutations, audit, failure and expiry");
+}finally{await browser.close()}

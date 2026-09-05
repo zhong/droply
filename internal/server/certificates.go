@@ -16,7 +16,7 @@ func (s *Server) handleCertificateStatus(w http.ResponseWriter, r *http.Request)
 	// Platform certificate metadata is shared with authenticated accounts; tenant
 	// certificates remain owner-only until a separate administrator role exists.
 	if host != s.baseDomain && host != "api."+s.baseDomain {
-		sub, _, ok := s.resolveHost(host)
+		sub, projectName, ok := s.resolveHost(host)
 		if !ok {
 			jsonError(w, "domain not found", http.StatusNotFound)
 			return
@@ -26,7 +26,14 @@ func (s *Server) handleCertificateStatus(w http.ResponseWriter, r *http.Request)
 			jsonError(w, "domain not found", http.StatusNotFound)
 			return
 		}
-		if owner.UserID != userFromContext(r.Context()).ID {
+		allowed := owner.UserID == userFromContext(r.Context()).ID
+		if !allowed && projectName != "" {
+			if project, err := s.store.GetProject(owner.ID, projectName); err == nil {
+				role, err := s.store.ProjectRole(r.Context(), project.ID, userFromContext(r.Context()).ID)
+				allowed = err == nil && roleAllows(role, "viewer")
+			}
+		}
+		if !allowed {
 			jsonError(w, "forbidden", http.StatusForbidden)
 			return
 		}

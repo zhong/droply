@@ -26,7 +26,6 @@ type createDomainResponse struct {
 // handleCreateDomain validates subdomain ownership, creates a custom domain record,
 // and returns 201 with the domain, verified=false, and the CNAME target.
 func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -35,12 +34,12 @@ func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
-	proj, err := s.store.GetProject(sub.ID, projName)
+	proj, err := s.authorizedProject(r, sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
@@ -78,7 +77,6 @@ func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
 // handleListDomains verifies subdomain ownership and returns all custom domains for the project.
 // Always returns an array (never null).
 func (s *Server) handleListDomains(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 
@@ -87,12 +85,12 @@ func (s *Server) handleListDomains(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
-	proj, err := s.store.GetProject(sub.ID, projName)
+	proj, err := s.authorizedProject(r, sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
@@ -112,7 +110,6 @@ func (s *Server) handleListDomains(w http.ResponseWriter, r *http.Request) {
 // handleDeleteDomain verifies subdomain ownership, deletes the custom domain from the store,
 // and returns 204.
 func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 	domainName, err := normalizeDomain(chi.URLParam(r, "domain"))
@@ -126,12 +123,12 @@ func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
-	proj, err := s.store.GetProject(sub.ID, projName)
+	proj, err := s.authorizedProject(r, sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
@@ -148,7 +145,6 @@ func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 // handleVerifyDomain checks DNS records for the custom domain and marks it as verified
 // if its dedicated TXT challenge proves ownership.
 func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
 	subName := chi.URLParam(r, "sub")
 	projName := chi.URLParam(r, "project")
 	domainName, err := normalizeDomain(chi.URLParam(r, "domain"))
@@ -162,12 +158,12 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if sub.UserID != user.ID {
+	if !s.canAccessSubdomainProject(r, sub) {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
-	proj, err := s.store.GetProject(sub.ID, projName)
+	proj, err := s.authorizedProject(r, sub.ID, projName)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
@@ -204,6 +200,7 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]any{"verified": true, "status": "verified"}, http.StatusOK)
 		return
 	}
+	markAuditFailure(r)
 	jsonResponse(w, map[string]any{"verified": false, "status": "pending", "message": "publish the exact verification TXT record", "verification_record": cd.VerificationRecord, "verification_token": cd.VerificationToken}, http.StatusOK)
 }
 

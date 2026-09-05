@@ -19,13 +19,18 @@ func newTestServer(t *testing.T) *server.Server {
 		t.Fatalf("create test store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return server.New(st, "/tmp/sites", "droplydoc.com", []byte("test-hmac-key-for-testing-1234"))
+	srv := server.New(st, "/tmp/sites", "droplydoc.com", []byte("test-hmac-key-for-testing-1234"))
+	srv.SetOpenRegistration(true)
+	return srv
 }
 
 // registerAndGetToken registers a new user and returns their API token.
 // This helper is intended to be used by subsequent test files in this package.
 func registerAndGetToken(t *testing.T, srv http.Handler, email, password string) string {
 	t.Helper()
+	if configurable, ok := srv.(interface{ SetOpenRegistration(bool) }); ok {
+		configurable.SetOpenRegistration(true)
+	}
 	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
