@@ -124,6 +124,7 @@ func (s *Server) cleanupProject(ctx context.Context, projectID int64, keep, days
 		}
 		// Tombstone first: a crash or removal error leaves a retryable record,
 		// which cannot be rolled back or acquire new aliases while deleting.
+		s.staticSites.forget(d.ArtifactID)
 		err = errors.Join(s.artifacts.RemoveStage(d.ArtifactID), s.artifacts.Remove(d.ArtifactID))
 		if err == nil {
 			err = s.store.SetArtifactState(ctx, d.ID, "deleted")
@@ -192,6 +193,7 @@ func (s *Server) CleanupDeployments(ctx context.Context) error {
 		if entry.Staging {
 			err = s.artifacts.RemoveStage(entry.ID)
 		} else {
+			s.staticSites.forget(entry.ID)
 			err = s.artifacts.Remove(entry.ID)
 		}
 		result = errors.Join(result, err)

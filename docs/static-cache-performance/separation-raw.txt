@@ -1,0 +1,46 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/zhong/droply/internal/staticweb
+cpu: Apple M3 Pro
+BenchmarkSiteRules/no_rules/load-12    	    6288	     56058 ns/op	    6519 B/op	      50 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6866	     54629 ns/op	    6415 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6334	     54923 ns/op	    6380 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6607	     55397 ns/op	    6424 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6709	     54710 ns/op	    6428 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6584	     54583 ns/op	    6424 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6501	     55779 ns/op	    6425 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6697	     55174 ns/op	    6411 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6248	     55949 ns/op	    6417 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/load-12    	    6580	     54944 ns/op	    6424 B/op	      48 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7766	     55170 ns/op	    2430 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    8190	     47716 ns/op	    2455 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7111	     48910 ns/op	    2448 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7452	     48926 ns/op	    2416 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7396	     48318 ns/op	    2447 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7393	     47846 ns/op	    2436 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7380	     48461 ns/op	    2466 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    8284	     49082 ns/op	    2441 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7462	     49040 ns/op	    2461 B/op	      29 allocs/op
+BenchmarkSiteRules/no_rules/reuse-12   	    7675	     50238 ns/op	    2459 B/op	      29 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1566	    237886 ns/op	   14983 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1356	    240114 ns/op	   14961 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1518	    240256 ns/op	   15112 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1507	    244121 ns/op	   15065 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1549	    237842 ns/op	   14985 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1491	    239034 ns/op	   14993 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1530	    236352 ns/op	   15061 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1490	    242363 ns/op	   14943 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1448	    251588 ns/op	   14974 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/load-12       	    1402	    242817 ns/op	   15008 B/op	     125 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7407	     48801 ns/op	    2457 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7572	     49145 ns/op	    2466 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7216	     49616 ns/op	    2474 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    8017	     48690 ns/op	    2459 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    8065	     49181 ns/op	    2472 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7471	     48568 ns/op	    2482 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7170	     48678 ns/op	    2459 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7412	     48545 ns/op	    2452 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    7387	     48636 ns/op	    2467 B/op	      30 allocs/op
+BenchmarkSiteRules/rules/reuse-12      	    6466	     49275 ns/op	    2463 B/op	      30 allocs/op
+PASS
+ok  	github.com/zhong/droply/internal/staticweb	14.810s
