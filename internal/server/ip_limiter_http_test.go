@@ -79,3 +79,31 @@ func TestLoginSurfacesHaveIndependentQuotasAndProxyTrust(t *testing.T) {
 		})
 	}
 }
+
+func TestVisitorCapacityResponseAndAccountIndependence(t *testing.T) {
+	srv := newTestServer(t)
+	visitor := srv.NewSiteHandler()
+	for i := range 4097 {
+		req := httptest.NewRequest(http.MethodPost, "/_droply/login", strings.NewReader("%"))
+		req.Host = "site.droplydoc.com"
+		req.RemoteAddr = fmt.Sprintf("198.18.%d.%d:1234", i/256, i%256)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+		visitor.ServeHTTP(response, req)
+		if i < 4096 {
+			if response.Code != 400 {
+				t.Fatalf("IP %d rejected before capacity: %d", i, response.Code)
+			}
+		} else if response.Code != 429 || response.Header().Get("Retry-After") != "" || response.Header().Get("Cache-Control") != "private, no-store" || response.Body.String() != "Too Many Requests\n" {
+			t.Fatalf("capacity response: %d %s", response.Code, response.Body.String())
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader("{"))
+	req.Host = "api.droplydoc.com"
+	req.RemoteAddr = "198.18.16.0:1234"
+	response := httptest.NewRecorder()
+	srv.ServeHTTP(response, req)
+	if response.Code != 400 {
+		t.Fatalf("visitor capacity consumed account quota: %d", response.Code)
+	}
+}

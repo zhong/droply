@@ -37,17 +37,18 @@ func TestIPLimiterBurstRefillAndConcurrency(t *testing.T) {
 
 func TestIPLimiterPreservesSurfacePolicies(t *testing.T) {
 	for _, policy := range []struct {
-		name     string
-		idleTTL  time.Duration
-		limit    int
-		capacity int
+		name           string
+		idleTTL        time.Duration
+		limit          int
+		capacity       int
+		rejectWhenFull bool
 	}{
 		{name: "account", limit: 4096, capacity: 4096},
-		{name: "visitor", idleTTL: 10 * time.Minute, capacity: 4097},
+		{name: "visitor", idleTTL: 10 * time.Minute, limit: 4096, capacity: 4096, rejectWhenFull: true},
 	} {
 		t.Run(policy.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				limiter := &ipLimiter{capacity: policy.limit, idleTTL: policy.idleTTL}
+				limiter := &ipLimiter{capacity: policy.limit, idleTTL: policy.idleTTL, rejectWhenFull: policy.rejectWhenFull}
 				for i := range 4097 {
 					time.Sleep(time.Nanosecond)
 					limiter.allow(strconv.Itoa(i))
@@ -90,6 +91,55 @@ func TestIPLimiterVisitorCleanupCadence(t *testing.T) {
 		limiter.allow("current")
 		if limiter.entries["old"] != nil {
 			t.Fatal("expired entry survived scheduled cleanup")
+		}
+	})
+}
+
+func TestIPLimiterAccountCapacityAtEqualTimestamps(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		limiter := &ipLimiter{capacity: 2}
+		for _, ip := range []string{"first", "second", "third", "fourth"} {
+			if !limiter.allow(ip) {
+				t.Fatal("account stopped admitting new IPs")
+			}
+			if len(limiter.entries) > 2 {
+				t.Fatal("equal timestamps allowed capacity overflow")
+			}
+		}
+	})
+}
+
+func TestIPLimiterVisitorCapacityPreservesQuotas(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		limiter := &ipLimiter{capacity: 4096, rejectWhenFull: true, idleTTL: 10 * time.Minute}
+		for range 10 {
+			if !limiter.allow("blocked") {
+				t.Fatal("initial burst rejected")
+			}
+		}
+		var accepted atomic.Int32
+		var wg sync.WaitGroup
+		for i := range 8192 {
+			wg.Go(func() {
+				if limiter.allow(strconv.Itoa(i)) {
+					accepted.Add(1)
+				}
+			})
+		}
+		wg.Wait()
+		if accepted.Load() != 4095 || len(limiter.entries) != 4096 {
+			t.Fatalf("accepted=%d entries=%d", accepted.Load(), len(limiter.entries))
+		}
+		if limiter.allow("blocked") || limiter.allow("new") {
+			t.Fatal("high-cardinality churn bypassed quota or capacity")
+		}
+		time.Sleep(6 * time.Second)
+		if !limiter.allow("blocked") || limiter.allow("blocked") {
+			t.Fatal("existing IP refill changed at capacity")
+		}
+		time.Sleep(11 * time.Minute)
+		if !limiter.allow("new") || len(limiter.entries) != 1 {
+			t.Fatal("idle cleanup did not restore admission")
 		}
 	})
 }
