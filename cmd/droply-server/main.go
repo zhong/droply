@@ -54,6 +54,12 @@ func run(ctx context.Context, args []string) error {
 	proxies := flags.String("trusted-proxies", "", "Comma-separated trusted proxy CIDRs (default: none)")
 	hmacSecret := flags.String("hmac-secret", "", "Existing cookie signing key; otherwise persist data-dir/hmac.key")
 	retention := flags.Int("log-retention-days", 30, "Detailed visit log retention")
+	deploymentCount := flags.Int("deployment-retain-count", 10, "Keep this many successful deployments per project (0: disable count protection)")
+	deploymentDays := flags.Int("deployment-retain-days", 30, "Keep successful deployments this many days (0: disable age protection)")
+	artifactQuota := flags.Int64("artifact-max-bytes", 0, "Managed artifact and staging byte quota (0: disk capacity only)")
+	expandedLimit := flags.Int64("deploy-max-expanded-bytes", 256<<20, "Maximum extracted bytes per deployment")
+	fileLimit := flags.Int("deploy-max-files", 10000, "Maximum archive entries per deployment")
+	orphanGrace := flags.Duration("artifact-orphan-grace", time.Hour, "Minimum age before reclaiming abandoned artifact/staging directories")
 	corp := flags.String("wework-corp-id", os.Getenv("DROPLY_WEWORK_CORP_ID"), "WeCom Corp ID")
 	agent := flags.String("wework-agent-id", os.Getenv("DROPLY_WEWORK_AGENT_ID"), "WeCom Agent ID")
 	secret := flags.String("wework-secret", os.Getenv("DROPLY_WEWORK_SECRET"), "WeCom Agent Secret")
@@ -108,6 +114,11 @@ func run(ctx context.Context, args []string) error {
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
+	dataLock, err := hosting.LockDataDirectory(*dataDir)
+	if err != nil {
+		return err
+	}
+	defer dataLock.Close()
 	st, err := store.NewSQLiteStore(filepath.Join(*dataDir, "droply.db"))
 	if err != nil {
 		return err
@@ -118,6 +129,12 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	srv := server.New(st, filepath.Join(*dataDir, "sites"), *domain, key)
+	if err := srv.SetDeploymentOptions(server.DeploymentOptions{MaxExpandedBytes: *expandedLimit, MaxFiles: *fileLimit, MaxStorageBytes: *artifactQuota, RetainCount: *deploymentCount, RetainDays: *deploymentDays, OrphanGrace: *orphanGrace}); err != nil {
+		return err
+	}
+	if err := srv.PrepareDeployments(ctx); err != nil {
+		return fmt.Errorf("prepare deployments: %w", err)
+	}
 	if *proxies != "" {
 		if err := srv.SetTrustedProxies(strings.Split(*proxies, ",")); err != nil {
 			return err
@@ -196,6 +213,7 @@ func run(ctx context.Context, args []string) error {
 	srv.StartAnalytics()
 	bg, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
+	workers.Go(func() { srv.RunDeploymentCleanup(bg) })
 	if manager != nil {
 		workers.Go(func() { manager.Run(bg) })
 	}

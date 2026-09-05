@@ -352,7 +352,19 @@ droply deploy
 
 #### 上传限制
 
-单次部署最大 **50MB**。
+压缩上传最大 **50 MiB**（含 multipart 开销），默认解压文件总量 256 MiB、文件和目录合计 10,000 个。上传先形成不可变产物，成功后切换生产版本；失败不覆盖线上内容。
+
+### 部署历史、回滚与清理
+
+```sh
+droply deployment list --sub alice --project blog --json
+droply deployment rollback 1 --sub alice --project blog
+# 默认预览；加 --apply 才执行清理
+droply deployment cleanup --sub alice --project blog --keep 5 --days 0
+```
+
+保留的完整版本可直接回滚；旧版只有元数据的历史明确不可回滚。服务端默认每小时清理，保护最新 10 个成功版本、最近 30 天的版本，以及生产和引用中的产物。升级前备份完整数据，参见 [M1 迁移、保留策略与验收说明](docs/migration-m1.md)。
+
 
 ### 管理项目
 
@@ -360,7 +372,7 @@ droply deploy
 # 列出子域名下的项目
 droply project list --sub alice
 
-# 删除项目（同时删除所有文件和部署记录）
+# 删除项目和部署记录；不可变文件在孤儿回收宽限期后清理
 droply project delete blog --sub alice
 ```
 
@@ -471,6 +483,8 @@ droply access set --subdomain alice --project docs \
 | DELETE | `/subdomains/:sub/projects/:name` | 删除项目 |
 | POST | `/subdomains/:sub/projects/:name/deploy` | 部署（multipart） |
 | GET | `/subdomains/:sub/projects/:name/deployments` | 部署历史 |
+| POST | `/subdomains/:sub/projects/:name/rollback/:version` | 回滚到保留版本 |
+| GET / POST | `/subdomains/:sub/projects/:name/cleanup` | 预览 / 执行清理 |
 | POST | `/subdomains/:sub/projects/:name/domains` | 添加自定义域名 |
 | GET | `/subdomains/:sub/projects/:name/domains` | 列出自定义域名 |
 | DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | 删除自定义域名 |

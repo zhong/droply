@@ -352,7 +352,19 @@ The following files and directories are automatically excluded during deployment
 
 #### Upload Limit
 
-Maximum **50MB** per deployment.
+Compressed uploads are limited to **50 MiB** including multipart overhead; defaults allow 256 MiB extracted file bytes and 10,000 files/directories. A complete immutable artifact is published only after validation; failed uploads preserve production.
+
+### Deployment history, rollback and cleanup
+
+```sh
+droply deployment list --sub alice --project blog --json
+droply deployment rollback 1 --sub alice --project blog
+# Preview by default; add --apply to delete eligible artifacts.
+droply deployment cleanup --sub alice --project blog --keep 5 --days 0
+```
+
+Rollback uses retained complete artifacts; legacy metadata-only history is explicitly unavailable. Hourly server maintenance protects the newest 10 successful versions, versions from the past 30 days, and production/referenced artifacts. Back up the entire data directory before upgrading; see [M1 migration, retention and verification](docs/migration-m1.md).
+
 
 ### Manage Projects
 
@@ -360,7 +372,7 @@ Maximum **50MB** per deployment.
 # List projects in a subdomain
 droply project list --sub alice
 
-# Delete a project (removes all files and deployments)
+# Delete a project and its metadata; orphan artifacts are reclaimed after the grace period
 droply project delete blog --sub alice
 ```
 
@@ -471,6 +483,8 @@ All API endpoints are accessed via `api.droplydoc.com` in JSON format. Authentic
 | DELETE | `/subdomains/:sub/projects/:name` | Delete project |
 | POST | `/subdomains/:sub/projects/:name/deploy` | Deploy (multipart) |
 | GET | `/subdomains/:sub/projects/:name/deployments` | Deployment history |
+| POST | `/subdomains/:sub/projects/:name/rollback/:version` | Rollback to a retained version |
+| GET / POST | `/subdomains/:sub/projects/:name/cleanup` | Preview / apply retention cleanup |
 | POST | `/subdomains/:sub/projects/:name/domains` | Add custom domain |
 | GET | `/subdomains/:sub/projects/:name/domains` | List custom domains |
 | DELETE | `/subdomains/:sub/projects/:name/domains/:domain` | Remove custom domain |

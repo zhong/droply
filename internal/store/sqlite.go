@@ -51,6 +51,10 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate domain verification: %w", err)
 	}
+	if err := s.migrateDeployments(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate deployments: %w", err)
+	}
 	return s, nil
 }
 
@@ -407,97 +411,6 @@ func scanProjectRow(rows *sql.Rows) (*model.Project, error) {
 	p.CreatedAt = parseTime(createdAt)
 	p.UpdatedAt = parseTime(updatedAt)
 	return &p, nil
-}
-
-// ---- Deployments ----
-
-func (s *SQLiteStore) CreateDeployment(projectID int64, fileCount int, totalSize int64) (*model.Deployment, error) {
-	var maxVersion sql.NullInt64
-	err := s.db.QueryRow(
-		`SELECT MAX(version) FROM deployments WHERE project_id = ?`, projectID,
-	).Scan(&maxVersion)
-	if err != nil {
-		return nil, fmt.Errorf("get max version: %w", err)
-	}
-	version := 1
-	if maxVersion.Valid {
-		version = int(maxVersion.Int64) + 1
-	}
-
-	res, err := s.db.Exec(
-		`INSERT INTO deployments (project_id, version, file_count, total_size, status) VALUES (?, ?, ?, ?, 'uploading')`,
-		projectID, version, fileCount, totalSize,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create deployment: %w", err)
-	}
-	id, _ := res.LastInsertId()
-	return s.getDeploymentByID(id)
-}
-
-func (s *SQLiteStore) ActivateDeployment(deploymentID int64) error {
-	// Get the project_id for the deployment
-	var projectID int64
-	err := s.db.QueryRow(
-		`SELECT project_id FROM deployments WHERE id = ?`, deploymentID,
-	).Scan(&projectID)
-	if err != nil {
-		return fmt.Errorf("get deployment project: %w", err)
-	}
-
-	// Archive previously active deployments
-	if _, err := s.db.Exec(
-		`UPDATE deployments SET status = 'archived' WHERE project_id = ? AND status = 'active'`,
-		projectID,
-	); err != nil {
-		return fmt.Errorf("archive active deployments: %w", err)
-	}
-
-	// Activate the new deployment
-	if _, err := s.db.Exec(
-		`UPDATE deployments SET status = 'active' WHERE id = ?`, deploymentID,
-	); err != nil {
-		return fmt.Errorf("activate deployment: %w", err)
-	}
-	return nil
-}
-
-func (s *SQLiteStore) ListDeployments(projectID int64) ([]model.Deployment, error) {
-	rows, err := s.db.Query(
-		`SELECT id, project_id, version, file_count, total_size, status, created_at
-		 FROM deployments WHERE project_id = ? ORDER BY version DESC`,
-		projectID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list deployments: %w", err)
-	}
-	defer rows.Close()
-
-	var result []model.Deployment
-	for rows.Next() {
-		var d model.Deployment
-		var createdAt string
-		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Version, &d.FileCount, &d.TotalSize, &d.Status, &createdAt); err != nil {
-			return nil, fmt.Errorf("scan deployment: %w", err)
-		}
-		d.CreatedAt = parseTime(createdAt)
-		result = append(result, d)
-	}
-	return result, rows.Err()
-}
-
-func (s *SQLiteStore) getDeploymentByID(id int64) (*model.Deployment, error) {
-	row := s.db.QueryRow(
-		`SELECT id, project_id, version, file_count, total_size, status, created_at
-		 FROM deployments WHERE id = ?`, id,
-	)
-	var d model.Deployment
-	var createdAt string
-	if err := row.Scan(&d.ID, &d.ProjectID, &d.Version, &d.FileCount, &d.TotalSize, &d.Status, &createdAt); err != nil {
-		return nil, fmt.Errorf("scan deployment by id: %w", err)
-	}
-	d.CreatedAt = parseTime(createdAt)
-	return &d, nil
 }
 
 // ---- Custom Domains ----

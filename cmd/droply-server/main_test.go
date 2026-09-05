@@ -18,9 +18,33 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestSecondServerCannotRecoverLiveData(t *testing.T) {
+	data, addr := t.TempDir(), availableAddress(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test"}) }()
+	waitForListener(t, addr, done)
+	err := run(t.Context(), []string{"--addr", availableAddress(t), "--data-dir", data, "--domain", "example.test"})
+	if err == nil || !strings.Contains(err.Error(), "data directory already in use") {
+		t.Fatalf("second process not excluded: %v", err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	// A clean exit releases the lock; startup recovery can run again.
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	cancel2()
+	if err := run(ctx2, []string{"--addr", addr, "--data-dir", data, "--domain", "example.test"}); err != nil && strings.Contains(err.Error(), "already in use") {
+		t.Fatalf("lock remained after shutdown: %v", err)
+	}
+}
 
 func availableAddress(t *testing.T) string {
 	t.Helper()
