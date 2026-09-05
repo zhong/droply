@@ -8,15 +8,16 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ipLimiter owns one login surface's independent per-IP buckets. The account
-// surface caps entries; the visitor surface expires idle entries. Zero values
-// disable the respective policy so existing entry lifecycles stay distinct.
+// ipLimiter owns one login surface's independent per-IP buckets. At capacity,
+// accounts evict the oldest entry; visitors reject new IPs until idle cleanup
+// frees space. Retaining visitor buckets prevents churn from resetting quotas.
 type ipLimiter struct {
-	mu          sync.Mutex
-	entries     map[string]*ipLimiterEntry
-	capacity    int
-	idleTTL     time.Duration
-	lastCleanup time.Time
+	mu             sync.Mutex
+	entries        map[string]*ipLimiterEntry
+	capacity       int
+	rejectWhenFull bool
+	idleTTL        time.Duration
+	lastCleanup    time.Time
 }
 
 type ipLimiterEntry struct {
@@ -40,10 +41,14 @@ func (l *ipLimiter) allow(ip string) bool {
 	entry := l.entries[ip]
 	if entry == nil {
 		if l.capacity > 0 && len(l.entries) >= l.capacity {
-			oldestKey, oldest := "", now
+			if l.rejectWhenFull {
+				return false
+			}
+			var oldestKey string
+			var oldest *ipLimiterEntry
 			for key, value := range l.entries {
-				if value.seen.Before(oldest) {
-					oldestKey, oldest = key, value.seen
+				if oldest == nil || value.seen.Before(oldest.seen) {
+					oldestKey, oldest = key, value
 				}
 			}
 			delete(l.entries, oldestKey)
