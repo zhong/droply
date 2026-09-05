@@ -212,9 +212,9 @@ func (b *Builder) finish() (result Info, resultErr error) {
 		return Info{}, err
 	}
 	// Children must be durable before their parents and the completed staging entry.
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].Type == "directory" {
-			if err = syncDirectory(filepath.Join(b.files, filepath.FromSlash(entries[i].Path))); err != nil {
+	for _, entry := range slices.Backward(entries) {
+		if entry.Type == "directory" {
+			if err = syncDirectory(filepath.Join(b.files, filepath.FromSlash(entry.Path))); err != nil {
 				return Info{}, err
 			}
 		}
