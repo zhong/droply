@@ -55,7 +55,7 @@ func newStatsCmd() *cobra.Command {
 					UV   int    `json:"uv"`
 				} `json:"pages"`
 			}
-			if err := client.doJSON("GET", path, nil, &resp); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "GET", path, nil, &resp); err != nil {
 				return err
 			}
 
@@ -67,17 +67,17 @@ func newStatsCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Project: %s/%s  |  Period: %s\n\n", sub, projectName, periodLabel)
-			fmt.Printf("Total PV: %s  |  Total UV: %s\n\n", formatNum(resp.TotalPV), formatNum(resp.TotalUV))
+			fmt.Fprintf(cmd.OutOrStdout(), "Project: %s/%s  |  Period: %s\n\n", sub, projectName, periodLabel)
+			fmt.Fprintf(cmd.OutOrStdout(), "Total PV: %s  |  Total UV: %s\n\n", formatNum(resp.TotalPV), formatNum(resp.TotalUV))
 
 			if len(resp.Pages) == 0 {
-				fmt.Println("No page views recorded yet.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No page views recorded yet.")
 				return nil
 			}
 
-			fmt.Println("Top Pages:")
+			fmt.Fprintln(cmd.OutOrStdout(), "Top Pages:")
 			for _, p := range resp.Pages {
-				fmt.Printf("  %-30s %s PV   %s UV\n", p.Path, formatNum(p.PV), formatNum(p.UV))
+				fmt.Fprintf(cmd.OutOrStdout(), "  %-30s %s PV   %s UV\n", p.Path, formatNum(p.PV), formatNum(p.UV))
 			}
 			return nil
 		},

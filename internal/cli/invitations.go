@@ -21,7 +21,7 @@ func newInvitationCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodPost, "/admin/invitations", map[string]any{"email": args[0], "expires_at": time.Now().UTC().Add(lifetime)}, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodPost, "/admin/invitations", map[string]any{"email": args[0], "expires_at": time.Now().UTC().Add(lifetime)}, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -33,7 +33,7 @@ func newInvitationCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodGet, "/admin/invitations", nil, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, "/admin/invitations", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -47,7 +47,7 @@ func newInvitationCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodDelete, "/admin/invitations/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodDelete, "/admin/invitations/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"id": id, "revoked": true})

@@ -76,14 +76,14 @@ func newDomainAddCmd() *cobra.Command {
 				VerificationToken  string `json:"verification_token"`
 			}
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains", sub, proj)
-			if err := client.doJSON("POST", apiPath, map[string]string{"domain": domain}, &result); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "POST", apiPath, map[string]string{"domain": domain}, &result); err != nil {
 				return err
 			}
 
-			fmt.Printf("Domain %q added.\n", domain)
-			fmt.Printf("CNAME target: %s\n", result.CnameTarget)
-			fmt.Printf("Verification TXT: %s = %s\n", result.VerificationRecord, result.VerificationToken)
-			fmt.Println("Status: pending. Publish the TXT record, then run domain verify.")
+			fmt.Fprintf(cmd.OutOrStdout(), "Domain %q added.\n", domain)
+			fmt.Fprintf(cmd.OutOrStdout(), "CNAME target: %s\n", result.CnameTarget)
+			fmt.Fprintf(cmd.OutOrStdout(), "Verification TXT: %s = %s\n", result.VerificationRecord, result.VerificationToken)
+			fmt.Fprintln(cmd.OutOrStdout(), "Status: pending. Publish the TXT record, then run domain verify.")
 			return nil
 		},
 	}
@@ -111,12 +111,12 @@ func newDomainListCmd() *cobra.Command {
 				Verified bool   `json:"verified"`
 			}
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains", sub, proj)
-			if err := client.doJSON("GET", apiPath, nil, &domains); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "GET", apiPath, nil, &domains); err != nil {
 				return err
 			}
 
 			if len(domains) == 0 {
-				fmt.Println("No custom domains configured.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No custom domains configured.")
 				return nil
 			}
 			for _, d := range domains {
@@ -124,7 +124,7 @@ func newDomainListCmd() *cobra.Command {
 				if d.Verified {
 					status = "verified"
 				}
-				fmt.Printf("%-48s  %s\n", d.Domain, status)
+				fmt.Fprintf(cmd.OutOrStdout(), "%-48s  %s\n", d.Domain, status)
 			}
 			return nil
 		},
@@ -155,12 +155,12 @@ func newDomainVerifyCmd() *cobra.Command {
 				Message  string `json:"message"`
 			}
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains/%s/verify", sub, proj, domain)
-			if err := client.doJSON("POST", apiPath, nil, &result); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "POST", apiPath, nil, &result); err != nil {
 				return err
 			}
 
 			if result.Verified {
-				fmt.Printf("Domain %q verified.\n", domain)
+				fmt.Fprintf(cmd.OutOrStdout(), "Domain %q verified.\n", domain)
 			} else {
 				return fmt.Errorf("domain %q not verified: %s", domain, result.Message)
 			}
@@ -189,11 +189,11 @@ func newDomainRemoveCmd() *cobra.Command {
 			client := NewAPIClient(cfg)
 
 			apiPath := fmt.Sprintf("/subdomains/%s/projects/%s/domains/%s", sub, proj, domain)
-			if err := client.doJSON("DELETE", apiPath, nil, nil); err != nil {
+			if err := client.doJSONContext(cmd.Context(), "DELETE", apiPath, nil, nil); err != nil {
 				return err
 			}
 
-			fmt.Printf("Domain %q removed.\n", domain)
+			fmt.Fprintf(cmd.OutOrStdout(), "Domain %q removed.\n", domain)
 			return nil
 		},
 	}

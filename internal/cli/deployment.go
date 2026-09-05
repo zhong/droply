@@ -44,7 +44,7 @@ func newDeploymentListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/deployments", nil, &deployments); err != nil {
+			if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, path+"/deployments", nil, &deployments); err != nil {
 				return err
 			}
 			if deployments == nil {
@@ -94,7 +94,7 @@ func newDeploymentSwitchCmd(action string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := NewAPIClient(cfg).doJSON(http.MethodPost, path+"/"+action+"/"+strconv.Itoa(version), nil, &result); err != nil {
+			if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodPost, path+"/"+action+"/"+strconv.Itoa(version), nil, &result); err != nil {
 				return err
 			}
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -145,7 +145,7 @@ func newDeploymentCleanupCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := NewAPIClient(cfg).doJSON(method, path, nil, &result); err != nil {
+			if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), method, path, nil, &result); err != nil {
 				return err
 			}
 			if err := json.NewEncoder(cmd.OutOrStdout()).Encode(result); err != nil {
@@ -181,7 +181,7 @@ func newDeploymentEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/events", nil, &events); err != nil {
+			if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, path+"/events", nil, &events); err != nil {
 				return err
 			}
 			if events == nil {

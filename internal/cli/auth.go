@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,25 +12,34 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// readInput prints prompt and reads a line from stdin.
-func readInput(prompt string) string {
-	fmt.Print(prompt)
-	scanner := bufio.NewScanner(os.Stdin)
-	if scanner.Scan() {
-		return strings.TrimSpace(scanner.Text())
+// readCredentials uses one scanner for redirected input so buffered lines are preserved.
+func readCredentials(cmd *cobra.Command) (string, string, error) {
+	scanner := bufio.NewScanner(cmd.InOrStdin())
+	fmt.Fprint(cmd.ErrOrStderr(), "Email: ")
+	if !scanner.Scan() {
+		return "", "", credentialInputError(scanner)
 	}
-	return ""
+	email := strings.TrimSpace(scanner.Text())
+	fmt.Fprint(cmd.ErrOrStderr(), "Password: ")
+	if input, ok := cmd.InOrStdin().(*os.File); ok && term.IsTerminal(int(input.Fd())) {
+		password, err := term.ReadPassword(int(input.Fd()))
+		fmt.Fprintln(cmd.ErrOrStderr())
+		if err != nil {
+			return "", "", fmt.Errorf("read password: %w", err)
+		}
+		return email, string(password), nil
+	}
+	if !scanner.Scan() {
+		return "", "", credentialInputError(scanner)
+	}
+	return email, scanner.Text(), nil
 }
 
-// readPassword prints prompt and reads a password without echo.
-func readPassword(prompt string) string {
-	fmt.Print(prompt)
-	b, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		return ""
+func credentialInputError(scanner *bufio.Scanner) error {
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read credentials: %w", err)
 	}
-	return string(b)
+	return fmt.Errorf("read credentials: %w", io.EOF)
 }
 
 // resolveLoginTarget returns (contextName, context) for register/login commands.
@@ -119,8 +129,10 @@ func newRegisterCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			email := readInput("Email: ")
-			password := readPassword("Password: ")
+			email, password, err := readCredentials(cmd)
+			if err != nil {
+				return err
+			}
 
 			client := NewAPIClient(ctx)
 
@@ -128,7 +140,7 @@ func newRegisterCmd() *cobra.Command {
 				APIToken string `json:"api_token"`
 			}
 			invite := os.Getenv("DROPLY_INVITE")
-			if err := client.doJSON("POST", "/auth/register", map[string]string{
+			if err := client.doJSONContext(cmd.Context(), "POST", "/auth/register", map[string]string{
 				"invite":   invite,
 				"email":    email,
 				"password": password,
@@ -140,7 +152,7 @@ func newRegisterCmd() *cobra.Command {
 			if err := saveContext(name, ctx); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Registered successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "Registered successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
 			return nil
 		},
 	}
@@ -158,15 +170,17 @@ func newLoginCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			email := readInput("Email: ")
-			password := readPassword("Password: ")
+			email, password, err := readCredentials(cmd)
+			if err != nil {
+				return err
+			}
 
 			client := NewAPIClient(ctx)
 
 			var resp struct {
 				APIToken string `json:"api_token"`
 			}
-			if err := client.doJSON("POST", "/auth/login", map[string]string{
+			if err := client.doJSONContext(cmd.Context(), "POST", "/auth/login", map[string]string{
 				"email":    email,
 				"password": password,
 			}, &resp); err != nil {
@@ -177,7 +191,7 @@ func newLoginCmd() *cobra.Command {
 			if err := saveContext(name, ctx); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Logged in successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "Logged in successfully on context %q (%s). Token saved.\n", name, ctx.APIURL)
 			return nil
 		},
 	}
@@ -205,7 +219,7 @@ func newLogoutCmd() *cobra.Command {
 			if err := SaveFullConfig(full); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Logged out of context %q. Token cleared.\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Logged out of context %q. Token cleared.\n", name)
 			return nil
 		},
 	}
@@ -225,16 +239,16 @@ func newWhoamiCmd() *cobra.Command {
 				return err
 			}
 			ctx := full.Contexts[name]
-			fmt.Printf("Context: %s\n", name)
-			fmt.Printf("API URL: %s\n", ctx.APIURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "Context: %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "API URL: %s\n", ctx.APIURL)
 			if ctx.Token == "" {
-				fmt.Println("Token:   (not set)")
+				fmt.Fprintln(cmd.OutOrStdout(), "Token:   (not set)")
 			} else {
 				masked := ctx.Token
 				if len(masked) > 8 {
 					masked = masked[:8] + strings.Repeat("*", len(masked)-8)
 				}
-				fmt.Printf("Token:   %s\n", masked)
+				fmt.Fprintf(cmd.OutOrStdout(), "Token:   %s\n", masked)
 			}
 			return nil
 		},

@@ -36,7 +36,7 @@ func newProjectTokenCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodPost, path+"/tokens", input, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodPost, path+"/tokens", input, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -54,7 +54,7 @@ func newProjectTokenCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodGet, path+"/tokens", nil, &result); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodGet, path+"/tokens", nil, &result); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -72,7 +72,7 @@ func newProjectTokenCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := NewAPIClient(cfg).doJSON(http.MethodDelete, path+"/tokens/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+		if err := NewAPIClient(cfg).doJSONContext(cmd.Context(), http.MethodDelete, path+"/tokens/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"id": id, "revoked": true})

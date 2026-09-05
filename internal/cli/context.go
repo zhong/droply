@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"text/tabwriter"
 
@@ -38,7 +37,7 @@ func newContextListCmd() *cobra.Command {
 			}
 
 			if len(full.Contexts) == 0 {
-				fmt.Println("No contexts configured.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No contexts configured.")
 				return nil
 			}
 
@@ -48,7 +47,7 @@ func newContextListCmd() *cobra.Command {
 			}
 			sort.Strings(names)
 
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "CONTEXT\tAPI URL\tAUTHED")
 			for _, name := range names {
 				ctx := full.Contexts[name]
@@ -90,19 +89,19 @@ func newContextShowCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("context %q not found", name)
 			}
-			fmt.Printf("Context: %s\n", name)
-			fmt.Printf("API URL: %s\n", ctx.APIURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "Context: %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "API URL: %s\n", ctx.APIURL)
 			if ctx.Token == "" {
-				fmt.Println("Token:   (not set)")
+				fmt.Fprintln(cmd.OutOrStdout(), "Token:   (not set)")
 			} else {
 				masked := ctx.Token
 				if len(masked) > 8 {
 					masked = masked[:8] + "..."
 				}
-				fmt.Printf("Token:   %s\n", masked)
+				fmt.Fprintf(cmd.OutOrStdout(), "Token:   %s\n", masked)
 			}
 			if name == full.CurrentContext {
-				fmt.Println("(current context)")
+				fmt.Fprintln(cmd.OutOrStdout(), "(current context)")
 			}
 			return nil
 		},
@@ -127,7 +126,7 @@ func newContextUseCmd() *cobra.Command {
 			if err := SaveFullConfig(full); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Switched to context %q.\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Switched to context %q.\n", name)
 			return nil
 		},
 	}
@@ -161,8 +160,8 @@ func newContextAddCmd() *cobra.Command {
 			if err := SaveFullConfig(full); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Context %q added (%s).\n", name, apiURL)
-			fmt.Println("Run 'droply auth login --context " + name + "' to authenticate.")
+			fmt.Fprintf(cmd.OutOrStdout(), "Context %q added (%s).\n", name, apiURL)
+			fmt.Fprintln(cmd.OutOrStdout(), "Run 'droply auth login --context "+name+"' to authenticate.")
 			return nil
 		},
 	}
@@ -200,7 +199,7 @@ func newContextRemoveCmd() *cobra.Command {
 			if err := SaveFullConfig(full); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Context %q removed.\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Context %q removed.\n", name)
 			return nil
 		},
 	}
