@@ -79,7 +79,7 @@ func TestProjectCollaborationPermissionMatrixAndRevocation(t *testing.T) {
 	if visitorResult.Code != 403 {
 		t.Fatal("publisher membership bypassed visitor access rules", visitorResult.Code)
 	}
-	reads := []string{base + "/deployments", base + "/events", base + "/domains", base + "/access", base + "/members", base + "/stats", base + "/logs", base + "/cleanup"}
+	reads := []string{base + "/deployments", base + "/events", base + "/domains", base + "/access", base + "/members", base + "/stats", base + "/logs", base + "/cleanup", base + "/audit"}
 	for _, role := range []string{"owner", "deployer", "viewer", "stranger"} {
 		for _, path := range reads {
 			w := request("GET", path, role, "")
@@ -90,6 +90,16 @@ func TestProjectCollaborationPermissionMatrixAndRevocation(t *testing.T) {
 			if w.Code != want {
 				t.Errorf("%s GET %s: %d %s", role, path, w.Code, w.Body.String())
 			}
+		}
+	}
+	for _, role := range []string{"owner", "deployer", "viewer", "stranger"} {
+		w := request("GET", base+"/tokens", role, "")
+		want := 200
+		if role == "viewer" || role == "stranger" {
+			want = 403
+		}
+		if w.Code != want {
+			t.Fatalf("%s token list: %d", role, w.Code)
 		}
 	}
 	for _, role := range []string{"viewer", "stranger"} {

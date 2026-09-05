@@ -23,56 +23,11 @@ func markAuditFailure(r *http.Request) {
 	}
 }
 
-func auditAction(r *http.Request) string {
-	const p = "/subdomains/{sub}/projects/{project}"
-	route := chi.RouteContext(r.Context()).RoutePattern()
-	switch r.Method + " " + route {
-	case "POST " + p + "/deploy":
-		return "deployment.create"
-	case "POST " + p + "/promote/{version}":
-		return "deployment.promote"
-	case "POST " + p + "/rollback/{version}":
-		return "deployment.rollback"
-	case "POST " + p + "/domains":
-		return "domain.create"
-	case "POST " + p + "/domains/{domain}/verify":
-		return "domain.verify"
-	case "DELETE " + p + "/domains/{domain}":
-		return "domain.remove"
-	case "PUT " + p + "/access":
-		return "access.set"
-	case "DELETE " + p + "/access":
-		return "access.remove"
-	case "PUT /subdomains/{sub}/access":
-		return "subdomain.access.set"
-	case "DELETE /subdomains/{sub}/access":
-		return "subdomain.access.remove"
-	case "PUT " + p + "/members":
-		return "member.set"
-	case "DELETE " + p + "/members/{id}":
-		return "member.remove"
-	case "POST " + p + "/tokens":
-		return "token.create"
-	case "DELETE " + p + "/tokens/{id}":
-		return "token.revoke"
-	case "POST /admin/invitations":
-		return "invitation.create"
-	case "DELETE /admin/invitations/{id}":
-		return "invitation.revoke"
-	case "DELETE " + p:
-		return "project.remove"
-	case "POST " + p + "/cleanup":
-		return "deployment.cleanup"
-	default:
-		return ""
-	}
-}
-
 // Reserve a durable pending event before mutation. A crash or failed final write
 // leaves an honest unknown outcome, rather than an invented successful event.
 func (s *Server) auditMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		action := auditAction(r)
+		action := operationFromRequest(r).policy().audit
 		if action == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -182,11 +137,11 @@ func (w *auditResponse) Write(data []byte) (int, error) {
 }
 
 func (s *Server) registerAuditRoutes(r chi.Router) {
-	r.Get("/subdomains/{sub}/projects/{project}/audit", s.handleProjectAudit)
-	r.Get("/admin/audit", s.handleAdminAudit)
+	r.With(s.forOperation(opProjectAudit)).Get("/subdomains/{sub}/projects/{project}/audit", s.handleProjectAudit)
+	r.With(s.forOperation(opAdminAudit)).Get("/admin/audit", s.handleAdminAudit)
 }
 func (s *Server) handleProjectAudit(w http.ResponseWriter, r *http.Request) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}

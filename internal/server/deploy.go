@@ -99,9 +99,9 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot create project", 500)
 		return
 	}
-	if !s.canAccessSubdomainProject(r, sub) {
+	if err := s.recheckPublication(r, proj); err != nil {
 		s.deploymentMu.Unlock()
-		jsonError(w, "project permission revoked", 403)
+		jsonError(w, err.Error(), 403)
 		return
 	}
 	id := rand.Text()
@@ -187,8 +187,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.deploymentMu.Lock()
 	defer s.deploymentMu.Unlock()
-	if !s.canAccessSubdomainProject(r, sub) {
-		fail("project permission revoked", 403)
+	if err := s.recheckPublication(r, proj); err != nil {
+		fail(err.Error(), 403)
 		return
 	}
 	if r.Context().Err() != nil {
@@ -229,27 +229,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // handleListDeployments verifies subdomain ownership and returns all deployments for the project.
 // Always returns an array (never null).
 func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
-	subName := chi.URLParam(r, "sub")
-	projName := chi.URLParam(r, "project")
-
-	sub, err := s.store.GetSubdomainByName(subName)
-	if err != nil {
-		jsonError(w, "subdomain not found", http.StatusNotFound)
-		return
-	}
-	if !s.canAccessSubdomainProject(r, sub) {
-		jsonError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
-	proj, err := s.authorizedProject(r, sub.ID, projName)
-	if err != nil {
-		jsonError(w, "project not found", http.StatusNotFound)
-		return
-	}
-
-	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok && token.ProjectID != proj.ID {
-		jsonError(w, "project token cannot target this project", 403)
+	proj := s.requireProject(w, r)
+	if proj == nil {
 		return
 	}
 

@@ -5,34 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zhong/droply/internal/model"
 	"github.com/zhong/droply/internal/store"
 )
-
-func (s *Server) ownedProject(w http.ResponseWriter, r *http.Request) *model.Project {
-	sub, err := s.store.GetSubdomainByName(chi.URLParam(r, "sub"))
-	if err != nil {
-		jsonError(w, "subdomain not found", 404)
-		return nil
-	}
-	if !s.canAccessSubdomainProject(r, sub) {
-		jsonError(w, "forbidden", 403)
-		return nil
-	}
-	project, err := s.authorizedProject(r, sub.ID, chi.URLParam(r, "project"))
-	if err != nil {
-		jsonError(w, "project not found", 404)
-		return nil
-	}
-	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok && token.ProjectID != project.ID {
-		jsonError(w, "project token cannot target this project", 403)
-		return nil
-	}
-	return project
-}
 
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 	s.switchPublication(w, r, false)
@@ -43,7 +20,7 @@ func (s *Server) handlePromote(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promote bool) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
@@ -60,17 +37,9 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 	defer s.deploymentMu.Unlock()
 	// Authorization may have changed while this request waited for a publisher
 	// or membership mutation. Recheck the exact project and credential under the lock.
-	role, err := s.store.ProjectRole(r.Context(), project.ID, userFromContext(r.Context()).ID)
-	if err != nil || !roleAllows(role, "deployer") {
-		jsonError(w, "project permission revoked", 403)
+	if err := s.recheckPublication(r, project); err != nil {
+		jsonError(w, err.Error(), 403)
 		return
-	}
-	if token, ok := r.Context().Value(projectTokenContextKey).(*model.ProjectToken); ok {
-		current, err := s.store.AuthenticateProjectToken(r.Context(), strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if err != nil || current.ID != token.ID || current.ProjectID != project.ID || !s.projectTokenAllows(r, current) {
-			jsonError(w, "project token permission revoked", 403)
-			return
-		}
 	}
 
 	d, err := s.store.GetDeployment(r.Context(), project.ID, version)
@@ -122,7 +91,7 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 }
 
 func (s *Server) handlePublicationEvents(w http.ResponseWriter, r *http.Request) {
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}

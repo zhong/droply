@@ -31,7 +31,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 	for _, tc := range []struct {
 		action, change string
 		token          bool
-	}{{"rollback/1", "remove", false}, {"promote/2", "downgrade", false}, {"promote/2", "revoke", true}} {
+	}{{"rollback/1", "remove", false}, {"promote/2", "downgrade", false}, {"promote/2", "revoke", true}, {"promote/2", "downgrade", true}, {"deploy", "revoke", true}} {
 		t.Run(tc.action+"-"+tc.change, func(t *testing.T) {
 			st, err := store.NewSQLiteStore(":memory:")
 			if err != nil {
@@ -57,7 +57,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 			if _, err := st.PutProjectMember(t.Context(), project.ID, member.Email, "deployer"); err != nil {
 				t.Fatal(err)
 			}
-			barrier := &publicationRoleBarrier{Store: st, at: 2, ready: make(chan struct{})}
+			barrier := &publicationRoleBarrier{Store: st, at: 1, ready: make(chan struct{})}
 			srv := New(barrier, t.TempDir(), "example.test", []byte("publication-test-key"))
 			if err := srv.PrepareDeployments(t.Context()); err != nil {
 				t.Fatal(err)
@@ -91,7 +91,7 @@ func TestPublicationRechecksPermissionAfterWaitingForLock(t *testing.T) {
 				}
 				credentialID = credential.ID
 				raw = value
-				barrier.at = 3
+				barrier.at = 2
 			}
 			srv.deploymentMu.Lock()
 			locked := true

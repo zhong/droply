@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,30 +56,7 @@ func (s *Server) projectTokenAllows(r *http.Request, token *model.ProjectToken) 
 	if err != nil || project.ID != token.ProjectID {
 		return false
 	}
-	role, err := s.store.ProjectRole(r.Context(), project.ID, token.IssuerID)
-	if err != nil || !roleAllows(role, "deployer") {
-		return false
-	}
-	pattern := chi.RouteContext(r.Context()).RoutePattern()
-	const base = "/subdomains/{sub}/projects/{project}"
-	switch {
-	case r.Method == http.MethodGet && (pattern == base+"/deployments" || pattern == base+"/events"):
-		return true
-	case r.Method == http.MethodPost && pattern == base+"/deploy":
-		values, ok := r.URL.Query()["environment"]
-		if ok && (len(values) != 1 || values[0] == "") {
-			return false
-		}
-		environment := "production"
-		if ok {
-			environment = values[0]
-		}
-		return (environment == "preview" && slices.Contains(token.Scopes, "preview")) || (environment == "production" && slices.Contains(token.Scopes, "production"))
-	case r.Method == http.MethodPost && (pattern == base+"/rollback/{version}" || pattern == base+"/promote/{version}"):
-		return slices.Contains(token.Scopes, "production")
-	default:
-		return false
-	}
+	return s.projectAllows(r, project, token.IssuerID, token)
 }
 
 func (s *Server) handleCreateProjectToken(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +64,7 @@ func (s *Server) handleCreateProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "user token required", 403)
 		return
 	}
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
@@ -127,7 +103,7 @@ func (s *Server) handleListProjectTokens(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "user token required", 403)
 		return
 	}
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
@@ -143,7 +119,7 @@ func (s *Server) handleRevokeProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "user token required", 403)
 		return
 	}
-	project := s.ownedProject(w, r)
+	project := s.requireProject(w, r)
 	if project == nil {
 		return
 	}
@@ -152,6 +128,8 @@ func (s *Server) handleRevokeProjectToken(w http.ResponseWriter, r *http.Request
 		jsonError(w, "invalid token ID", 400)
 		return
 	}
+	s.deploymentMu.Lock()
+	defer s.deploymentMu.Unlock()
 	err = s.store.RevokeProjectToken(r.Context(), project.ID, userFromContext(r.Context()).ID, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		jsonError(w, "project token not found", 404)

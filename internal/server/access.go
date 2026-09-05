@@ -92,20 +92,18 @@ func (s *Server) setAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if !s.canAccessSubdomainProject(r, sub) {
+	project, err := s.projectForOperation(r, sub)
+	if err != nil {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
-
 	var projectID *int64
 	if isProject {
-		projName := chi.URLParam(r, "project")
-		proj, err := s.authorizedProject(r, sub.ID, projName)
-		if err != nil {
+		if project == nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return
 		}
-		projectID = &proj.ID
+		projectID = &project.ID
 	}
 
 	var req setAccessRequest
@@ -218,20 +216,18 @@ func (s *Server) getAccess(w http.ResponseWriter, r *http.Request, isProject boo
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if !s.canAccessSubdomainProject(r, sub) {
+	project, err := s.projectForOperation(r, sub)
+	if err != nil {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
-
 	var projectID *int64
 	if isProject {
-		projName := chi.URLParam(r, "project")
-		proj, err := s.authorizedProject(r, sub.ID, projName)
-		if err != nil {
+		if project == nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return
 		}
-		projectID = &proj.ID
+		projectID = &project.ID
 	}
 
 	rule, err := s.store.GetAccessRule(r.Context(), sub.ID, projectID)
@@ -263,20 +259,18 @@ func (s *Server) deleteAccess(w http.ResponseWriter, r *http.Request, isProject 
 		jsonError(w, "subdomain not found", http.StatusNotFound)
 		return
 	}
-	if !s.canAccessSubdomainProject(r, sub) {
+	project, err := s.projectForOperation(r, sub)
+	if err != nil {
 		jsonError(w, "forbidden", http.StatusForbidden)
 		return
 	}
-
 	var projectID *int64
 	if isProject {
-		projName := chi.URLParam(r, "project")
-		proj, err := s.authorizedProject(r, sub.ID, projName)
-		if err != nil {
+		if project == nil {
 			jsonError(w, "project not found", http.StatusNotFound)
 			return
 		}
-		projectID = &proj.ID
+		projectID = &project.ID
 	}
 
 	if err := s.store.DeleteAccessRule(r.Context(), sub.ID, projectID); err != nil {
