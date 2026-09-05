@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
@@ -19,6 +22,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Report actual toolchain
+        run: go version
       - name: Controlled ACME
         run: sh scripts/test-acme.sh
       - name: Restore into a new directory and serve real HTTP and TLS
@@ -47,6 +52,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Report actual toolchain
+        run: go version
       - name: Build
         run: |
           VERSION=${GITHUB_REF_NAME}

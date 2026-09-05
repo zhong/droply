@@ -42,4 +42,4 @@ make build-all
 
 `test-required.sh` needs Python 3 and fails if its named test skips, disappears, or fails. To check fail-closed behavior, run it for `TestConsoleBrowser` without the opt-in environment variable, or for `TestDoesNotExist`; both must exit nonzero. Enabling the browser test with a nonexistent Playwright module must also fail. A green ordinary integration suite alone is never a claim that browser or ACME acceptance passed.
 
-Go versions still follow `go.mod` here; the minimum/release toolchain policy is owned by #37. Branch protection is a repository setting: this change supplies checks, but does not claim administrators cannot bypass them.
+Go versions follow `go.mod`; see the [minimum/release toolchain policy](toolchain.md). Branch protection is a repository setting: this change supplies checks, but does not claim administrators cannot bypass them.

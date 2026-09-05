@@ -58,7 +58,7 @@ jobs:
       - run: npm ci && npm run build
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.1'
+          go-version: '1.27.1'
       - run: |
           test -n "$DROPLY_VERSION"
           go install "github.com/zhong/droply/cmd/droply@$DROPLY_VERSION"
@@ -83,7 +83,7 @@ jobs:
       - run: npm ci && npm run build
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.1'
+          go-version: '1.27.1'
       - run: |
           test -n "$DROPLY_VERSION"
           go install "github.com/zhong/droply/cmd/droply@$DROPLY_VERSION"
