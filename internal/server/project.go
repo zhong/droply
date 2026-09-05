@@ -86,5 +86,6 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	_ = os.RemoveAll(filepath.Join(s.sitesDir, subName, projName))
 
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(http.StatusNoContent)
 }

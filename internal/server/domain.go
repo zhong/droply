@@ -55,6 +55,8 @@ func (s *Server) handleCreateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	auditResourceTarget(r, auditResource, cd.ID)
+	recordAudit(r, auditSuccess)
 	cnameTarget := fmt.Sprintf("%s.%s", subName, s.baseDomain)
 	jsonResponse(w, createDomainResponse{
 		CustomDomain: cd,
@@ -101,6 +103,7 @@ func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -125,6 +128,7 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cd.Verified {
+		recordAudit(r, auditSuccess)
 		jsonResponse(w, map[string]any{"verified": true, "message": "already verified"}, http.StatusOK)
 		return
 	}
@@ -135,6 +139,7 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	records, err := resolver.LookupTXT(r.Context(), cd.VerificationRecord)
 	if err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "DNS verification lookup failed; retry after publishing the TXT record", http.StatusBadGateway)
 		return
 	}
@@ -146,10 +151,11 @@ func (s *Server) handleVerifyDomain(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "failed to persist verification", http.StatusInternalServerError)
 			return
 		}
+		recordAudit(r, auditSuccess)
 		jsonResponse(w, map[string]any{"verified": true, "status": "verified"}, http.StatusOK)
 		return
 	}
-	markAuditFailure(r)
+	recordAudit(r, auditFailure)
 	jsonResponse(w, map[string]any{"verified": false, "status": "pending", "message": "publish the exact verification TXT record", "verification_record": cd.VerificationRecord, "verification_token": cd.VerificationToken}, http.StatusOK)
 }
 

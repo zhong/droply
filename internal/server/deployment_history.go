@@ -30,6 +30,7 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 		return
 	}
 	if err := s.PrepareDeployments(r.Context()); err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "deployment storage unavailable", 503)
 		return
 	}
@@ -48,6 +49,7 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 		return
 	}
 	if err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "cannot read deployment", 500)
 		return
 	}
@@ -84,6 +86,8 @@ func (s *Server) switchPublication(w http.ResponseWriter, r *http.Request, promo
 		jsonError(w, "rollback transaction failed; query current production", 500)
 		return
 	}
+	auditResourceTarget(r, auditVersion, int64(d.Version))
+	recordAudit(r, auditSuccess)
 	jsonResponse(w, struct {
 		Deployment *model.Deployment `json:"deployment"`
 		Changed    bool              `json:"changed"`

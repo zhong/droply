@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
@@ -179,5 +180,63 @@ func TestAuditRealManagementAndSecretBoundaries(t *testing.T) {
 	active, err := st.GetActiveDeployment(t.Context(), project.ID)
 	if err != nil || active.Version != 1 {
 		t.Fatal("audit failure changed production", err)
+	}
+}
+
+// Simulate losing the database acknowledgment after a durable commit. HTTP 500
+// cannot establish whether publication happened, so the audit must stay pending.
+type auditCommitFault struct {
+	store.Store
+}
+
+func (s auditCommitFault) CommitDeployment(ctx context.Context, id int64, files int, size int64, checksum string) error {
+	if err := s.Store.CommitDeployment(ctx, id, files, size, checksum); err != nil {
+		return err
+	}
+	return errors.New("commit acknowledgment lost")
+}
+
+func TestAuditUnknownPublicationAndPrecommitFailure(t *testing.T) {
+	st, err := store.NewSQLiteStore(filepath.Join(t.TempDir(), "audit.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	srv := server.New(auditCommitFault{st}, t.TempDir(), "droplydoc.com", []byte("audit-key"))
+	defer srv.ShutdownAnalytics()
+	token := registerAndGetToken(t, srv, "fault@example.test", "password-123")
+	createSubdomain(t, srv, token, "fault")
+	for _, tc := range []struct {
+		files  map[string]string
+		status int
+		result string
+	}{
+		{map[string]string{"index.html": "bad", "_redirects": "unsupported"}, 400, "failure"},
+		{map[string]string{"index.html": "committed"}, 500, "pending"},
+	} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, buildDeployRequest(t, "/subdomains/fault/projects/site/deploy", createTestTarGz(t, tc.files), token))
+		if w.Code != tc.status {
+			t.Fatalf("response=%d %s", w.Code, w.Body)
+		}
+		events, err := st.ListAuditEvents(t.Context(), 0, 0, 0, 1)
+		if err != nil || len(events) != 1 {
+			t.Fatalf("events=%+v err=%v", events, err)
+		}
+		if events[0].Result != tc.result || events[0].StatusCode != tc.status || events[0].ProjectID == 0 || !strings.HasPrefix(events[0].Target, "version:") {
+			t.Fatalf("event=%+v", events[0])
+		}
+	}
+	sub, err := st.GetSubdomainByName("fault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := st.GetProject(sub.ID, "site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := st.GetActiveDeployment(t.Context(), project.ID)
+	if err != nil || active.Version != 2 {
+		t.Fatalf("durable publication=%+v err=%v", active, err)
 	}
 }

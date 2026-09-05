@@ -40,7 +40,7 @@ func (s *SQLiteStore) BeginAuditEvent(ctx context.Context, event model.AuditEven
 	return result.LastInsertId()
 }
 func (s *SQLiteStore) FinishAuditEvent(ctx context.Context, id, projectID int64, target string, status int, outcome string) error {
-	if status < 100 || status > 599 || len(target) > 512 || (outcome != "success" && outcome != "failure") {
+	if (status != 0 && status < 100) || status > 599 || len(target) > 512 || (outcome != "success" && outcome != "failure" && outcome != "pending") {
 		return errors.New("invalid audit outcome")
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE audit_events SET project_id=?,target=?,result=?,status_code=? WHERE id=? AND result='pending'`, projectID, target, outcome, status, id)

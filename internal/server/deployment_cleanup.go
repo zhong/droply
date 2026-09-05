@@ -46,6 +46,7 @@ func (s *Server) handleDeploymentCleanup(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if err := s.PrepareDeployments(r.Context()); err != nil {
+		recordAudit(r, auditFailure)
 		jsonError(w, "deployment storage unavailable", 503)
 		return
 	}
@@ -56,8 +57,9 @@ func (s *Server) handleDeploymentCleanup(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "cannot inspect artifact retention", 500)
 		return
 	}
+	recordAudit(r, auditSuccess)
 	if len(report.Errors) > 0 {
-		markAuditFailure(r)
+		recordAudit(r, auditFailure)
 	}
 	jsonResponse(w, report, 200)
 }

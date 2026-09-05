@@ -57,6 +57,8 @@ func (s *Server) handleCreateInvitation(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, "cannot create invitation", 500)
 		return
 	}
+	auditResourceTarget(r, auditResource, invitation.ID)
+	recordAudit(r, auditSuccess)
 	w.Header().Set("Cache-Control", "no-store")
 	jsonResponse(w, struct {
 		ID        int64     `json:"id"`
@@ -98,5 +100,6 @@ func (s *Server) handleRevokeInvitation(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, "cannot revoke invitation", 500)
 		return
 	}
+	recordAudit(r, auditSuccess)
 	w.WriteHeader(204)
 }

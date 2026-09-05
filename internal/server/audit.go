@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,11 +14,46 @@ import (
 
 const auditOutcomeContextKey contextKey = "audit-outcome"
 
-type auditOutcome struct{ failed bool }
+// Results describe the operation, independently of response encoding or delivery.
+type auditResult uint8
 
-func markAuditFailure(r *http.Request) {
+const (
+	auditUnreported auditResult = iota
+	auditPending
+	auditSuccess
+	auditFailure
+)
+
+type auditTarget uint8
+
+const (
+	auditResource auditTarget = iota
+	auditVersion
+	auditUser
+)
+
+type auditOutcome struct {
+	result    auditResult
+	target    string
+	projectID int64
+}
+
+func recordAudit(r *http.Request, result auditResult) {
 	if outcome, ok := r.Context().Value(auditOutcomeContextKey).(*auditOutcome); ok {
-		outcome.failed = true
+		outcome.result = result
+	}
+}
+
+func auditResourceTarget(r *http.Request, kind auditTarget, id int64) {
+	if outcome, ok := r.Context().Value(auditOutcomeContextKey).(*auditOutcome); ok && id > 0 {
+		names := [...]string{"id", "version", "user"}
+		outcome.target = fmt.Sprintf("%s:%d", names[kind], id)
+	}
+}
+
+func auditProject(r *http.Request, id int64) {
+	if outcome, ok := r.Context().Value(auditOutcomeContextKey).(*auditOutcome); ok {
+		outcome.projectID = id
 	}
 }
 
@@ -66,46 +100,41 @@ func (s *Server) auditMiddleware(next http.Handler) http.Handler {
 		capture := &auditResponse{ResponseWriter: w}
 		completed := false
 		defer func() {
+			interrupted := recover()
 			status := capture.status
-			if !completed {
-				status = 500
-			} else if status == 0 {
-				status = 200
-			}
-			// Decode only numeric resource identifiers; neither body nor credentials are persisted.
-			var result struct {
-				ID         int64 `json:"id"`
-				UserID     int64 `json:"user_id"`
-				Version    int   `json:"version"`
-				Deployment struct {
-					Version int `json:"version"`
-				} `json:"deployment"`
-			}
-			if completed && json.Unmarshal(capture.body, &result) == nil {
+			if status == 0 {
 				switch {
-				case result.Version > 0:
-					event.Target = fmt.Sprintf("version:%d", result.Version)
-				case result.Deployment.Version > 0:
-					event.Target = fmt.Sprintf("version:%d", result.Deployment.Version)
-				case result.UserID > 0:
-					event.Target = fmt.Sprintf("user:%d", result.UserID)
-				case result.ID > 0:
-					event.Target = fmt.Sprintf("id:%d", result.ID)
+				case completed:
+					status = http.StatusOK
+				case interrupted != nil && interrupted != http.ErrAbortHandler:
+					// chi's outer Recoverer will write this status when no header was sent.
+					status = http.StatusInternalServerError
 				}
 			}
-			if event.ProjectID == 0 && event.SubdomainID > 0 && chi.URLParam(r, "project") != "" {
-				if project, err := s.store.GetProject(event.SubdomainID, chi.URLParam(r, "project")); err == nil {
-					event.ProjectID = project.ID
+			resultName := "pending"
+			switch outcome.result {
+			case auditSuccess:
+				resultName = "success"
+			case auditFailure:
+				resultName = "failure"
+			case auditUnreported:
+				if completed && status >= 400 && status < 500 {
+					resultName = "failure"
 				}
+			}
+			if outcome.target != "" {
+				event.Target = outcome.target
+			}
+			if outcome.projectID != 0 {
+				event.ProjectID = outcome.projectID
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			resultName := "failure"
-			if completed && status >= 200 && status < 300 && !outcome.failed {
-				resultName = "success"
-			}
 			if err := s.store.FinishAuditEvent(ctx, id, event.ProjectID, event.Target, status, resultName); err != nil {
 				log.Printf("audit event %d remains pending: finalization failed", id)
+			}
+			if interrupted != nil {
+				panic(interrupted)
 			}
 		}()
 		next.ServeHTTP(capture, r)
@@ -116,12 +145,11 @@ func (s *Server) auditMiddleware(next http.Handler) http.Handler {
 type auditResponse struct {
 	http.ResponseWriter
 	status int
-	body   []byte
 }
 
 func (w *auditResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func (w *auditResponse) WriteHeader(status int) {
-	if w.status == 0 {
+	if w.status == 0 && status >= 200 {
 		w.status = status
 	}
 	w.ResponseWriter.WriteHeader(status)
@@ -129,9 +157,6 @@ func (w *auditResponse) WriteHeader(status int) {
 func (w *auditResponse) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(200)
-	}
-	if len(w.body) < 4096 {
-		w.body = append(w.body, data[:min(len(data), 4096-len(w.body))]...)
 	}
 	return w.ResponseWriter.Write(data)
 }
