@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Empty, Input } from "@cloudflare/kumo";
-import {
-  ArrowClockwiseIcon,
-  CubeIcon,
-  MoonIcon,
-  SunIcon,
-} from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, CubeIcon } from "@phosphor-icons/react";
 import {
   APIError,
   createAPI,
@@ -16,25 +11,7 @@ import {
 import type { API, Project, Session } from "./api";
 import { ErrorNotice, Loading } from "./ui";
 import { ProjectDetail } from "./ProjectDetail";
-
-function ThemeToggle() {
-  const [dark, setDark] = useState(
-    () => matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-  useEffect(() => {
-    document.documentElement.dataset.mode = dark ? "dark" : "light";
-  }, [dark]);
-  return (
-    <Button
-      variant="ghost"
-      icon={dark ? SunIcon : MoonIcon}
-      aria-label={dark ? "切换浅色主题" : "切换深色主题"}
-      onClick={() => setDark(!dark)}
-    >
-      {dark ? "浅色" : "深色"}
-    </Button>
-  );
-}
+import { ThemeToggle } from "./ThemeToggle";
 
 export function App() {
   const [session, setSession] = useState<Session | null>();

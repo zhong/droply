@@ -13,5 +13,5 @@
     "noUnusedParameters": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "visitor", "vite.config.ts", "vite.visitor.config.ts"]
 }

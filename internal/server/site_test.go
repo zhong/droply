@@ -252,8 +252,8 @@ func TestSiteHandlerLoginWrongPassword(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 (login page with error), got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Incorrect password") {
-		t.Fatalf("expected 'Incorrect password' in body, got %q", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "密码不正确，请重试。") {
+		t.Fatalf("expected '密码不正确，请重试。' in body, got %q", rr.Body.String())
 	}
 }
 

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="kumo">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>访问验证 · Droply</title>
+    <script type="module" crossorigin src="/_droply/ui/visitor.js"></script>
+    <link rel="stylesheet" crossorigin href="/_droply/ui/visitor.css">
+  </head>
+  <body>
+    <div
+      id="visitor-root"
+      data-host="{{.Host}}"
+      data-redirect="{{.Redirect}}"
+      data-error="{{.Error}}"
+      data-password="{{.ShowPassword}}"
+      data-wework="{{.ShowWeWork}}"
+    >
+      <!-- Keep a working form until React is ready, including without JavaScript. -->
+      <main class="visitor-layout">
+        <section class="panel visitor-card" aria-labelledby="fallback-title">
+          <p class="text-sm text-kumo-subtle">DROPLY · 受保护的站点</p>
+          <h1 id="fallback-title">验证后继续访问</h1>
+          <p class="break-all text-sm text-kumo-subtle">{{.Host}}</p>
+          {{if .Error}}
+          <p role="alert" class="text-kumo-danger">{{.Error}}</p>
+          {{end}} {{if .ShowPassword}}
+          <form method="POST" action="/_droply/login" class="form-stack">
+            <label for="fallback-password">访问密码</label>
+            <input
+              id="fallback-password"
+              class="fallback-input"
+              type="password"
+              name="password"
+              placeholder="输入访问密码"
+              autocomplete="current-password"
+              required
+            />
+            <input type="hidden" name="redirect" value="{{.Redirect}}" />
+            <input type="hidden" name="host" value="{{.Host}}" />
+            <button class="fallback-button" type="submit">验证并访问</button>
+          </form>
+          {{end}} {{if .ShowWeWork}}
+          <a
+            class="fallback-button"
+            href="/_droply/wework/auth?redirect={{.Redirect | urlquery}}&host={{.Host | urlquery}}"
+            >使用企业微信登录</a
+          >
+          {{end}} {{if not (or .ShowPassword .ShowWeWork)}}
+          <p role="alert">暂时无法验证访问权限，请联系站点管理员。</p>
+          {{end}}
+          <p class="text-sm text-kumo-subtle">
+            如需获取访问权限，请联系分享此链接的人。
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

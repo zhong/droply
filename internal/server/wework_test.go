@@ -350,13 +350,13 @@ func TestWeWorkLoginPageShowsButton(t *testing.T) {
 		t.Fatalf("expected 200 (login page), got %d", rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "Login with WeCom") {
+	if !strings.Contains(body, "使用企业微信登录") {
 		t.Errorf("expected WeCom button in login page, body=%q", body)
 	}
 	if !strings.Contains(body, "/_droply/wework/auth") {
 		t.Errorf("expected auth link in login page, body=%q", body)
 	}
-	if strings.Contains(body, "Enter password") {
+	if strings.Contains(body, "输入访问密码") {
 		t.Errorf("did not expect password input when only WeWork enabled, body=%q", body)
 	}
 }
@@ -377,7 +377,7 @@ func TestWeWorkAuthHandlerNotConfigured(t *testing.T) {
 }
 
 // TestWeWorkLoginPageButtonHrefIsClickable is a regression test for a bug where
-// the login page's "Login with WeCom" button href was double-URL-encoded:
+// the login page's "使用企业微信登录" button href was double-URL-encoded:
 // renderLoginPage called url.QueryEscape() on the redirect path, and then
 // html/template did URL escaping again on the attribute value. Clicking the
 // resulting link yielded ?redirect=%252Fvpn%252F, which the auth handler then
@@ -703,10 +703,10 @@ func TestWeWorkNoAutoRedirectWhenPasswordAlsoEnabled(t *testing.T) {
 		t.Fatalf("expected 200 login page when password also enabled, got %d", rr.Code)
 	}
 	body2 := rr.Body.String()
-	if !strings.Contains(body2, "Enter password") {
+	if !strings.Contains(body2, "输入访问密码") {
 		t.Errorf("expected password input in login page, body=%q", body2)
 	}
-	if !strings.Contains(body2, "Login with WeCom") {
+	if !strings.Contains(body2, "使用企业微信登录") {
 		t.Errorf("expected WeCom button in login page, body=%q", body2)
 	}
 }
@@ -731,7 +731,7 @@ func TestWeWorkNoAutoRedirectAfterRecentFailure(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 login page after recent failure, got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "Login with WeCom") {
+	if !strings.Contains(rr.Body.String(), "使用企业微信登录") {
 		t.Errorf("expected login page with WeCom button, got body=%q", rr.Body.String())
 	}
 }
@@ -754,7 +754,7 @@ func TestWeWorkAutoRedirectDisabledWhenServerNotConfigured(t *testing.T) {
 	}
 	body := rr.Body.String()
 	// Login page should NOT show the WeCom button when server is unconfigured.
-	if strings.Contains(body, "Login with WeCom") {
+	if strings.Contains(body, "使用企业微信登录") {
 		t.Errorf("WeCom button should not be present when server unconfigured, body=%q", body)
 	}
 }

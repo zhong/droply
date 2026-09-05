@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "watch": "vite build --watch",
-    "format": "prettier --write src tests vite.config.ts",
-    "check": "tsc --noEmit && prettier --check src tests vite.config.ts",
-    "build": "npm run check && vite build"
+    "format": "prettier --write src visitor tests vite.config.ts vite.visitor.config.ts",
+    "check": "tsc --noEmit && prettier --check src visitor tests vite.config.ts vite.visitor.config.ts",
+    "build": "npm run check && vite build && vite build --config vite.visitor.config.ts",
+    "watch:visitor": "vite build --config vite.visitor.config.ts --watch"
   },
   "engines": { "node": ">=22.12.0" },
   "dependencies": {

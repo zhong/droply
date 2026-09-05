@@ -29,9 +29,22 @@ Vite 开发预览地址为 `http://localhost:5173/console/`。登录和真实 AP
 - `src/api.ts`：现有 Go 服务接口类型和同源请求。
 - `src/ui.tsx`：共用的 Kumo 表格、加载、错误和链接。
 - `src/style.css`：Kumo 语义 token 与响应式布局。
+- `visitor/`：站点密码 / 企业微信访问验证页，与控制台共用 Kumo 和主题组件。
+
+`make console` 同时构建访客页面到 `internal/server/visitor_assets/`，该目录也随源码提交。访客资源通过站点同源的 `/_droply/ui/visitor.js` 和 `visitor.css` 提供，不请求管理控制台资源。Go 模板保留普通 POST 表单，JavaScript 不可用时仍能完成密码登录。开发时可运行 `npm --prefix console run watch:visitor` 持续构建访客页面。
 
 保持各详情区域的失败隔离；切换项目或退出时取消旧请求。写操作确认后锁定表单和导航，完成后重新获取详情。凭证仅保留于现有 HttpOnly Cookie，会话中的 CSRF 值仅存在内存；主题也不写入浏览器存储。
 
 ## 验收
 
 真实 Go HTTPS fixture 的浏览器验收入口仍为 `scripts/console_test.mjs`，覆盖登录、权限、Cookie 隔离、发布、回滚、规则变更与过期；它同时调用 `console/tests/acceptance.mjs` 验证主题、中文窄屏、键盘、失败状态和重复提交。运行方法见 [控制台文档](../docs/console-m3.md)。
+
+访客页使用相同的 Playwright 安装：
+
+```sh
+DROPLY_VISITOR_BROWSER=1 \
+DROPLY_PLAYWRIGHT_PATH=/tmp/droply-console-browser-deps/node_modules/playwright/index.mjs \
+go test -tags=integration ./internal/server -run '^TestVisitorBrowser$' -count=1 -v
+```
+
+它验证四种站点地址、错误密码重试、查询参数保留、企业微信链接、禁用 JavaScript、CSP、主题、键盘、移动布局和重复提交。

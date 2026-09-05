@@ -64,7 +64,7 @@ jobs:
         run: |
           npm --prefix console ci
           npm --prefix console run build
-          git diff --exit-code -- internal/server/console_assets
+          git diff --exit-code -- internal/server/console_assets internal/server/visitor_assets
       - name: Install Chromium acceptance dependencies
         run: |
           npm install --prefix "$RUNNER_TEMP/browser" --no-save --package-lock=false playwright@1.61.0
@@ -72,5 +72,8 @@ jobs:
       - name: Real Chromium acceptance (must execute)
         env:
           DROPLY_CONSOLE_BROWSER: '1'
+          DROPLY_VISITOR_BROWSER: '1'
           DROPLY_PLAYWRIGHT_PATH: ${{ runner.temp }}/browser/node_modules/playwright/index.mjs
-        run: sh scripts/test-required.sh TestConsoleBrowser ./internal/server
+        run: |
+          sh scripts/test-required.sh TestConsoleBrowser ./internal/server
+          sh scripts/test-required.sh TestVisitorBrowser ./internal/server

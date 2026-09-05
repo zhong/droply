@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,48 +19,6 @@ import (
 	"github.com/zhong/droply/internal/model"
 	"github.com/zhong/droply/internal/staticweb"
 )
-
-// loginPageTemplate is the HTML template for the access login page (password and/or WeWork QR).
-var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login Required</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-  .container { background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 360px; }
-  h1 { font-size: 1.25rem; margin: 0 0 1.5rem; text-align: center; }
-  input[type="password"] { width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-  button { width: 100%; padding: 0.5rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-  button:hover { background: #555; }
-  .error { color: #c00; font-size: 0.875rem; margin-bottom: 1rem; text-align: center; }
-  .divider { display: flex; align-items: center; margin: 1rem 0; color: #999; font-size: 0.75rem; }
-  .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #ddd; }
-  .divider span { padding: 0 0.5rem; }
-  .wework-btn { display: block; text-align: center; padding: 0.5rem; background: #07c160; color: #fff; text-decoration: none; border-radius: 4px; }
-  .wework-btn:hover { background: #05a050; }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Login Required</h1>
-  {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-  {{if .ShowPassword}}
-  <form method="POST" action="/_droply/login">
-    <input type="password" name="password" placeholder="Enter password" autofocus required>
-    <input type="hidden" name="redirect" value="{{.Redirect}}">
-    <input type="hidden" name="host" value="{{.Host}}">
-    <button type="submit">Login</button>
-  </form>
-  {{end}}
-  {{if and .ShowPassword .ShowWeWork}}<div class="divider"><span>OR</span></div>{{end}}
-  {{if .ShowWeWork}}
-  <a class="wework-btn" href="/_droply/wework/auth?redirect={{.Redirect | urlquery}}&host={{.Host | urlquery}}">Login with WeCom</a>
-  {{end}}
-</div>
-</body>
-</html>`))
 
 // NewSiteHandler returns an http.Handler that serves site content with access control.
 // Server selects this handler for site hosts on the unified listener.
@@ -77,6 +34,10 @@ func (s *Server) NewSiteHandler() http.Handler {
 				w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 			}
 			w.Header().Set("Cache-Control", "private, no-store")
+		}
+		if strings.HasPrefix(r.URL.Path, "/_droply/ui/") {
+			s.serveVisitorAsset(w, r)
+			return
 		}
 		// OAuth callback performs remote I/O and never selects an artifact.
 		// Its handler revalidates the destination after the network exchange.
@@ -265,19 +226,6 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, resolved site
 	}
 }
 
-// renderLoginPage renders the login page template, showing password and/or WeWork buttons based on rule.
-func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, rule *model.AccessRule, errorMsg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]any{
-		"Error":        errorMsg,
-		"Redirect":     r.URL.RequestURI(),
-		"Host":         r.Host,
-		"ShowPassword": rule.HasPassword,
-		"ShowWeWork":   rule.WeWorkEnabled && s.wework != nil,
-	}
-	loginPageTemplate.Execute(w, data)
-}
-
 // siteLoginHandler handles POST /_droply/login.
 func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ipLimiter) {
 	clientIP := getClientIP(r)
@@ -300,6 +248,11 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ip
 	}
 
 	if !validRedirectPath(redirect) || !sameHost(host, r.Host) {
+		jsonError(w, "invalid login destination", http.StatusBadRequest)
+		return
+	}
+	redirectURL, err := url.ParseRequestURI(redirect)
+	if err != nil {
 		jsonError(w, "invalid login destination", http.StatusBadRequest)
 		return
 	}
@@ -334,11 +287,10 @@ func (s *Server) siteLoginHandler(w http.ResponseWriter, r *http.Request, rl *ip
 
 	// Compare password.
 	if err := bcrypt.CompareHashAndPassword([]byte(rule.PasswordHash), []byte(password)); err != nil {
-		// Wrong password — re-render login page.
-		// Build a fake request with the redirect path for the login page rendering.
-		r.URL.Path = redirect
-		r.Host = host
-		s.renderLoginPage(w, r, rule, "Incorrect password")
+		// Preserve the escaped path and query when a visitor retries the form.
+		retry := r.Clone(r.Context())
+		retry.URL = redirectURL
+		s.renderLoginPage(w, retry, rule, "Incorrect password")
 		return
 	}
 

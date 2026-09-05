@@ -1,0 +1,16 @@
+@import "../src/style.css";
+
+@layer components {
+  .visitor-layout {
+    @apply flex min-h-[calc(100svh-4.5rem)] items-center justify-center px-5 py-10;
+  }
+  .visitor-card {
+    @apply w-full max-w-md space-y-6 p-7 sm:p-9;
+  }
+  .fallback-input {
+    @apply w-full rounded-lg border border-kumo-line bg-kumo-base px-3 py-2 text-kumo-default;
+  }
+  .fallback-button {
+    @apply block w-full rounded-lg border border-kumo-line bg-kumo-tint px-4 py-2 text-center text-kumo-default;
+  }
+}
